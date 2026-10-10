@@ -191,7 +191,27 @@ namespace MasterConsole.ViewModels
         public string Force582N => FormatForce(_s.Force582N, "N·m");
         public string Force587F => FormatForce(_s.Force587F, "N");
         public string Force587N => FormatForce(_s.Force587N, "N·m");
-        public string CleanForce => FormatForce(_s.CleanForceN, "N");
+
+        // 轴2(导管)和轴7(导丝)的角度指示器指针坐标计算
+        public double Axis2PointerX => CalculatePointerX(_hasStatus ? _s.AxisPos[1] : 0.0);
+        public double Axis2PointerY => CalculatePointerY(_hasStatus ? _s.AxisPos[1] : 0.0);
+        public double Axis7PointerX => CalculatePointerX(_hasStatus ? _s.AxisPos[6] : 0.0);
+        public double Axis7PointerY => CalculatePointerY(_hasStatus ? _s.AxisPos[6] : 0.0);
+
+        private double CalculatePointerX(double angleDeg)
+        {
+            // 0度指向上方，顺时针旋转
+            // 角度增加时向右转
+            double angleRad = (angleDeg - 90.0) * System.Math.PI / 180.0;
+            return 20.0 * System.Math.Cos(angleRad);
+        }
+
+        private double CalculatePointerY(double angleDeg)
+        {
+            // Canvas中Y轴向下
+            double angleRad = (angleDeg - 90.0) * System.Math.PI / 180.0;
+            return 20.0 * System.Math.Sin(angleRad);
+        }
 
         private string FormatForce(float v, string unit)
             => _hasStatus ? v.ToString("0.000", CultureInfo.InvariantCulture) + " " + unit : "—";
@@ -436,7 +456,8 @@ namespace MasterConsole.ViewModels
         {
             nameof(EstopHold), nameof(ControlActive), nameof(FfEnabled), nameof(FfZeroing), nameof(YValveClosed),
             nameof(AdsHealthy), nameof(IsCatheterMode), nameof(IsGuidewireMode), nameof(ModeText), nameof(PhaseText), nameof(CanStartControl),
-            nameof(Force582F), nameof(Force582N), nameof(Force587F), nameof(Force587N), nameof(CleanForce),
+            nameof(Force582F), nameof(Force582N), nameof(Force587F), nameof(Force587N),
+            nameof(Axis2PointerX), nameof(Axis2PointerY), nameof(Axis7PointerX), nameof(Axis7PointerY),
             nameof(PrepareStatusText), nameof(FfCaption), nameof(YValveCaption), nameof(Injector1Text), nameof(Injector2Text), nameof(Axis4Text),
             nameof(StatusFresh),
         };

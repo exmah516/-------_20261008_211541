@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Threading;
+using MasterConsole.Controls;
 using MasterConsole.Services;
 using MasterConsole.ViewModels;
 
@@ -20,6 +21,7 @@ namespace MasterConsole.Views
         private static string _linkNotice;
         private static string _linkTokenPath;
         private readonly DsaJpegReceiver _dsaReceiver;
+        private readonly VtkMotionReceiver _vtkMotionReceiver;
         private readonly string[] _dsaStreamStatus = { "未连接", "未连接" };
         private readonly object _dsaStatusSync = new object();
         private readonly DispatcherTimer _armKeepaliveTimer;
@@ -38,15 +40,27 @@ namespace MasterConsole.Views
             _dsaReceiver.FrameReceived += DsaFrameReceived;
             _dsaReceiver.StatusChanged += DsaStatusChanged;
             _dsaReceiver.Start();
+            _vtkMotionReceiver = new VtkMotionReceiver();
+            _vtkMotionReceiver.StateReceived += VtkStateReceived;
+            _vtkMotionReceiver.StatusChanged += VtkStatusChanged;
+            _vtkMotionReceiver.Start();
             _armKeepaliveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
             _armKeepaliveTimer.Tick += ArmKeepaliveTimer_Tick;
             _armKeepaliveTimer.Start();
             if (_linkNotice != null) _vm.PostLog("warn", _linkNotice);
             else if (_linkTokenPath != null) _vm.PostLog("info", "已加载密钥：" + _linkTokenPath);
-            Closed += (s, e) => { _armKeepaliveTimer.Stop(); _vm.StopAllHoldActions(); _dsaReceiver.Dispose(); DsaImageView.Dispose(); HikCamera1.Dispose(); HikCamera2.Dispose(); _vm.Dispose(); RobotModelViewport.Dispose(); };
+            Closed += (s, e) => { _armKeepaliveTimer.Stop(); _vm.StopAllHoldActions(); _vtkMotionReceiver.Dispose(); _dsaReceiver.Dispose(); DsaImageView.Dispose(); HikCamera1.Dispose(); HikCamera2.Dispose(); _vm.Dispose(); RobotModelViewport.Dispose(); };
         }
 
         private void DsaFrameReceived(int stream, byte[] jpeg, DateTime receivedUtc) => DsaImageView.PublishJpeg(jpeg, receivedUtc);
+
+        private bool VtkStateReceived(DsaArmDisplayState state) => RobotModelViewport.PublishTestDsaArmState(state);
+
+        private void VtkStatusChanged(string message)
+        {
+            if (Dispatcher.HasShutdownStarted) return;
+            Dispatcher.BeginInvoke(new Action(() => _vm.PostLog("info", message)));
+        }
 
         private void DsaStatusChanged(int stream, string status, string detail)
         {

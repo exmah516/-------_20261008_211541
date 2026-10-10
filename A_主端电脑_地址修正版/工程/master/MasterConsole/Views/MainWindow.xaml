@@ -220,7 +220,7 @@
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="模式（仅显示）" Style="{StaticResource FieldLabelText}" Margin="0,0,10,0"/>
+                                <TextBlock Text="模式" Style="{StaticResource FieldLabelText}" Margin="0,0,10,0"/>
                                 <Border Grid.Column="1" Style="{StaticResource ModeChipDisplay}">
                                     <TextBlock Text="{Binding ModeText}" HorizontalAlignment="Center" MinWidth="52"/>
                                 </Border>
@@ -237,7 +237,6 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
                                 <TextBlock Grid.Column="1" Text="力" Style="{StaticResource CaptionText}" HorizontalAlignment="Right"/>
                                 <TextBlock Grid.Column="2" Text="扭矩" Style="{StaticResource CaptionText}" HorizontalAlignment="Right"/>
@@ -249,9 +248,60 @@
                                 <TextBlock Grid.Row="2" Text="手柄 587" Style="{StaticResource FieldLabelText}" Margin="0,2"/>
                                 <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Force587F}" Style="{StaticResource DataValueText}" HorizontalAlignment="Right"/>
                                 <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding Force587N}" Style="{StaticResource DataValueText}" HorizontalAlignment="Right"/>
+                            </Grid>
 
-                                <TextBlock Grid.Row="3" Text="纯净力" Style="{StaticResource FieldLabelText}" Margin="0,2"/>
-                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding CleanForce}" Style="{StaticResource DataValueText}" HorizontalAlignment="Right"/>
+                            <!-- 轴2(导管) 和 轴7(导丝) 角度指示器 -->
+                            <Grid Margin="0,8,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- 左侧空白 -->
+                                <Border Grid.Column="0"/>
+
+                                <!-- 导管角度(轴2) -->
+                                <StackPanel Grid.Column="1" Orientation="Vertical" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,12,0">
+                                    <Canvas Width="50" Height="50" Background="Transparent" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <!-- 圆形背景 -->
+                                        <Ellipse Canvas.Left="0" Canvas.Top="0" Width="50" Height="50"
+                                                 Stroke="#1E40AF" StrokeThickness="1.5" Fill="Transparent"/>
+                                        <!-- 指针线(医疗蓝) -->
+                                        <Line Canvas.Left="25" Canvas.Top="25" X1="0" Y1="0"
+                                              X2="{Binding Axis2PointerX, FallbackValue=0}"
+                                              Y2="{Binding Axis2PointerY, FallbackValue=-17}"
+                                              Stroke="#1E40AF" StrokeThickness="2"/>
+                                        <!-- 指针端点圆点 -->
+                                        <Ellipse Canvas.Left="21" Canvas.Top="21" Width="8" Height="8"
+                                                 Fill="#1E40AF" Opacity="0.7"/>
+                                    </Canvas>
+                                    <TextBlock Text="轴2" FontSize="9" Foreground="{StaticResource TextMutedBrush}"
+                                               HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                </StackPanel>
+
+                                <!-- 导丝角度(轴7) -->
+                                <StackPanel Grid.Column="2" Orientation="Vertical" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <Canvas Width="50" Height="50" Background="Transparent" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <!-- 圆形背景 -->
+                                        <Ellipse Canvas.Left="0" Canvas.Top="0" Width="50" Height="50"
+                                                 Stroke="#16A34A" StrokeThickness="1.5" Fill="Transparent"/>
+                                        <!-- 指针线(绿色) -->
+                                        <Line Canvas.Left="25" Canvas.Top="25" X1="0" Y1="0"
+                                              X2="{Binding Axis7PointerX, FallbackValue=0}"
+                                              Y2="{Binding Axis7PointerY, FallbackValue=-17}"
+                                              Stroke="#16A34A" StrokeThickness="2"/>
+                                        <!-- 指针端点圆点 -->
+                                        <Ellipse Canvas.Left="21" Canvas.Top="21" Width="8" Height="8"
+                                                 Fill="#16A34A" Opacity="0.7"/>
+                                    </Canvas>
+                                    <TextBlock Text="轴7" FontSize="9" Foreground="{StaticResource TextMutedBrush}"
+                                               HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                </StackPanel>
+
+                                <!-- 右侧空白 -->
+                                <Border Grid.Column="3"/>
                             </Grid>
 
                             <DockPanel Margin="0,8,0,0">
