@@ -1,0 +1,507 @@
+--- before/ADSComm.cpp
++++ after/ADSComm.cpp
+@@ -154,6 +154,19 @@
+ 	return std::string(m_lastError);
+ }
+ 
++std::string CADSComm::ConnectionDescription() const
++{
++	std::lock_guard<std::recursive_mutex> lock(m_mutex);
++	if (m_PAmsAddr == nullptr) return "target=unavailable";
++	const auto& id = m_PAmsAddr->netId.b;
++	char detail[160]{};
++	sprintf_s(detail, "target=%u.%u.%u.%u.%u.%u:%u client_port=%ld timeout_ms=%lu",
++		static_cast<unsigned>(id[0]), static_cast<unsigned>(id[1]), static_cast<unsigned>(id[2]),
++		static_cast<unsigned>(id[3]), static_cast<unsigned>(id[4]), static_cast<unsigned>(id[5]),
++		static_cast<unsigned>(m_PAmsAddr->port), m_adsPort, m_timeoutMs);
++	return detail;
++}
++
+ const char* CADSComm::GetLastError() const
+ {
+ 	// 保留旧接口，但返回每线程副本，避免解锁后暴露可变的内部缓冲区。
+@@ -629,7 +642,7 @@
+ 		&cbReturn);
+ 	if (nErr != 0)
+ 	{
+-		sprintf_s(m_lastError, sizeof(m_lastError), "Error: AdsSyncReadWriteReqEx2(HNDBYNAME): %ld\n", nErr);
++		sprintf_s(m_lastError, sizeof(m_lastError), "Error: AdsSyncReadWriteReqEx2(HNDBYNAME): %ld symbol=%.160s\n", nErr, key.c_str());
+ 		return 0;
+ 	}
+ 	if (cbReturn != sizeof(handle) || handle == 0)
+--- before/ads_communication.cpp
++++ after/ads_communication.cpp
+@@ -1069,11 +1069,21 @@
+ {
+ 	// 服务只被动建立路由，禁止在后台把人工 STOP/故障 STOP 自动切回 RUN。
+ 	// 握手连接阶段使用 1000 ms 宽容超时
+-	ads_.SetTimeout(1000);
+-	if (!ads_.IsCommOpen() && !ads_.OpenCommInsideReadOnly() && !ads_.OpenCommReadOnly())
+-	{
+-		record_failure("CONNECT", ads_.GetLastErrorCopy());
++	if (!ads_.SetTimeout(1000))
++	{
++		record_failure("SET_TIMEOUT", ads_.GetLastErrorCopy());
+ 		return false;
++	}
++	if (!ads_.IsCommOpen() && !ads_.OpenCommInsideReadOnly())
++	{
++		// 后备路由失败不能覆盖首次本地连接错误，两条路径分别保留。
++		const std::string local_failure = ads_.ConnectionDescription() + " " + ads_.GetLastErrorCopy();
++		if (!ads_.OpenCommReadOnly())
++		{
++			record_failure("CONNECT", "local={" + local_failure + "} fallback={" +
++				ads_.ConnectionDescription() + " " + ads_.GetLastErrorCopy() + "}");
++			return false;
++		}
+ 	}
+ 	unsigned short ads_state = ADSSTATE_INVALID;
+ 	unsigned short device_state = 0;
+@@ -1107,6 +1117,7 @@
+ 		ads_.CloseComm();
+ 		return false;
+ 	}
++	std::cout << "[ADS-DIAG] connected " << ads_.ConnectionDescription() << std::endl;
+ 	return true;
+ }
+ 
+@@ -1481,6 +1492,10 @@
+ 		return false;
+ 	}
+ 	snapshot.plc_cycle_span = snapshot.plc_cycle_end - snapshot.plc_cycle_begin;
++	{
++		std::lock_guard<std::mutex> lock(event_mutex_);
++		snapshot.self_check_done = event_state_.self_check_done;
++	}
+ 
+ 	bool positions_finite = true;
+ 	for (int axis = 0; axis < 7; ++axis)
+@@ -1916,7 +1931,7 @@
+ 		{ "G.axis4_manual_done", sizeof(bool), kNotifyAxis4Done },
+ 		{ AdsSymbol::axis4_manual_error, sizeof(bool), kNotifyAxis4Error },
+ 		{ AdsSymbol::axis4_manual_error_id, sizeof(std::uint32_t), kNotifyAxis4ErrorId },
+-		{ AdsSymbol::gen_state, sizeof(int), kNotifyGenState },
++		{ AdsSymbol::gen_state, sizeof(std::int16_t), kNotifyGenState },
+ 		{ AdsSymbol::axis1_return.busy, sizeof(bool), kNotifyAxis1ReturnBusy },
+ 		{ AdsSymbol::axis1_return.done, sizeof(bool), kNotifyAxis1ReturnDone },
+ 		{ AdsSymbol::axis1_return.error, sizeof(bool), kNotifyAxis1ReturnError },
+@@ -2174,7 +2189,7 @@
+ 
+ void AdsCommunicationService::record_failure(const char* operation, const std::string& detail)
+ {
+-	std::string single_line = detail;
++	std::string single_line = detail + " " + ads_.ConnectionDescription();
+ 	std::replace(single_line.begin(), single_line.end(), '\n', ' ');
+ 	std::replace(single_line.begin(), single_line.end(), '\r', ' ');
+ 	std::lock_guard<std::mutex> lock(stats_mutex_);
+--- before/ads_communication.h
++++ after/ads_communication.h
+@@ -45,6 +45,7 @@
+ 	short ft_2_value = 0;
+ 	bool estop_hold_req = false;
+ 	bool host_comm_timeout = false;
++	bool self_check_done = false; // 与本次快照绑定，避免断线清空通知缓存后产生伪边沿。
+ 	// 位置/速度和 PLC 时序可用于运动控制时为 true；不受单独力数据质量影响。
+ 	bool position_valid = false;
+ 	// 本次 Sum Read 通信成功且四路力值均为有限数时为 true；PLC 周期跨度仅用于诊断。
+@@ -109,7 +110,7 @@
+ 	bool axis4_manual_done = false;
+ 	bool axis4_manual_error = false;
+ 	std::uint32_t axis4_manual_error_id = 0;
+-	int gen_state = 0;
++	std::int16_t gen_state = 0; // PLC state 显式以 INT（16 位）存储。
+ 	bool axis1_return_busy = false;
+ 	bool axis1_return_done = false;
+ 	bool axis1_return_error = false;
+--- before/main.cpp
++++ after/main.cpp
+@@ -1035,6 +1035,7 @@
+ 	std::uint64_t handled_plc_restart_count = 0;
+ 	std::uint64_t handled_reconnect_count = 0;
+ 	bool ads_soft_hold_active = true;
++	bool ads_resume_required = false;
+ 	bool plc_restart_recovery_latched = false;
+ 	std::vector<AdsFastSnapshot> drained_ads_snapshots;
+ 	struct HandleRecordSnapshot
+@@ -1104,7 +1105,10 @@
+ 				pending_return_error_deadline_ms = 0;
+ 			}
+ 		}
+-		self_check_done = ads_events.self_check_done;
++		// 断线清空的是通信缓存，只有新鲜 PLC 快照才能改变已确认的自检状态。
++		const bool ads_self_check_valid = has_new_ads_snapshot && ads_snapshot.position_valid &&
++			ads_stats.state == AdsConnectionState::Running;
++		if (ads_self_check_valid) self_check_done = ads_snapshot.self_check_done;
+ 		if (ads_events.selfcheck_status == 2 || ads_events.selfcheck_status == 0 ||
+ 			ads_events.selfcheck_status == 3 ||
+ 			ads_stats.state != AdsConnectionState::Running)
+@@ -1290,6 +1294,11 @@
+ 
+ 		if (!ads_motion_cycle_valid)
+ 		{
++			if (initial_sync_done)
++			{
++				ads_resume_required = true;
++				control_active = false;
++			}
+ 			if (!ads_soft_hold_active)
+ 			{
+ 				ads_soft_hold_active = true;
+@@ -1406,6 +1415,8 @@
+ 			independent_axis2_hold_rel = plc_act_pos[1];
+ 			std::cout << "连接就绪：保持 PLC 当前反馈位置，不恢复历史目标。axis2="
+ 				<< plc_act_pos[1] << "，axis7=" << plc_act_pos[6] << "（相对角度）" << std::endl;
++			if (ads_resume_required)
++				std::cout << "通信恢复后保持停控；请点击“开始控制”在当前位置继续，无需重新进入准备位置。" << std::endl;
+ 		}
+ 
+ 		if (!initial_sync_done)
+@@ -1831,13 +1842,13 @@
+ 			const int ch = _getch();
+ 			if (ch == 'c' || ch == 'C')
+ 			{
+-				if (!startup.completed && startup.phase == StartupPhase::WaitForEnter)
++				if ((!startup.completed && startup.phase == StartupPhase::WaitForEnter) || ads_resume_required)
+ 				{
+ 					if (estop_hold_active)
+ 					{
+ 						std::cout << "直接控制启动已忽略：处于 PLC 急停状态。" << std::endl;
+ 					}
+-					else if (ads_soft_hold_active)
++					else if (ads_soft_hold_active || handle_soft_hold_active || !initial_sync_done || return_ads_fault_hold)
+ 					{
+ 						std::cout << "直接控制启动已忽略：ADS 当前处于软保持或重连状态。" << std::endl;
+ 					}
+@@ -1861,6 +1872,7 @@
+ 						startup.completed = true;
+ 						startup.prompted = false;
+ 						control_active = true;
++						ads_resume_required = false;
+ 						plc_restart_recovery_latched = false;
+ 						std::cout << "已进入直接控制。" << std::endl;
+ 					}
+@@ -2106,7 +2118,7 @@
+ 			: requested_guidewire_mode;
+ 
+ 		// 6) 自检和重同步请求均由 Notification 驱动，不再做周期单读。
+-		if (has_self_check_flag && self_check_done != last_self_check_done)
++		if (ads_self_check_valid && has_self_check_flag && self_check_done != last_self_check_done)
+ 		{
+ 			if (last_self_check_done && !self_check_done)
+ 			{
+@@ -2138,7 +2150,7 @@
+ 				startup.completed = true;
+ 				startup.direct_positioning = false;
+ 				startup.prompted = false;
+-				if (coordinates_refreshed && !estop_hold_active &&
++				if (coordinates_refreshed && !ads_resume_required && !estop_hold_active &&
+ 					!ads_soft_hold_active && sync_all(30))
+ 				{
+ 					control_active = true;
+@@ -2151,7 +2163,7 @@
+ 				}
+ 			}
+ 		}
+-		last_self_check_done = self_check_done;
++		if (ads_self_check_valid) last_self_check_done = self_check_done;
+ 
+ 		if (handle_reinit_req && !last_handle_reinit_req)
+ 		{
+@@ -2159,7 +2171,7 @@
+ 			(void)cancel_active_return_motion(true);
+ 			const bool coordinates_refreshed = ads_communication.refresh_coordinates();
+ 			if (!coordinates_refreshed) ads_communication.request_coordinate_refresh();
+-			if (coordinates_refreshed && !estop_hold_active &&
++			if (coordinates_refreshed && !ads_resume_required && !estop_hold_active &&
+ 				!ads_soft_hold_active && !startup.is_active() &&
+ 				sync_all(30))
+ 			{
+@@ -2171,7 +2183,7 @@
+ 		// 8) 当启动已完成但控制未激活时，通过全量重同步恢复。
+ 		const bool motion_startup_active = startup.is_active();
+ 		startup_smoothing_bypass = motion_startup_active || emergency_retract_active;
+-		if (!control_active && !return_ads_fault_hold && !motion_startup_active &&
++		if (!control_active && !return_ads_fault_hold && !ads_resume_required && !motion_startup_active &&
+ 			!estop_hold_active && !ads_soft_hold_active && startup.completed)
+ 		{
+ 			if (sync_all(20))
+@@ -4889,6 +4901,7 @@
+ 				remote_extra.force_zero_ok_count = remote_force_zero_ok_count;
+ 				remote_extra.force_zero_fail_count = remote_force_zero_fail_count;
+ 				remote_extra.initial_sync_done = initial_sync_done;
++				remote_extra.return_ads_fault_hold = return_ads_fault_hold;
+ 				remote_extra.handle_soft_hold = handle_soft_hold_active;
+ 				remote_extra.ads_soft_hold = ads_soft_hold_active;
+ 				remote_extra.connection_hold = connection_hold_active;
+@@ -5421,6 +5434,7 @@
+ 						// 自检完成后点击“开始控制”：不再走到准备位置，直接在当前位置开始手柄控制。
+ 						pending_selfcheck_axes = 0;
+ 						if (!startup.is_active() &&
++							!return_ads_fault_hold && !handle_soft_hold_active && initial_sync_done &&
+ 							!estop_hold_active &&
+ 							!ads_soft_hold_active &&
+ 							has_self_check_flag && self_check_done)
+@@ -5438,15 +5452,19 @@
+ 							}
+ 							else if (sync_all(20))
+ 							{
+-								guidewire_mode = GuidewireMode::None;
+-								axis6_crawl.enabled = false;
+-								axis6_window_locked = false;
++								if (!ads_resume_required)
++								{
++									guidewire_mode = GuidewireMode::None;
++									axis6_crawl.enabled = false;
++									axis6_window_locked = false;
++								}
+ 								startup.recovery_mode = false;
+ 								startup.direct_positioning = false;
+ 								startup.phase = StartupPhase::Done;
+ 								startup.completed = true;
+ 								startup.prompted = false;
+ 								control_active = true;
++								ads_resume_required = false;
+ 								plc_restart_recovery_latched = false;
+ 								std::cout << "已在当前位置开始控制。" << std::endl;
+ 							}
+--- before/remote_gateway.cpp
++++ after/remote_gateway.cpp
+@@ -312,11 +312,12 @@
+ 			s += t;
+ 		};
+ 		if (vs.estop_hold) add("PLC 急停保持");
++		if (ex.return_ads_fault_hold) add("回退故障已锁止，请检查 PLC 回退错误并在确认停止后重新启动从端");
+ 		if (vs.ads_state != 2 || ex.ads_soft_hold) add("ADS 通信未就绪或处于软保持");
+ 		if (ex.handle_soft_hold) add("手柄数据无效（从端未收到有效的主端手柄采样，请确认主端手柄在线且已持有控制权）");
+ 		if (!ex.initial_sync_done) add("从端初始同步未完成（需要手柄就绪、ADS 正常且已完成自检）");
+-		if (!vs.self_check_done) add("尚未到达器械准备位置");
+-		else if (!vs.control_active) add("手柄控制尚未开始（请点击“开始控制”）");
++		if (!vs.self_check_done && vs.ads_state == 2 && !ex.ads_soft_hold) add("尚未到达器械准备位置");
++		else if (!vs.control_active && !ex.return_ads_fault_hold && vs.ads_state == 2 && !ex.ads_soft_hold) add("手柄控制尚未开始（请点击“开始控制”）");
+ 		if (s.empty()) add("自动流程（启动准备/换手/回退/屈曲恢复/软限位）正在接管");
+ 		return s;
+ 	}
+@@ -908,7 +909,7 @@
+ 		if (w < 10.0 || w > 639.0) { send_ack(sock, id, "rejected", "Y阀及导丝机构位置范围为 10–639 mm"); return; }
+ 		if (c > w) { send_ack(sock, id, "rejected", "导管搓捻机构位置不得大于 Y阀及导丝机构位置"); return; }
+ 		if (st.vs.ads_state != 2) { send_ack(sock, id, "rejected", "从端 ADS 通信未就绪"); return; }
+-		if (st.vs.self_check_done) { send_ack(sock, id, "rejected", "已处于器械准备位置，无需重复进入"); return; }
++		if (st.vs.self_check_done) { send_ack(sock, id, "rejected", "PLC 自检已完成，无需重复进入准备位置；通信恢复就绪后请点击“开始控制”"); return; }
+ 		if (st.vs.selfcheck_status != 1 && st.vs.selfcheck_status != 3)
+ 		{
+ 			send_ack(sock, id, "rejected", "PLC 当前不接受自检请求（运行中或尚未初始化）");
+@@ -1006,13 +1007,20 @@
+ 	if (name == "start_control")
+ 	{
+ 		// 等价于本地调试台自检完成后的“开始控制”（SelectDirectControl）：在当前位置直接进入手柄控制。
++		// 通信中断会清空自检缓存，必须先区分通信不可用与 PLC 确认未自检。
++		if (st.vs.ads_state != 2 || st.extra.ads_soft_hold)
++		{
++			send_ack(sock, id, "rejected", "ADS 通信正在恢复，请等待“连接就绪”后再次点击“开始控制”，无需因此重新进入准备位置");
++			return;
++		}
+ 		if (st.vs.control_active) { send_ack(sock, id, "done"); return; }
+ 		if (!st.vs.self_check_done)
+ 		{
+ 			send_ack(sock, id, "rejected", "尚未到达器械准备位置，请先点击“进入器械准备位置”");
+ 			return;
+ 		}
+-		if (st.vs.estop_hold || st.vs.ads_state != 2 || st.extra.ads_soft_hold || !st.extra.initial_sync_done)
++		if (st.vs.estop_hold || st.extra.return_ads_fault_hold || st.extra.handle_soft_hold ||
++			st.vs.ads_state != 2 || st.extra.ads_soft_hold || !st.extra.initial_sync_done)
+ 		{
+ 			// 初始同步完成前开始控制会被紧接着的初始同步重置，必须等它完成。
+ 			send_ack(sock, id, "rejected", "暂不能开始控制：" + describe_hold(st.vs, st.extra));
+--- before/remote_gateway.h
++++ after/remote_gateway.h
+@@ -55,6 +55,7 @@
+ 	bool handle_soft_hold = false;
+ 	bool ads_soft_hold = false;
+ 	bool connection_hold = false;
++	bool return_ads_fault_hold = false;
+ };
+ 
+ class RemoteGateway
+--- before/tools\ads_diagnostics_test.cpp
++++ after/tools\ads_diagnostics_test.cpp
+@@ -22,9 +22,21 @@
+     unsigned long next_handle = 1;
+     std::uint32_t cycle = 10;
+     bool fail_read = false, fail_transport = false, stall = false, nonfinite = false;
++    bool fail_local = false, fail_remote = false;
++    std::string missing_symbol;
+     std::string fail_item, error;
+     std::vector<double> targets;
+     unsigned int committed = 0;
++    const std::unordered_map<std::string, unsigned long> plc_sizes = {
++#include "ads_symbol_sizes.inc"
++    };
++    void validate_size(const std::string& name, unsigned long size) {
++        auto expected = plc_sizes.find(name);
++        if (expected != plc_sizes.end() && expected->second != size) {
++            std::cerr << "FAIL: PLC size mismatch " << name << " expected=" << expected->second << " requested=" << size << std::endl;
++            std::exit(1);
++        }
++    }
+     void check(bool ok, const char* name) {
+         if (!ok) { std::cerr << "FAIL: " << name << std::endl; std::exit(1); }
+         std::cout << "PASS: " << name << std::endl;
+@@ -34,29 +46,32 @@
+ CADSComm::CADSComm() : m_PAmsAddr(nullptr), m_adsPort(0), m_bOpen(true), m_timeoutMs(300) {}
+ CADSComm::~CADSComm() {}
+ bool CADSComm::IsCommOpen() const { return m_bOpen; }
+-bool CADSComm::OpenCommInsideReadOnly() { m_bOpen = true; return true; }
+-bool CADSComm::OpenCommReadOnly() { m_bOpen = true; return true; }
++bool CADSComm::OpenCommInsideReadOnly() { if (fail_local) { error = "LOCAL_READ_STATE 1861"; return false; } m_bOpen = true; return true; }
++bool CADSComm::OpenCommReadOnly() { if (fail_remote) { error = "REMOTE_READ_STATE 29"; return false; } m_bOpen = true; return true; }
+ bool CADSComm::CloseComm() { m_bOpen = false; error.clear(); return true; }
+ bool CADSComm::SetTimeout(unsigned long) { return true; }
+ bool CADSComm::ReadDeviceState(unsigned short& a, unsigned short& d) { a = ADSSTATE_RUN; d = 0; return true; }
+ std::string CADSComm::GetLastErrorCopy() const { return error; }
++std::string CADSComm::ConnectionDescription() const { return "target=offline:851 timeout_ms=300"; }
+ unsigned long CADSComm::ADSGetAddr(const char* name) {
++    if (name == missing_symbol) { error = "HNDBYNAME 1808 symbol=" + missing_symbol; return 0; }
+     for (auto& entry : symbols) if (entry.second == name) return entry.first;
+     symbols[next_handle] = name;
+     return next_handle++;
+ }
+ bool CADSComm::ADSRead(const char* name, unsigned long size, void* out) {
++    validate_size(name, size);
+     std::memset(out, 0, size);
+     if (std::string(name) == "G.self_check_done" || std::string(name) == "G.handle_reinit_done") *static_cast<bool*>(out) = true;
+     return true;
+ }
+-bool CADSComm::ADSWrite(const char*, unsigned long, void*) { return true; }
++bool CADSComm::ADSWrite(const char* name, unsigned long size, void*) { validate_size(name, size); return true; }
+ bool CADSComm::ADSReadSum(const char* const* names, const unsigned long* sizes, void* const* out, unsigned long count) {
+     for (unsigned long i = 0; i < count; ++i) ADSRead(names[i], sizes[i], out[i]);
+     return true;
+ }
+ bool CADSComm::ADSWriteSum(const char* const*, const unsigned long*, const void* const*, unsigned long) { return true; }
+-bool CADSComm::ADSAddNotification(const char*, unsigned long, PAdsNotificationFuncEx, std::uint32_t, unsigned long* h, ADSTRANSMODE, unsigned long, unsigned long) { *h = next_handle++; return true; }
++bool CADSComm::ADSAddNotification(const char* name, unsigned long size, PAdsNotificationFuncEx, std::uint32_t, unsigned long* h, ADSTRANSMODE, unsigned long, unsigned long) { validate_size(name, size); *h = next_handle++; return true; }
+ bool CADSComm::ADSDeleteNotification(unsigned long) { return true; }
+ bool CADSComm::ADSReadSumByHandle(const unsigned long* handles, const unsigned long* sizes, void* const* out, unsigned long count) {
+     if (fail_read) { error = "injected read timeout code=1861"; return false; }
+@@ -64,6 +79,7 @@
+     for (unsigned long i = 0; i < count; ++i) {
+         std::memset(out[i], 0, sizes[i]);
+         const auto& s = symbols.at(handles[i]);
++        validate_size(s, sizes[i]);
+         if (s.find("CycleCount") != std::string::npos) *static_cast<std::uint32_t*>(out[i]) = cycle;
+         if (s.find("DcTaskTime") != std::string::npos) *static_cast<std::int64_t*>(out[i]) = static_cast<std::int64_t>(cycle) * 10000000;
+         if (nonfinite && s == "G.axis[1].NcToPlc.ActPos") *static_cast<double*>(out[i]) = std::numeric_limits<double>::quiet_NaN();
+@@ -76,6 +92,7 @@
+     bool ok = true;
+     for (unsigned long i = 0; i < count; ++i) {
+         const auto& s = symbols.at(handles[i]);
++        validate_size(s, sizes[i]);
+         results[i] = s == fail_item ? 1797 : 0;
+         if (results[i]) { ok = false; error = "injected item code=1797 symbol=" + s; }
+         if (s.find("TargetAbs") != std::string::npos) { assert(sizes[i] == sizeof(double)); targets.push_back(*static_cast<const double*>(in[i])); }
+@@ -129,7 +146,9 @@
+     check(error.empty() && captured == service.stats().diagnostic && service.stats().diagnostic_sequence == failure, "success cannot erase captured failure");
+ 
+     AdsFastSnapshot snapshot{};
++    service.event_state_.self_check_done = true;
+     check(service.read_fast_snapshot(snapshot, true) && snapshot.position_valid, "valid snapshot accepted");
++    const auto confirmed_snapshot = snapshot;
+     fail_read = true;
+     snapshot = {};
+     check(!service.read_fast_snapshot(snapshot, false) && !snapshot.position_valid, "read timeout invalidates snapshot");
+@@ -146,6 +165,29 @@
+     service.event_state_.self_check_done = true;
+     service.clear_runtime_connection_state();
+     check(!service.event_state().self_check_done, "disconnect clears self-check cache without a PLC self-check restart");
++    check(confirmed_snapshot.self_check_done, "published snapshot retains its own confirmed self-check state after cache reset");
+     check(service.stats().diagnostic_sequence > 0, "disconnect cleanup preserves evidence");
++    ads.CloseComm();
++    fail_local = fail_remote = true;
++    check(!service.ensure_connection(true), "both connection failures remain failures");
++    auto connection_error = std::string(service.stats().diagnostic);
++    check(connection_error.find("LOCAL_READ_STATE 1861") != std::string::npos &&
++          connection_error.find("REMOTE_READ_STATE 29") != std::string::npos,
++          "fallback failure cannot erase primary connection error");
++    fail_local = fail_remote = false;
++    missing_symbol = "G.return_cmd[1].TargetAbs";
++    check(!service.ensure_connection(true) && !service.fast_handles_valid_,
++          "missing return symbol prevents readiness before first return");
++    check(std::string(service.stats().diagnostic).find(missing_symbol) != std::string::npos,
++          "missing symbol failure preserves variable name");
++    missing_symbol.clear();
++    check(service.ensure_connection(true) && service.event_state().self_check_done,
++          "reconnection reloads actual PLC self-check instead of retaining cleared cache");
++    const std::int16_t plc_state = 6;
++    service.on_notification(kNotifyGenState, &plc_state, sizeof(plc_state));
++    check(service.event_state().gen_state == 6, "two-byte PLC state notification is accepted");
++    const std::int32_t oversized_state = 10;
++    service.on_notification(kNotifyGenState, &oversized_state, sizeof(oversized_state));
++    check(service.event_state().gen_state == 6, "wrong-size state notification is rejected");
+     service.running_.store(false);
+ }
+--- before/tools\run_ads_diagnostics_test.py
++++ after/tools\run_ads_diagnostics_test.py
+@@ -3,6 +3,7 @@
+ import os
+ import subprocess
+ import tempfile
++import sys
+ 
+ project = Path(__file__).resolve().parents[1]
+ vswhere = Path(os.environ['ProgramFiles(x86)']) / 'Microsoft Visual Studio/Installer/vswhere.exe'
+@@ -10,14 +11,41 @@
+                               'Microsoft.VisualStudio.Component.VC.Tools.x86.x64', '-property', 'installationPath'],
+                              text=True).strip()
+ build = Path(tempfile.mkdtemp(prefix='ads-offline-diagnostics-'))
++test = sys.argv[1] if len(sys.argv) > 1 else 'ads_diagnostics_test'
++if test not in ('ads_diagnostics_test', 'remote_recovery_test', 'main_recovery_test'):
++    raise SystemExit('Unknown offline test')
++extra_source = f'"{project / "plc_io.cpp"}" ' if test == 'ads_diagnostics_test' else ''
++if test == 'ads_diagnostics_test':
++    rows = (project / 'tools/ads_symbol_sizes.tsv').read_text(encoding='utf-8').splitlines()
++    entries = []
++    for row in rows:
++        if not row or row.startswith('#'):
++            continue
++        name, size = row.split('\t')
++        entries.append('{"' + name + '", ' + str(int(size)) + '},')
++    (build / 'ads_symbol_sizes.inc').write_text('\n'.join(entries), encoding='utf-8')
++if test == 'main_recovery_test':
++    source = (project / 'main.cpp').read_text(encoding='utf-8-sig')
++    def between(start, end):
++        begin = source.index(start)
++        return source[begin:source.index(end, begin)]
++    observe_start = ('\t\tconst bool ads_self_check_valid' if 'const bool ads_self_check_valid' in source
++                     else '\t\tself_check_done = ads_events.self_check_done;')
++    observe = between(observe_start, '\t\tif (ads_events.selfcheck_status')
++    hold = between('\t\tif (!ads_motion_cycle_valid)', '\t\t\tif (!ads_soft_hold_active)') + '\n}\n'
++    (build / 'main_observe.inc').write_text(observe + hold, encoding='utf-8')
++    auto = between('\t\tif (!control_active && !return_ads_fault_hold', '\t\tunsigned short cylinder1_cmd')
++    (build / 'main_auto_resume.inc').write_text(auto, encoding='utf-8')
++    start = between('\t\t\t\tcase VisCommandType::SelectDirectControl:', '\t\t\t\t\tcase VisCommandType::SetGravityCompensation:')
++    (build / 'main_start.inc').write_text(start.split('\n', 1)[1], encoding='utf-8')
+ script = build / 'build.cmd'
+ script.write_text('@echo off\nchcp 65001 >nul\n'
+                   f'call "{vs}\\VC\\Auxiliary\\Build\\vcvars64.bat" >nul\n'
+                   'if errorlevel 1 exit /b 1\n'
+-                  f'cl /nologo /std:c++17 /EHsc /utf-8 /Gy /MD /I"{project}" /I"{project / "ADS/Include"}" '
+-                  f'/I"{project / "手柄"}" /I"{project / "手柄/include"}" '
+-                  f'"{project / "tools/ads_diagnostics_test.cpp"}" '
+-                  f'"{project / "plc_io.cpp"}" /Fe:ads_diagnostics_test.exe /link /OPT:REF\n'
++                  f'cl /nologo /std:c++17 /EHsc /utf-8 /Gy /MD /I"{build}" /I"{project}" /I"{project / "ADS/Include"}" '
++                  f'/I"{project / "手柄"}" /I"{project / "手柄/include"}" /I"{project / "protocol/cpp"}" '
++                  f'"{project / ("tools/" + test + ".cpp")}" '
++                  f'{extra_source}/Fe:ads_diagnostics_test.exe /link /OPT:REF\n'
+                   'if errorlevel 1 exit /b 1\nads_diagnostics_test.exe\nexit /b %errorlevel%\n', encoding='utf-8')
+ result = subprocess.run(['cmd.exe', '/d', '/c', str(script)], cwd=build)
+ print('Offline test artifacts:', build)
+--- before/ADS\Include\ADSComm1.h
++++ after/ADS\Include\ADSComm1.h
+@@ -60,6 +60,7 @@
+ 
+ 	bool IsCommOpen() const;
+ 	std::string GetLastErrorCopy() const;
++	std::string ConnectionDescription() const;
+ 	const char* GetLastError() const;
+ 
+ private:

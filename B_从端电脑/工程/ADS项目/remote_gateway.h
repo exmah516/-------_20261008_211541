@@ -55,6 +55,7 @@ struct RemoteExtraState
 	bool handle_soft_hold = false;
 	bool ads_soft_hold = false;
 	bool connection_hold = false;
+	bool return_ads_fault_hold = false;
 };
 
 class RemoteGateway

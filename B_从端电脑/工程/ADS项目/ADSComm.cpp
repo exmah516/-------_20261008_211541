@@ -154,6 +154,19 @@ std::string CADSComm::GetLastErrorCopy() const
 	return std::string(m_lastError);
 }
 
+std::string CADSComm::ConnectionDescription() const
+{
+	std::lock_guard<std::recursive_mutex> lock(m_mutex);
+	if (m_PAmsAddr == nullptr) return "target=unavailable";
+	const auto& id = m_PAmsAddr->netId.b;
+	char detail[160]{};
+	sprintf_s(detail, "target=%u.%u.%u.%u.%u.%u:%u client_port=%ld timeout_ms=%lu",
+		static_cast<unsigned>(id[0]), static_cast<unsigned>(id[1]), static_cast<unsigned>(id[2]),
+		static_cast<unsigned>(id[3]), static_cast<unsigned>(id[4]), static_cast<unsigned>(id[5]),
+		static_cast<unsigned>(m_PAmsAddr->port), m_adsPort, m_timeoutMs);
+	return detail;
+}
+
 const char* CADSComm::GetLastError() const
 {
 	// 保留旧接口，但返回每线程副本，避免解锁后暴露可变的内部缓冲区。
@@ -629,7 +642,7 @@ unsigned long CADSComm::ADSGetAddr(const char* paraName)
 		&cbReturn);
 	if (nErr != 0)
 	{
-		sprintf_s(m_lastError, sizeof(m_lastError), "Error: AdsSyncReadWriteReqEx2(HNDBYNAME): %ld\n", nErr);
+		sprintf_s(m_lastError, sizeof(m_lastError), "Error: AdsSyncReadWriteReqEx2(HNDBYNAME): %ld symbol=%.160s\n", nErr, key.c_str());
 		return 0;
 	}
 	if (cbReturn != sizeof(handle) || handle == 0)

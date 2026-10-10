@@ -45,6 +45,7 @@ struct AdsFastSnapshot
 	short ft_2_value = 0;
 	bool estop_hold_req = false;
 	bool host_comm_timeout = false;
+	bool self_check_done = false; // 与本次快照绑定，避免断线清空通知缓存后产生伪边沿。
 	// 位置/速度和 PLC 时序可用于运动控制时为 true；不受单独力数据质量影响。
 	bool position_valid = false;
 	// 本次 Sum Read 通信成功且四路力值均为有限数时为 true；PLC 周期跨度仅用于诊断。
@@ -109,7 +110,7 @@ struct AdsEventState
 	bool axis4_manual_done = false;
 	bool axis4_manual_error = false;
 	std::uint32_t axis4_manual_error_id = 0;
-	int gen_state = 0;
+	std::int16_t gen_state = 0; // PLC state 显式以 INT（16 位）存储。
 	bool axis1_return_busy = false;
 	bool axis1_return_done = false;
 	bool axis1_return_error = false;
@@ -154,6 +155,10 @@ struct AdsCommunicationStats
 	std::uint64_t plc_restart_count = 0;
 	std::uint64_t missed_deadlines = 0;
 	std::uint64_t snapshot_queue_dropped = 0;
+	// 故障发生时立即保存，避免成功请求或断线清理覆盖底层错误。
+	std::uint64_t diagnostic_sequence = 0;
+	std::uint64_t diagnostic_tick_ms = 0;
+	char diagnostic[768] = {};
 };
 
 class AdsCommunicationService
@@ -228,6 +233,7 @@ private:
 	void publish_snapshot(const AdsFastSnapshot& snapshot);
 	void set_connection_state(AdsConnectionState state);
 	void update_rate(std::int64_t now_qpc, std::uint64_t rtt_us, bool success);
+	void record_failure(const char* operation, const std::string& detail);
 	void wait_until(std::int64_t qpc_deadline);
 
 	struct NotificationRegistration

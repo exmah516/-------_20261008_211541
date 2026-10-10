@@ -1,0 +1,140 @@
+--- Oct8/main.cpp
++++ before/main.cpp
+@@ -19,6 +19,8 @@
+ #include <cstring>
+ #include <deque>
+ #include <iostream>
++#include <fstream>
++#include <sstream>
+ #include <limits>
+ #include <string>
+ #include <vector>
+@@ -32,6 +34,20 @@
+ int main(int argc, char* argv[])
+ {
+ 	setup_console_utf8();
++#ifdef _DEBUG
++	const char* diagnostic_build = "Debug";
++#else
++	const char* diagnostic_build = "Release";
++#endif
++	// 只记录故障边沿；使用 exe 旁的文件，VS 与脚本启动都能找到同一位置。
++	wchar_t diagnostic_exe[MAX_PATH] = {};
++	GetModuleFileNameW(nullptr, diagnostic_exe, MAX_PATH);
++	std::wstring diagnostic_path(diagnostic_exe);
++	const auto diagnostic_slash = diagnostic_path.find_last_of(L"\\/");
++	diagnostic_path = diagnostic_slash == std::wstring::npos ? L"" : diagnostic_path.substr(0, diagnostic_slash + 1);
++	diagnostic_path += L"ads_fault_diagnostics.log";
++	std::cout << "[ADS-DIAG] build=" << diagnostic_build << " " << __DATE__ << " " << __TIME__
++		<< "；故障记录位于 ADS.exe 同目录的 ads_fault_diagnostics.log" << std::endl;
+ 	constexpr DWORD physical_handle_582_serial = 582;
+ 	constexpr DWORD physical_handle_587_serial = 587;
+ 	// 主循环允许通信线程最多 300 ms 产出下一帧，避免低频 ADS 请求占用期间误触发连接保持。
+@@ -1039,6 +1055,8 @@
+ 	LARGE_INTEGER vis_qpc_frequency{};
+ 	QueryPerformanceFrequency(&vis_qpc_frequency);
+ 	std::int64_t next_vis_publish_qpc = 0;
++	std::uint64_t reported_ads_diagnostic_sequence = 0;
++	ULONGLONG last_ads_diagnostic_log_ms = 0;
+ 
+ 	while (true)
+ 	{
+@@ -1276,7 +1294,53 @@
+ 			{
+ 				ads_soft_hold_active = true;
+ 				clear_force_output();
++				SYSTEMTIME diagnostic_time{};
++				GetLocalTime(&diagnostic_time);
++				std::ostringstream diagnostic;
++				diagnostic << "[ADS-DIAG] " << diagnostic_time.wYear << "-" << diagnostic_time.wMonth << "-" << diagnostic_time.wDay
++					<< " " << diagnostic_time.wHour << ":" << diagnostic_time.wMinute << ":" << diagnostic_time.wSecond
++					<< "." << diagnostic_time.wMilliseconds << " build=" << diagnostic_build
++					<< " new_snapshot=" << has_new_ads_snapshot << " position_valid=" << ads_snapshot.position_valid
++					<< " state=" << static_cast<int>(ads_stats.state)
++					<< " age_us=" << ads_stats.latest_snapshot_age_us << " rtt_us=" << ads_stats.latest_rtt_us
++					<< " failed=" << ads_stats.consecutive_failures << " reconnects=" << ads_stats.reconnect_count
++					<< " plc_restarts=" << ads_stats.plc_restart_count
++					<< " self_check=" << self_check_done << " selfcheck_status=" << ads_events.selfcheck_status
++					<< " reinit_done=" << ads_events.handle_reinit_done
++					<< " host_timeout=" << ads_snapshot.host_comm_timeout << "/" << ads_events.host_comm_timeout
++					<< " return_phase=" << static_cast<int>(planned_return.phase) << " legs=" << planned_return.leg_count;
++				for (int diagnostic_leg = 0; diagnostic_leg < planned_return.leg_count; ++diagnostic_leg)
++				{
++					const auto& leg = planned_return.legs[diagnostic_leg];
++					diagnostic << " axis=" << leg.axis_index + 1 << " target=" << leg.target_abs << " started=" << leg.started;
++				}
++				diagnostic << " axis1_busy/error/id=" << ads_events.axis1_return_busy << "/" << ads_events.axis1_return_error
++					<< "/" << ads_events.axis1_return_error_id
++					<< " axis6_busy/error/id=" << ads_events.axis6_return_busy << "/" << ads_events.axis6_return_error
++					<< "/" << ads_events.axis6_return_error_id << "\n[ADS-DIAG] last_failure_seq=" << ads_stats.diagnostic_sequence
++					<< " failure_tick_ms=" << ads_stats.diagnostic_tick_ms << " now_tick_ms=" << loop_now_ms
++					<< " " << (ads_stats.diagnostic_sequence ? ads_stats.diagnostic : "No ADS call failure recorded; inspect readiness flags or snapshot wait") << "\n";
++				std::cout << diagnostic.str();
++				std::ofstream diagnostic_log(diagnostic_path, std::ios::app | std::ios::binary);
++				if (diagnostic_log) diagnostic_log << diagnostic.str();
++				else std::cerr << "[ADS-DIAG] 无法写入故障文件，请保留控制台输出。" << std::endl;
++				reported_ads_diagnostic_sequence = ads_stats.diagnostic_sequence;
++				last_ads_diagnostic_log_ms = loop_now_ms;
+ 				std::cout << "ADS 快照中断：保持最后参考并丢弃故障期间手柄增量。" << std::endl;
++			}
++			else if (ads_stats.diagnostic_sequence != reported_ads_diagnostic_sequence &&
++				loop_now_ms - last_ads_diagnostic_log_ms >= 1000)
++			{
++				// 主循环可能先等满300ms，底层超时随后才返回；补记迟到原因，最多每秒一次。
++				std::ostringstream diagnostic;
++				diagnostic << "[ADS-DIAG] hold_update tick_ms=" << loop_now_ms
++					<< " failure_tick_ms=" << ads_stats.diagnostic_tick_ms << " seq=" << ads_stats.diagnostic_sequence
++					<< " state=" << static_cast<int>(ads_stats.state) << " " << ads_stats.diagnostic << "\n";
++				std::cout << diagnostic.str();
++				std::ofstream diagnostic_log(diagnostic_path, std::ios::app | std::ios::binary);
++				if (diagnostic_log) diagnostic_log << diagnostic.str();
++				reported_ads_diagnostic_sequence = ads_stats.diagnostic_sequence;
++				last_ads_diagnostic_log_ms = loop_now_ms;
+ 			}
+ 		}
+ 		else if ((ads_soft_hold_active || (connection_hold_active_prev && initial_sync_done)) &&
+@@ -2049,7 +2113,9 @@
+ 				(void)cancel_active_return_motion(true);
+ 				control_active = false;
+ 				clear_force_output();
+-				std::cout << "PLC 自检重新开始，已停止当前控制。" << std::endl;
++				std::cout << (ads_stats.state == AdsConnectionState::Running
++					? "PLC 自检完成标志变为 false，已停止当前控制。"
++					: "ADS 未就绪，自检完成缓存已失效，已停止当前控制；不能据此判定 PLC 重启自检。") << std::endl;
+ 			}
+ 			else if (!last_self_check_done && self_check_done)
+ 			{
+@@ -3789,14 +3855,18 @@
+ 				cylinder3_cmd = cyl.cyl3_open;
+ 				cylinder4_cmd = cyl.cyl4_clamp;
+ 
+-				// 触发判定（本链路自身输入只在当前方向的触发端触发；导管推动 g 触边两端都触发，
+-				// 否则 g 远端无法由导管的递送/撤出自行解除）。
++				// 触发判定：
++				// - 导丝自身：只在 axis6 方向的触发端触发（递送正向到近端，撤出反向到远端）
++				// - 导管推动 g：只在导管当前方向对应的触发端触发（递送 inc1<0 到 g_hi，撤出 inc1>0 到 gmin）
++				//   另一端只靠第 3772-3773 行截断 d1，不触发换手
+ 				const bool g_toward_hi = inc6 > 0.0 || inc1 < 0.0;
+ 				const bool g_toward_lo = inc6 < 0.0 || inc1 > 0.0;
+-				const bool hit_g_hi = (g_now >= g_wire_hi - tol) &&
+-					((axis6_reverse && inc6 > 0.0) || inc1 < 0.0);
+-				const bool hit_g_lo = !hit_g_hi && (g_now <= gmin + tol) &&
+-					((!axis6_reverse && inc6 < 0.0) || inc1 > 0.0);
++				const bool wire_hit_hi = (g_now >= g_wire_hi - tol) && axis6_reverse && inc6 > 0.0;
++				const bool wire_hit_lo = (g_now <= gmin + tol) && !axis6_reverse && inc6 < 0.0;
++				const bool cath_hit_hi = (g_now >= g_wire_hi - tol) && !reverse && inc1 < 0.0;
++				const bool cath_hit_lo = (g_now <= gmin + tol) && reverse && inc1 > 0.0;
++				const bool hit_g_hi = wire_hit_hi || cath_hit_hi;
++				const bool hit_g_lo = !hit_g_hi && (wire_hit_lo || cath_hit_lo);
+ 				const bool trig_1_left = axis1_window_ok && !reverse &&
+ 					(cmd1 <= w1_left + tol) && inc1 < 0.0;
+ 				const bool trig_1_right = axis1_window_ok && reverse &&
+@@ -3827,7 +3897,7 @@
+ 					const double axis5_left_now = axis5_abs - plc_leftlimit[4];
+ 					// 导丝自身触发 → 重定位到限位端（递送：gmax+inset；撤出：gmin）。
+ 					// 导管推动 g 触边 → 重定位到窗口中点，避免换手后立刻再次触边。
+-					const bool wire_caused_g = axis6_reverse ? do_g_hi : do_g_lo;
++					const bool wire_caused_g = axis6_reverse ? wire_hit_hi : wire_hit_lo;
+ 					const double g_target = wire_caused_g
+ 						? (axis6_reverse ? gmin : (gmax + inset))
+ 						: (0.5 * (gmin + gmax));

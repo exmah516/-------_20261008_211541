@@ -1,0 +1,6 @@
+ads_communication.cpp: October 8 commit vs repository HEAD: SAME
+ads_communication.h: October 8 commit vs repository HEAD: SAME
+ADSComm.cpp: October 8 commit vs repository HEAD: SAME
+remote_gateway.cpp: October 8 commit vs repository HEAD: SAME
+main.cpp: October 8 commit vs repository HEAD: SAME
+Active PLC project Oct8..HEAD diff: NONE

@@ -917,6 +917,8 @@ void AdsCommunicationService::run()
 			device_state_ok = ads_.ReadDeviceState(ads_state, device_state);
 			if (device_state_ok && ads_state != ADSSTATE_RUN)
 			{
+				record_failure("PLC_STATE", "ads_state=" + std::to_string(ads_state) +
+					" device_state=" + std::to_string(device_state));
 				mark_plc_restart(false);
 				fail_queued_low_frequency_requests();
 				fail_queued_planned_return_commands();
@@ -938,6 +940,7 @@ void AdsCommunicationService::run()
 		}
 		if (!device_state_ok)
 		{
+			record_failure("READ_DEVICE_STATE", ads_.GetLastErrorCopy());
 			fail_queued_low_frequency_requests();
 			fail_queued_planned_return_commands();
 			AdsFastSnapshot state_failure_snapshot{};
@@ -1066,18 +1069,34 @@ bool AdsCommunicationService::ensure_connection(bool reconnecting)
 {
 	// 服务只被动建立路由，禁止在后台把人工 STOP/故障 STOP 自动切回 RUN。
 	// 握手连接阶段使用 1000 ms 宽容超时
-	ads_.SetTimeout(1000);
-	if (!ads_.IsCommOpen() && !ads_.OpenCommInsideReadOnly() && !ads_.OpenCommReadOnly()) return false;
+	if (!ads_.SetTimeout(1000))
+	{
+		record_failure("SET_TIMEOUT", ads_.GetLastErrorCopy());
+		return false;
+	}
+	if (!ads_.IsCommOpen() && !ads_.OpenCommInsideReadOnly())
+	{
+		// 后备路由失败不能覆盖首次本地连接错误，两条路径分别保留。
+		const std::string local_failure = ads_.ConnectionDescription() + " " + ads_.GetLastErrorCopy();
+		if (!ads_.OpenCommReadOnly())
+		{
+			record_failure("CONNECT", "local={" + local_failure + "} fallback={" +
+				ads_.ConnectionDescription() + " " + ads_.GetLastErrorCopy() + "}");
+			return false;
+		}
+	}
 	unsigned short ads_state = ADSSTATE_INVALID;
 	unsigned short device_state = 0;
 	if (!ads_.ReadDeviceState(ads_state, device_state))
 	{
+		record_failure("CONNECT_STATE", ads_.GetLastErrorCopy());
 		clear_runtime_connection_state();
 		ads_.CloseComm();
 		return false;
 	}
 	if (ads_state != ADSSTATE_RUN)
 	{
+		record_failure("CONNECT_PLC_STATE", "ads_state=" + std::to_string(ads_state));
 		if (reconnecting) mark_plc_restart(false);
 		clear_runtime_connection_state();
 		ads_.CloseComm();
@@ -1085,6 +1104,7 @@ bool AdsCommunicationService::ensure_connection(bool reconnecting)
 	}
 	if (!initialize_connection())
 	{
+		record_failure("INITIALIZE", ads_.GetLastErrorCopy());
 		clear_runtime_connection_state();
 		ads_.CloseComm();
 		return false;
@@ -1092,10 +1112,12 @@ bool AdsCommunicationService::ensure_connection(bool reconnecting)
 	// 运行期允许单次 ADS 调用等待 300 ms，短时调度抖动不直接升级为断线。
 	if (!ads_.SetTimeout(300))
 	{
+		record_failure("SET_TIMEOUT", ads_.GetLastErrorCopy());
 		clear_runtime_connection_state();
 		ads_.CloseComm();
 		return false;
 	}
+	std::cout << "[ADS-DIAG] connected " << ads_.ConnectionDescription() << std::endl;
 	return true;
 }
 
@@ -1465,10 +1487,15 @@ bool AdsCommunicationService::read_fast_snapshot(AdsFastSnapshot& snapshot, bool
 		(after.QuadPart - before.QuadPart) * 1000000LL / qpc_frequency_);
 	if (!read_ok)
 	{
+		record_failure("SUM_READ", ads_.GetLastErrorCopy());
 		snapshot.valid = false;
 		return false;
 	}
 	snapshot.plc_cycle_span = snapshot.plc_cycle_end - snapshot.plc_cycle_begin;
+	{
+		std::lock_guard<std::mutex> lock(event_mutex_);
+		snapshot.self_check_done = event_state_.self_check_done;
+	}
 
 	bool positions_finite = true;
 	for (int axis = 0; axis < 7; ++axis)
@@ -1519,6 +1546,8 @@ bool AdsCommunicationService::read_fast_snapshot(AdsFastSnapshot& snapshot, bool
 	last_plc_cycle_ = snapshot.plc_cycle_end;
 	if (plc_time_regressed || plc_cycle_regressed)
 	{
+		record_failure("PLC_TIME_REGRESSED", "cycle=" + std::to_string(snapshot.plc_cycle_end) +
+			" dc_time=" + std::to_string(snapshot.plc_dc_task_time));
 		mark_plc_restart(!handles_fresh);
 		snapshot.position_valid = false;
 		snapshot.force_valid = false;
@@ -1527,12 +1556,15 @@ bool AdsCommunicationService::read_fast_snapshot(AdsFastSnapshot& snapshot, bool
 	}
 	if (stalled_plc_snapshot_count_ >= kMaxStalledPlcSnapshots)
 	{
+		record_failure("PLC_TASK_STALLED", "cycle=" + std::to_string(snapshot.plc_cycle_end) +
+			" dc_time=" + std::to_string(snapshot.plc_dc_task_time));
 		snapshot.position_valid = false;
 		snapshot.force_valid = false;
 		snapshot.valid = false;
 		return false;
 	}
 	// 返回值表示本拍是否仍可用于运动控制，而不是力数据是否有效。
+	if (!snapshot.position_valid) record_failure("NONFINITE_POSITION", "Position, coordinates or axis1 velocity is not finite");
 	return snapshot.position_valid;
 }
 
@@ -1753,6 +1785,14 @@ bool AdsCommunicationService::write_output_cycle(bool& planned_return_processed)
 		item_results.data(),
 		&transport_succeeded);
 	(void)all_items_succeeded;
+	if (!all_items_succeeded)
+	{
+		record_failure("SUM_WRITE", ads_.GetLastErrorCopy() +
+			" planned_operation=" + (has_planned_return ? std::to_string(static_cast<int>(planned_slot.command.operation)) : "none") +
+			" legs=" + std::to_string(has_planned_return ? planned_slot.command.leg_count : 0) +
+			" clear_mask=" + std::to_string(output_clear_mask) +
+			" transport_ok=" + std::to_string(transport_succeeded));
+	}
 	auto item_range_succeeded = [&](std::size_t begin, std::size_t end)
 	{
 		for (std::size_t index = begin; index < end; ++index)
@@ -1891,7 +1931,7 @@ bool AdsCommunicationService::register_notifications()
 		{ "G.axis4_manual_done", sizeof(bool), kNotifyAxis4Done },
 		{ AdsSymbol::axis4_manual_error, sizeof(bool), kNotifyAxis4Error },
 		{ AdsSymbol::axis4_manual_error_id, sizeof(std::uint32_t), kNotifyAxis4ErrorId },
-		{ AdsSymbol::gen_state, sizeof(int), kNotifyGenState },
+		{ AdsSymbol::gen_state, sizeof(std::int16_t), kNotifyGenState },
 		{ AdsSymbol::axis1_return.busy, sizeof(bool), kNotifyAxis1ReturnBusy },
 		{ AdsSymbol::axis1_return.done, sizeof(bool), kNotifyAxis1ReturnDone },
 		{ AdsSymbol::axis1_return.error, sizeof(bool), kNotifyAxis1ReturnError },
@@ -2145,6 +2185,17 @@ void AdsCommunicationService::publish_snapshot(const AdsFastSnapshot& snapshot)
 	}
 	if (snapshot.position_valid) latest_valid_qpc_.store(snapshot.qpc_ticks, std::memory_order_release);
 	snapshot_cv_.notify_all();
+}
+
+void AdsCommunicationService::record_failure(const char* operation, const std::string& detail)
+{
+	std::string single_line = detail + " " + ads_.ConnectionDescription();
+	std::replace(single_line.begin(), single_line.end(), '\n', ' ');
+	std::replace(single_line.begin(), single_line.end(), '\r', ' ');
+	std::lock_guard<std::mutex> lock(stats_mutex_);
+	++stats_.diagnostic_sequence;
+	stats_.diagnostic_tick_ms = GetTickCount64();
+	snprintf(stats_.diagnostic, sizeof(stats_.diagnostic), "%s: %s", operation, single_line.c_str());
 }
 
 void AdsCommunicationService::set_connection_state(AdsConnectionState state)

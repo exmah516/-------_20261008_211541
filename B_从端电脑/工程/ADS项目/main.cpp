@@ -19,6 +19,8 @@
 #include <cstring>
 #include <deque>
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include <limits>
 #include <string>
 #include <vector>
@@ -32,6 +34,20 @@
 int main(int argc, char* argv[])
 {
 	setup_console_utf8();
+#ifdef _DEBUG
+	const char* diagnostic_build = "Debug";
+#else
+	const char* diagnostic_build = "Release";
+#endif
+	// 只记录故障边沿；使用 exe 旁的文件，VS 与脚本启动都能找到同一位置。
+	wchar_t diagnostic_exe[MAX_PATH] = {};
+	GetModuleFileNameW(nullptr, diagnostic_exe, MAX_PATH);
+	std::wstring diagnostic_path(diagnostic_exe);
+	const auto diagnostic_slash = diagnostic_path.find_last_of(L"\\/");
+	diagnostic_path = diagnostic_slash == std::wstring::npos ? L"" : diagnostic_path.substr(0, diagnostic_slash + 1);
+	diagnostic_path += L"ads_fault_diagnostics.log";
+	std::cout << "[ADS-DIAG] build=" << diagnostic_build << " " << __DATE__ << " " << __TIME__
+		<< "；故障记录位于 ADS.exe 同目录的 ads_fault_diagnostics.log" << std::endl;
 	constexpr DWORD physical_handle_582_serial = 582;
 	constexpr DWORD physical_handle_587_serial = 587;
 	// 主循环允许通信线程最多 300 ms 产出下一帧，避免低频 ADS 请求占用期间误触发连接保持。
@@ -1019,6 +1035,7 @@ int main(int argc, char* argv[])
 	std::uint64_t handled_plc_restart_count = 0;
 	std::uint64_t handled_reconnect_count = 0;
 	bool ads_soft_hold_active = true;
+	bool ads_resume_required = false;
 	bool plc_restart_recovery_latched = false;
 	std::vector<AdsFastSnapshot> drained_ads_snapshots;
 	struct HandleRecordSnapshot
@@ -1039,6 +1056,8 @@ int main(int argc, char* argv[])
 	LARGE_INTEGER vis_qpc_frequency{};
 	QueryPerformanceFrequency(&vis_qpc_frequency);
 	std::int64_t next_vis_publish_qpc = 0;
+	std::uint64_t reported_ads_diagnostic_sequence = 0;
+	ULONGLONG last_ads_diagnostic_log_ms = 0;
 
 	while (true)
 	{
@@ -1086,7 +1105,10 @@ int main(int argc, char* argv[])
 				pending_return_error_deadline_ms = 0;
 			}
 		}
-		self_check_done = ads_events.self_check_done;
+		// 断线清空的是通信缓存，只有新鲜 PLC 快照才能改变已确认的自检状态。
+		const bool ads_self_check_valid = has_new_ads_snapshot && ads_snapshot.position_valid &&
+			ads_stats.state == AdsConnectionState::Running;
+		if (ads_self_check_valid) self_check_done = ads_snapshot.self_check_done;
 		if (ads_events.selfcheck_status == 2 || ads_events.selfcheck_status == 0 ||
 			ads_events.selfcheck_status == 3 ||
 			ads_stats.state != AdsConnectionState::Running)
@@ -1272,11 +1294,62 @@ int main(int argc, char* argv[])
 
 		if (!ads_motion_cycle_valid)
 		{
+			if (initial_sync_done)
+			{
+				ads_resume_required = true;
+				control_active = false;
+			}
 			if (!ads_soft_hold_active)
 			{
 				ads_soft_hold_active = true;
 				clear_force_output();
+				SYSTEMTIME diagnostic_time{};
+				GetLocalTime(&diagnostic_time);
+				std::ostringstream diagnostic;
+				diagnostic << "[ADS-DIAG] " << diagnostic_time.wYear << "-" << diagnostic_time.wMonth << "-" << diagnostic_time.wDay
+					<< " " << diagnostic_time.wHour << ":" << diagnostic_time.wMinute << ":" << diagnostic_time.wSecond
+					<< "." << diagnostic_time.wMilliseconds << " build=" << diagnostic_build
+					<< " new_snapshot=" << has_new_ads_snapshot << " position_valid=" << ads_snapshot.position_valid
+					<< " state=" << static_cast<int>(ads_stats.state)
+					<< " age_us=" << ads_stats.latest_snapshot_age_us << " rtt_us=" << ads_stats.latest_rtt_us
+					<< " failed=" << ads_stats.consecutive_failures << " reconnects=" << ads_stats.reconnect_count
+					<< " plc_restarts=" << ads_stats.plc_restart_count
+					<< " self_check=" << self_check_done << " selfcheck_status=" << ads_events.selfcheck_status
+					<< " reinit_done=" << ads_events.handle_reinit_done
+					<< " host_timeout=" << ads_snapshot.host_comm_timeout << "/" << ads_events.host_comm_timeout
+					<< " return_phase=" << static_cast<int>(planned_return.phase) << " legs=" << planned_return.leg_count;
+				for (int diagnostic_leg = 0; diagnostic_leg < planned_return.leg_count; ++diagnostic_leg)
+				{
+					const auto& leg = planned_return.legs[diagnostic_leg];
+					diagnostic << " axis=" << leg.axis_index + 1 << " target=" << leg.target_abs << " started=" << leg.started;
+				}
+				diagnostic << " axis1_busy/error/id=" << ads_events.axis1_return_busy << "/" << ads_events.axis1_return_error
+					<< "/" << ads_events.axis1_return_error_id
+					<< " axis6_busy/error/id=" << ads_events.axis6_return_busy << "/" << ads_events.axis6_return_error
+					<< "/" << ads_events.axis6_return_error_id << "\n[ADS-DIAG] last_failure_seq=" << ads_stats.diagnostic_sequence
+					<< " failure_tick_ms=" << ads_stats.diagnostic_tick_ms << " now_tick_ms=" << loop_now_ms
+					<< " " << (ads_stats.diagnostic_sequence ? ads_stats.diagnostic : "No ADS call failure recorded; inspect readiness flags or snapshot wait") << "\n";
+				std::cout << diagnostic.str();
+				std::ofstream diagnostic_log(diagnostic_path, std::ios::app | std::ios::binary);
+				if (diagnostic_log) diagnostic_log << diagnostic.str();
+				else std::cerr << "[ADS-DIAG] 无法写入故障文件，请保留控制台输出。" << std::endl;
+				reported_ads_diagnostic_sequence = ads_stats.diagnostic_sequence;
+				last_ads_diagnostic_log_ms = loop_now_ms;
 				std::cout << "ADS 快照中断：保持最后参考并丢弃故障期间手柄增量。" << std::endl;
+			}
+			else if (ads_stats.diagnostic_sequence != reported_ads_diagnostic_sequence &&
+				loop_now_ms - last_ads_diagnostic_log_ms >= 1000)
+			{
+				// 主循环可能先等满300ms，底层超时随后才返回；补记迟到原因，最多每秒一次。
+				std::ostringstream diagnostic;
+				diagnostic << "[ADS-DIAG] hold_update tick_ms=" << loop_now_ms
+					<< " failure_tick_ms=" << ads_stats.diagnostic_tick_ms << " seq=" << ads_stats.diagnostic_sequence
+					<< " state=" << static_cast<int>(ads_stats.state) << " " << ads_stats.diagnostic << "\n";
+				std::cout << diagnostic.str();
+				std::ofstream diagnostic_log(diagnostic_path, std::ios::app | std::ios::binary);
+				if (diagnostic_log) diagnostic_log << diagnostic.str();
+				reported_ads_diagnostic_sequence = ads_stats.diagnostic_sequence;
+				last_ads_diagnostic_log_ms = loop_now_ms;
 			}
 		}
 		else if ((ads_soft_hold_active || (connection_hold_active_prev && initial_sync_done)) &&
@@ -1342,6 +1415,8 @@ int main(int argc, char* argv[])
 			independent_axis2_hold_rel = plc_act_pos[1];
 			std::cout << "连接就绪：保持 PLC 当前反馈位置，不恢复历史目标。axis2="
 				<< plc_act_pos[1] << "，axis7=" << plc_act_pos[6] << "（相对角度）" << std::endl;
+			if (ads_resume_required)
+				std::cout << "通信恢复后保持停控；请点击“开始控制”在当前位置继续，无需重新进入准备位置。" << std::endl;
 		}
 
 		if (!initial_sync_done)
@@ -1767,13 +1842,13 @@ int main(int argc, char* argv[])
 			const int ch = _getch();
 			if (ch == 'c' || ch == 'C')
 			{
-				if (!startup.completed && startup.phase == StartupPhase::WaitForEnter)
+				if ((!startup.completed && startup.phase == StartupPhase::WaitForEnter) || ads_resume_required)
 				{
 					if (estop_hold_active)
 					{
 						std::cout << "直接控制启动已忽略：处于 PLC 急停状态。" << std::endl;
 					}
-					else if (ads_soft_hold_active)
+					else if (ads_soft_hold_active || handle_soft_hold_active || !initial_sync_done || return_ads_fault_hold)
 					{
 						std::cout << "直接控制启动已忽略：ADS 当前处于软保持或重连状态。" << std::endl;
 					}
@@ -1797,6 +1872,7 @@ int main(int argc, char* argv[])
 						startup.completed = true;
 						startup.prompted = false;
 						control_active = true;
+						ads_resume_required = false;
 						plc_restart_recovery_latched = false;
 						std::cout << "已进入直接控制。" << std::endl;
 					}
@@ -2042,14 +2118,16 @@ int main(int argc, char* argv[])
 			: requested_guidewire_mode;
 
 		// 6) 自检和重同步请求均由 Notification 驱动，不再做周期单读。
-		if (has_self_check_flag && self_check_done != last_self_check_done)
+		if (ads_self_check_valid && has_self_check_flag && self_check_done != last_self_check_done)
 		{
 			if (last_self_check_done && !self_check_done)
 			{
 				(void)cancel_active_return_motion(true);
 				control_active = false;
 				clear_force_output();
-				std::cout << "PLC 自检重新开始，已停止当前控制。" << std::endl;
+				std::cout << (ads_stats.state == AdsConnectionState::Running
+					? "PLC 自检完成标志变为 false，已停止当前控制。"
+					: "ADS 未就绪，自检完成缓存已失效，已停止当前控制；不能据此判定 PLC 重启自检。") << std::endl;
 			}
 			else if (!last_self_check_done && self_check_done)
 			{
@@ -2072,7 +2150,7 @@ int main(int argc, char* argv[])
 				startup.completed = true;
 				startup.direct_positioning = false;
 				startup.prompted = false;
-				if (coordinates_refreshed && !estop_hold_active &&
+				if (coordinates_refreshed && !ads_resume_required && !estop_hold_active &&
 					!ads_soft_hold_active && sync_all(30))
 				{
 					control_active = true;
@@ -2085,7 +2163,7 @@ int main(int argc, char* argv[])
 				}
 			}
 		}
-		last_self_check_done = self_check_done;
+		if (ads_self_check_valid) last_self_check_done = self_check_done;
 
 		if (handle_reinit_req && !last_handle_reinit_req)
 		{
@@ -2093,7 +2171,7 @@ int main(int argc, char* argv[])
 			(void)cancel_active_return_motion(true);
 			const bool coordinates_refreshed = ads_communication.refresh_coordinates();
 			if (!coordinates_refreshed) ads_communication.request_coordinate_refresh();
-			if (coordinates_refreshed && !estop_hold_active &&
+			if (coordinates_refreshed && !ads_resume_required && !estop_hold_active &&
 				!ads_soft_hold_active && !startup.is_active() &&
 				sync_all(30))
 			{
@@ -2105,7 +2183,7 @@ int main(int argc, char* argv[])
 		// 8) 当启动已完成但控制未激活时，通过全量重同步恢复。
 		const bool motion_startup_active = startup.is_active();
 		startup_smoothing_bypass = motion_startup_active || emergency_retract_active;
-		if (!control_active && !return_ads_fault_hold && !motion_startup_active &&
+		if (!control_active && !return_ads_fault_hold && !ads_resume_required && !motion_startup_active &&
 			!estop_hold_active && !ads_soft_hold_active && startup.completed)
 		{
 			if (sync_all(20))
@@ -4823,6 +4901,7 @@ int main(int argc, char* argv[])
 				remote_extra.force_zero_ok_count = remote_force_zero_ok_count;
 				remote_extra.force_zero_fail_count = remote_force_zero_fail_count;
 				remote_extra.initial_sync_done = initial_sync_done;
+				remote_extra.return_ads_fault_hold = return_ads_fault_hold;
 				remote_extra.handle_soft_hold = handle_soft_hold_active;
 				remote_extra.ads_soft_hold = ads_soft_hold_active;
 				remote_extra.connection_hold = connection_hold_active;
@@ -5355,6 +5434,7 @@ int main(int argc, char* argv[])
 						// 自检完成后点击“开始控制”：不再走到准备位置，直接在当前位置开始手柄控制。
 						pending_selfcheck_axes = 0;
 						if (!startup.is_active() &&
+							!return_ads_fault_hold && !handle_soft_hold_active && initial_sync_done &&
 							!estop_hold_active &&
 							!ads_soft_hold_active &&
 							has_self_check_flag && self_check_done)
@@ -5372,15 +5452,19 @@ int main(int argc, char* argv[])
 							}
 							else if (sync_all(20))
 							{
-								guidewire_mode = GuidewireMode::None;
-								axis6_crawl.enabled = false;
-								axis6_window_locked = false;
+								if (!ads_resume_required)
+								{
+									guidewire_mode = GuidewireMode::None;
+									axis6_crawl.enabled = false;
+									axis6_window_locked = false;
+								}
 								startup.recovery_mode = false;
 								startup.direct_positioning = false;
 								startup.phase = StartupPhase::Done;
 								startup.completed = true;
 								startup.prompted = false;
 								control_active = true;
+								ads_resume_required = false;
 								plc_restart_recovery_latched = false;
 								std::cout << "已在当前位置开始控制。" << std::endl;
 							}

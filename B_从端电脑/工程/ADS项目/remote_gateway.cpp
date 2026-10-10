@@ -312,11 +312,12 @@ namespace
 			s += t;
 		};
 		if (vs.estop_hold) add("PLC 急停保持");
+		if (ex.return_ads_fault_hold) add("回退故障已锁止，请检查 PLC 回退错误并在确认停止后重新启动从端");
 		if (vs.ads_state != 2 || ex.ads_soft_hold) add("ADS 通信未就绪或处于软保持");
 		if (ex.handle_soft_hold) add("手柄数据无效（从端未收到有效的主端手柄采样，请确认主端手柄在线且已持有控制权）");
 		if (!ex.initial_sync_done) add("从端初始同步未完成（需要手柄就绪、ADS 正常且已完成自检）");
-		if (!vs.self_check_done) add("尚未到达器械准备位置");
-		else if (!vs.control_active) add("手柄控制尚未开始（请点击“开始控制”）");
+		if (!vs.self_check_done && vs.ads_state == 2 && !ex.ads_soft_hold) add("尚未到达器械准备位置");
+		else if (!vs.control_active && !ex.return_ads_fault_hold && vs.ads_state == 2 && !ex.ads_soft_hold) add("手柄控制尚未开始（请点击“开始控制”）");
 		if (s.empty()) add("自动流程（启动准备/换手/回退/屈曲恢复/软限位）正在接管");
 		return s;
 	}
@@ -908,7 +909,7 @@ void RemoteGateway::handle_command(std::uintptr_t sock_handle, int id, const std
 		if (w < 10.0 || w > 639.0) { send_ack(sock, id, "rejected", "Y阀及导丝机构位置范围为 10–639 mm"); return; }
 		if (c > w) { send_ack(sock, id, "rejected", "导管搓捻机构位置不得大于 Y阀及导丝机构位置"); return; }
 		if (st.vs.ads_state != 2) { send_ack(sock, id, "rejected", "从端 ADS 通信未就绪"); return; }
-		if (st.vs.self_check_done) { send_ack(sock, id, "rejected", "已处于器械准备位置，无需重复进入"); return; }
+		if (st.vs.self_check_done) { send_ack(sock, id, "rejected", "PLC 自检已完成，无需重复进入准备位置；通信恢复就绪后请点击“开始控制”"); return; }
 		if (st.vs.selfcheck_status != 1 && st.vs.selfcheck_status != 3)
 		{
 			send_ack(sock, id, "rejected", "PLC 当前不接受自检请求（运行中或尚未初始化）");
@@ -1006,13 +1007,20 @@ void RemoteGateway::handle_command(std::uintptr_t sock_handle, int id, const std
 	if (name == "start_control")
 	{
 		// 等价于本地调试台自检完成后的“开始控制”（SelectDirectControl）：在当前位置直接进入手柄控制。
+		// 通信中断会清空自检缓存，必须先区分通信不可用与 PLC 确认未自检。
+		if (st.vs.ads_state != 2 || st.extra.ads_soft_hold)
+		{
+			send_ack(sock, id, "rejected", "ADS 通信正在恢复，请等待“连接就绪”后再次点击“开始控制”，无需因此重新进入准备位置");
+			return;
+		}
 		if (st.vs.control_active) { send_ack(sock, id, "done"); return; }
 		if (!st.vs.self_check_done)
 		{
 			send_ack(sock, id, "rejected", "尚未到达器械准备位置，请先点击“进入器械准备位置”");
 			return;
 		}
-		if (st.vs.estop_hold || st.vs.ads_state != 2 || st.extra.ads_soft_hold || !st.extra.initial_sync_done)
+		if (st.vs.estop_hold || st.extra.return_ads_fault_hold || st.extra.handle_soft_hold ||
+			st.vs.ads_state != 2 || st.extra.ads_soft_hold || !st.extra.initial_sync_done)
 		{
 			// 初始同步完成前开始控制会被紧接着的初始同步重置，必须等它完成。
 			send_ack(sock, id, "rejected", "暂不能开始控制：" + describe_hold(st.vs, st.extra));

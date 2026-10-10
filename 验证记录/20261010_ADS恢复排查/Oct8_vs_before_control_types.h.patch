@@ -1,0 +1,19 @@
+--- Oct8/control_types.h
++++ before/control_types.h
+@@ -221,14 +221,14 @@
+ 	unsigned short cyl1_clamp = 5;
+ 	unsigned short cyl1_preclamp = 320;
+ 	unsigned short cyl2_open = 5;
+-	unsigned short cyl2_clamp = 600;
++	unsigned short cyl2_clamp = 1000;
+ 	unsigned short cyl2_preopen = 150;
+ 	unsigned short cyl2_preclamp = 400;
+ 	unsigned short cyl3_open = 450;
+ 	unsigned short cyl3_clamp = 50;
+ 	unsigned short cyl3_preclamp = 200;
+ 	unsigned short cyl4_open = 5;
+-	unsigned short cyl4_clamp = 500;
++	unsigned short cyl4_clamp = 1000;
+ 	unsigned short cyl4_preopen = 300;
+ 	unsigned short cyl4_preclamp = 300;
+ 	unsigned short cyl3_follow_release = 400;

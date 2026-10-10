@@ -60,6 +60,7 @@ public:
 
 	bool IsCommOpen() const;
 	std::string GetLastErrorCopy() const;
+	std::string ConnectionDescription() const;
 	const char* GetLastError() const;
 
 private:

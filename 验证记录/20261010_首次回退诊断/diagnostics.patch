@@ -1,0 +1,253 @@
+--- before/main.cpp
++++ after/main.cpp
+@@ -19,6 +19,8 @@
+ #include <cstring>
+ #include <deque>
+ #include <iostream>
++#include <fstream>
++#include <sstream>
+ #include <limits>
+ #include <string>
+ #include <vector>
+@@ -32,6 +34,20 @@
+ int main(int argc, char* argv[])
+ {
+ 	setup_console_utf8();
++#ifdef _DEBUG
++	const char* diagnostic_build = "Debug";
++#else
++	const char* diagnostic_build = "Release";
++#endif
++	// 只记录故障边沿；使用 exe 旁的文件，VS 与脚本启动都能找到同一位置。
++	wchar_t diagnostic_exe[MAX_PATH] = {};
++	GetModuleFileNameW(nullptr, diagnostic_exe, MAX_PATH);
++	std::wstring diagnostic_path(diagnostic_exe);
++	const auto diagnostic_slash = diagnostic_path.find_last_of(L"\\/");
++	diagnostic_path = diagnostic_slash == std::wstring::npos ? L"" : diagnostic_path.substr(0, diagnostic_slash + 1);
++	diagnostic_path += L"ads_fault_diagnostics.log";
++	std::cout << "[ADS-DIAG] build=" << diagnostic_build << " " << __DATE__ << " " << __TIME__
++		<< "；故障记录位于 ADS.exe 同目录的 ads_fault_diagnostics.log" << std::endl;
+ 	constexpr DWORD physical_handle_582_serial = 582;
+ 	constexpr DWORD physical_handle_587_serial = 587;
+ 	// 主循环允许通信线程最多 300 ms 产出下一帧，避免低频 ADS 请求占用期间误触发连接保持。
+@@ -1039,6 +1055,8 @@
+ 	LARGE_INTEGER vis_qpc_frequency{};
+ 	QueryPerformanceFrequency(&vis_qpc_frequency);
+ 	std::int64_t next_vis_publish_qpc = 0;
++	std::uint64_t reported_ads_diagnostic_sequence = 0;
++	ULONGLONG last_ads_diagnostic_log_ms = 0;
+ 
+ 	while (true)
+ 	{
+@@ -1276,7 +1294,53 @@
+ 			{
+ 				ads_soft_hold_active = true;
+ 				clear_force_output();
++				SYSTEMTIME diagnostic_time{};
++				GetLocalTime(&diagnostic_time);
++				std::ostringstream diagnostic;
++				diagnostic << "[ADS-DIAG] " << diagnostic_time.wYear << "-" << diagnostic_time.wMonth << "-" << diagnostic_time.wDay
++					<< " " << diagnostic_time.wHour << ":" << diagnostic_time.wMinute << ":" << diagnostic_time.wSecond
++					<< "." << diagnostic_time.wMilliseconds << " build=" << diagnostic_build
++					<< " new_snapshot=" << has_new_ads_snapshot << " position_valid=" << ads_snapshot.position_valid
++					<< " state=" << static_cast<int>(ads_stats.state)
++					<< " age_us=" << ads_stats.latest_snapshot_age_us << " rtt_us=" << ads_stats.latest_rtt_us
++					<< " failed=" << ads_stats.consecutive_failures << " reconnects=" << ads_stats.reconnect_count
++					<< " plc_restarts=" << ads_stats.plc_restart_count
++					<< " self_check=" << self_check_done << " selfcheck_status=" << ads_events.selfcheck_status
++					<< " reinit_done=" << ads_events.handle_reinit_done
++					<< " host_timeout=" << ads_snapshot.host_comm_timeout << "/" << ads_events.host_comm_timeout
++					<< " return_phase=" << static_cast<int>(planned_return.phase) << " legs=" << planned_return.leg_count;
++				for (int diagnostic_leg = 0; diagnostic_leg < planned_return.leg_count; ++diagnostic_leg)
++				{
++					const auto& leg = planned_return.legs[diagnostic_leg];
++					diagnostic << " axis=" << leg.axis_index + 1 << " target=" << leg.target_abs << " started=" << leg.started;
++				}
++				diagnostic << " axis1_busy/error/id=" << ads_events.axis1_return_busy << "/" << ads_events.axis1_return_error
++					<< "/" << ads_events.axis1_return_error_id
++					<< " axis6_busy/error/id=" << ads_events.axis6_return_busy << "/" << ads_events.axis6_return_error
++					<< "/" << ads_events.axis6_return_error_id << "\n[ADS-DIAG] last_failure_seq=" << ads_stats.diagnostic_sequence
++					<< " failure_tick_ms=" << ads_stats.diagnostic_tick_ms << " now_tick_ms=" << loop_now_ms
++					<< " " << (ads_stats.diagnostic_sequence ? ads_stats.diagnostic : "No ADS call failure recorded; inspect readiness flags or snapshot wait") << "\n";
++				std::cout << diagnostic.str();
++				std::ofstream diagnostic_log(diagnostic_path, std::ios::app | std::ios::binary);
++				if (diagnostic_log) diagnostic_log << diagnostic.str();
++				else std::cerr << "[ADS-DIAG] 无法写入故障文件，请保留控制台输出。" << std::endl;
++				reported_ads_diagnostic_sequence = ads_stats.diagnostic_sequence;
++				last_ads_diagnostic_log_ms = loop_now_ms;
+ 				std::cout << "ADS 快照中断：保持最后参考并丢弃故障期间手柄增量。" << std::endl;
++			}
++			else if (ads_stats.diagnostic_sequence != reported_ads_diagnostic_sequence &&
++				loop_now_ms - last_ads_diagnostic_log_ms >= 1000)
++			{
++				// 主循环可能先等满300ms，底层超时随后才返回；补记迟到原因，最多每秒一次。
++				std::ostringstream diagnostic;
++				diagnostic << "[ADS-DIAG] hold_update tick_ms=" << loop_now_ms
++					<< " failure_tick_ms=" << ads_stats.diagnostic_tick_ms << " seq=" << ads_stats.diagnostic_sequence
++					<< " state=" << static_cast<int>(ads_stats.state) << " " << ads_stats.diagnostic << "\n";
++				std::cout << diagnostic.str();
++				std::ofstream diagnostic_log(diagnostic_path, std::ios::app | std::ios::binary);
++				if (diagnostic_log) diagnostic_log << diagnostic.str();
++				reported_ads_diagnostic_sequence = ads_stats.diagnostic_sequence;
++				last_ads_diagnostic_log_ms = loop_now_ms;
+ 			}
+ 		}
+ 		else if ((ads_soft_hold_active || (connection_hold_active_prev && initial_sync_done)) &&
+@@ -2049,7 +2113,9 @@
+ 				(void)cancel_active_return_motion(true);
+ 				control_active = false;
+ 				clear_force_output();
+-				std::cout << "PLC 自检重新开始，已停止当前控制。" << std::endl;
++				std::cout << (ads_stats.state == AdsConnectionState::Running
++					? "PLC 自检完成标志变为 false，已停止当前控制。"
++					: "ADS 未就绪，自检完成缓存已失效，已停止当前控制；不能据此判定 PLC 重启自检。") << std::endl;
+ 			}
+ 			else if (!last_self_check_done && self_check_done)
+ 			{
+--- before/ads_communication.cpp
++++ after/ads_communication.cpp
+@@ -917,6 +917,8 @@
+ 			device_state_ok = ads_.ReadDeviceState(ads_state, device_state);
+ 			if (device_state_ok && ads_state != ADSSTATE_RUN)
+ 			{
++				record_failure("PLC_STATE", "ads_state=" + std::to_string(ads_state) +
++					" device_state=" + std::to_string(device_state));
+ 				mark_plc_restart(false);
+ 				fail_queued_low_frequency_requests();
+ 				fail_queued_planned_return_commands();
+@@ -938,6 +940,7 @@
+ 		}
+ 		if (!device_state_ok)
+ 		{
++			record_failure("READ_DEVICE_STATE", ads_.GetLastErrorCopy());
+ 			fail_queued_low_frequency_requests();
+ 			fail_queued_planned_return_commands();
+ 			AdsFastSnapshot state_failure_snapshot{};
+@@ -1067,17 +1070,23 @@
+ 	// 服务只被动建立路由，禁止在后台把人工 STOP/故障 STOP 自动切回 RUN。
+ 	// 握手连接阶段使用 1000 ms 宽容超时
+ 	ads_.SetTimeout(1000);
+-	if (!ads_.IsCommOpen() && !ads_.OpenCommInsideReadOnly() && !ads_.OpenCommReadOnly()) return false;
++	if (!ads_.IsCommOpen() && !ads_.OpenCommInsideReadOnly() && !ads_.OpenCommReadOnly())
++	{
++		record_failure("CONNECT", ads_.GetLastErrorCopy());
++		return false;
++	}
+ 	unsigned short ads_state = ADSSTATE_INVALID;
+ 	unsigned short device_state = 0;
+ 	if (!ads_.ReadDeviceState(ads_state, device_state))
+ 	{
++		record_failure("CONNECT_STATE", ads_.GetLastErrorCopy());
+ 		clear_runtime_connection_state();
+ 		ads_.CloseComm();
+ 		return false;
+ 	}
+ 	if (ads_state != ADSSTATE_RUN)
+ 	{
++		record_failure("CONNECT_PLC_STATE", "ads_state=" + std::to_string(ads_state));
+ 		if (reconnecting) mark_plc_restart(false);
+ 		clear_runtime_connection_state();
+ 		ads_.CloseComm();
+@@ -1085,6 +1094,7 @@
+ 	}
+ 	if (!initialize_connection())
+ 	{
++		record_failure("INITIALIZE", ads_.GetLastErrorCopy());
+ 		clear_runtime_connection_state();
+ 		ads_.CloseComm();
+ 		return false;
+@@ -1092,6 +1102,7 @@
+ 	// 运行期允许单次 ADS 调用等待 300 ms，短时调度抖动不直接升级为断线。
+ 	if (!ads_.SetTimeout(300))
+ 	{
++		record_failure("SET_TIMEOUT", ads_.GetLastErrorCopy());
+ 		clear_runtime_connection_state();
+ 		ads_.CloseComm();
+ 		return false;
+@@ -1465,6 +1476,7 @@
+ 		(after.QuadPart - before.QuadPart) * 1000000LL / qpc_frequency_);
+ 	if (!read_ok)
+ 	{
++		record_failure("SUM_READ", ads_.GetLastErrorCopy());
+ 		snapshot.valid = false;
+ 		return false;
+ 	}
+@@ -1519,6 +1531,8 @@
+ 	last_plc_cycle_ = snapshot.plc_cycle_end;
+ 	if (plc_time_regressed || plc_cycle_regressed)
+ 	{
++		record_failure("PLC_TIME_REGRESSED", "cycle=" + std::to_string(snapshot.plc_cycle_end) +
++			" dc_time=" + std::to_string(snapshot.plc_dc_task_time));
+ 		mark_plc_restart(!handles_fresh);
+ 		snapshot.position_valid = false;
+ 		snapshot.force_valid = false;
+@@ -1527,12 +1541,15 @@
+ 	}
+ 	if (stalled_plc_snapshot_count_ >= kMaxStalledPlcSnapshots)
+ 	{
++		record_failure("PLC_TASK_STALLED", "cycle=" + std::to_string(snapshot.plc_cycle_end) +
++			" dc_time=" + std::to_string(snapshot.plc_dc_task_time));
+ 		snapshot.position_valid = false;
+ 		snapshot.force_valid = false;
+ 		snapshot.valid = false;
+ 		return false;
+ 	}
+ 	// 返回值表示本拍是否仍可用于运动控制，而不是力数据是否有效。
++	if (!snapshot.position_valid) record_failure("NONFINITE_POSITION", "Position, coordinates or axis1 velocity is not finite");
+ 	return snapshot.position_valid;
+ }
+ 
+@@ -1753,6 +1770,14 @@
+ 		item_results.data(),
+ 		&transport_succeeded);
+ 	(void)all_items_succeeded;
++	if (!all_items_succeeded)
++	{
++		record_failure("SUM_WRITE", ads_.GetLastErrorCopy() +
++			" planned_operation=" + (has_planned_return ? std::to_string(static_cast<int>(planned_slot.command.operation)) : "none") +
++			" legs=" + std::to_string(has_planned_return ? planned_slot.command.leg_count : 0) +
++			" clear_mask=" + std::to_string(output_clear_mask) +
++			" transport_ok=" + std::to_string(transport_succeeded));
++	}
+ 	auto item_range_succeeded = [&](std::size_t begin, std::size_t end)
+ 	{
+ 		for (std::size_t index = begin; index < end; ++index)
+@@ -2147,6 +2172,17 @@
+ 	snapshot_cv_.notify_all();
+ }
+ 
++void AdsCommunicationService::record_failure(const char* operation, const std::string& detail)
++{
++	std::string single_line = detail;
++	std::replace(single_line.begin(), single_line.end(), '\n', ' ');
++	std::replace(single_line.begin(), single_line.end(), '\r', ' ');
++	std::lock_guard<std::mutex> lock(stats_mutex_);
++	++stats_.diagnostic_sequence;
++	stats_.diagnostic_tick_ms = GetTickCount64();
++	snprintf(stats_.diagnostic, sizeof(stats_.diagnostic), "%s: %s", operation, single_line.c_str());
++}
++
+ void AdsCommunicationService::set_connection_state(AdsConnectionState state)
+ {
+ 	std::lock_guard<std::mutex> lock(stats_mutex_);
+--- before/ads_communication.h
++++ after/ads_communication.h
+@@ -154,6 +154,10 @@
+ 	std::uint64_t plc_restart_count = 0;
+ 	std::uint64_t missed_deadlines = 0;
+ 	std::uint64_t snapshot_queue_dropped = 0;
++	// 故障发生时立即保存，避免成功请求或断线清理覆盖底层错误。
++	std::uint64_t diagnostic_sequence = 0;
++	std::uint64_t diagnostic_tick_ms = 0;
++	char diagnostic[768] = {};
+ };
+ 
+ class AdsCommunicationService
+@@ -228,6 +232,7 @@
+ 	void publish_snapshot(const AdsFastSnapshot& snapshot);
+ 	void set_connection_state(AdsConnectionState state);
+ 	void update_rate(std::int64_t now_qpc, std::uint64_t rtt_us, bool success);
++	void record_failure(const char* operation, const std::string& detail);
+ 	void wait_until(std::int64_t qpc_deadline);
+ 
+ 	struct NotificationRegistration
