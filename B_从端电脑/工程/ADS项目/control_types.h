@@ -118,7 +118,7 @@ struct ControlConfig
 	double transaction_merge_eps_mm = 1.5;
 	// 换手夹爪时序：持有者先夹 -> 等 T_clamp -> 移动者松 -> 等 T_release；回程对称。
 	DWORD axis_clamp_wait_ms = 100;
-	DWORD axis_release_wait_ms = 100;
+	DWORD axis_release_wait_ms = 400;
 	// 启动最终姿态下的 axis6-axis5 间距（窗口中点附近，避免落在端点）。
 	double startup_g_mm = 13.0;
 	// 标准启动中间夹持阶段的轴5/6间距；与运行时20 mm窗口宽度相互独立。
@@ -221,14 +221,14 @@ struct CylinderPreset
 	unsigned short cyl1_clamp = 5;
 	unsigned short cyl1_preclamp = 320;
 	unsigned short cyl2_open = 5;
-	unsigned short cyl2_clamp = 1000;
+	unsigned short cyl2_clamp = 1800;
 	unsigned short cyl2_preopen = 150;
 	unsigned short cyl2_preclamp = 400;
 	unsigned short cyl3_open = 450;
 	unsigned short cyl3_clamp = 50;
 	unsigned short cyl3_preclamp = 200;
 	unsigned short cyl4_open = 5;
-	unsigned short cyl4_clamp = 1000;
+	unsigned short cyl4_clamp = 1800;
 	unsigned short cyl4_preopen = 300;
 	unsigned short cyl4_preclamp = 300;
 	unsigned short cyl3_follow_release = 400;
