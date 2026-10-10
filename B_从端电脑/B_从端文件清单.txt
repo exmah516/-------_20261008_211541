@@ -1,0 +1,9 @@
+包目录：D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\B_从端电脑
+运行内容大小：11.3 MiB
+
+关键文件哈希：
+运行\ADS.exe | 463872 bytes | SHA-256 2cb6bc5819d8f7e871fbdddb3fd56d0bdb404bd219233916d7cf15cdb43ea5e6
+运行\FLCatheter.dll | 6273536 bytes | SHA-256 2788f7b266917e259395cdbd8f7bfcbbbe4ea05a8f0980827068710bfbf3dca0
+运行\TcAdsDll.dll | 832072 bytes | SHA-256 46b306a26f54210dab7279f0a7880f3122ad7e9ff7b0e946ddcdc69434d44cec
+
+“源码备份”是本地已有源码和库源码的归档，不作为运行依赖。

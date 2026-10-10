@@ -1,0 +1,6 @@
+**/bin/
+**/obj/
+**/.vs/
+ADS项目/x64/
+config/remote.token
+config/hik_cameras.ini

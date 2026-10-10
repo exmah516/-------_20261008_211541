@@ -1,0 +1,5 @@
+# 文本统一存储，二进制由 Git 自动识别。
+* text=auto
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.sh text eol=lf

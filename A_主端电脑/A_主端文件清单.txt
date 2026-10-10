@@ -1,0 +1,10 @@
+包目录：D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\A_主端电脑
+运行内容大小：96.2 MiB
+
+关键文件哈希：
+运行\can4wpf.dll | 38912 bytes | SHA-256 df95efc50e41b4081cc62cba5b8366a483041f62270ec80a00ae981aca8d57ff
+运行\FLCatheter.dll | 6273536 bytes | SHA-256 2788f7b266917e259395cdbd8f7bfcbbbe4ea05a8f0980827068710bfbf3dca0
+运行\MasterConsole.exe | 161792 bytes | SHA-256 9de8ca83d7772fdf6a2873033f8030f6d8969c627902224f5d5363d12acc4d68
+运行\Math4wpf.dll | 63488 bytes | SHA-256 b66219aa2ae71d57a4f04d63e8f9611e841905156a033b81f76f9e7f5fc3cd9d
+
+“源码备份”是本地已有源码和库源码的归档，不作为运行依赖。

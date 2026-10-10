@@ -1,0 +1,38 @@
+# 编译输出与开发工具缓存；工程依赖的 DLL、LIB 和模型资源仍纳入版本控制。
+**/bin/
+**/obj/
+**/.vs/
+**/ADS项目/x64/
+__pycache__/
+*.py[cod]
+*.obj
+*.pdb
+*.ipdb
+*.iobj
+*.ilk
+*.tlog
+*.suo
+*.user
+*.VC.db
+*.VC.opendb
+*.log
+*.tmp
+Thumbs.db
+Desktop.ini
+
+# 本机密钥和设备配置；保留 *.example 模板。
+remote.token
+hik_cameras.ini
+dsa_screencut.ini
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.pem
+*.key
+
+# 历史运行包可能包含现场凭据，仅保留在本地。
+/A_主端电脑/运行/
+**/归档_旧运行_*.zip
+/验证记录/20261010_工程迁移/归档原目录/

@@ -1,0 +1,23 @@
+Microsoft (R) COFF/PE Dumper Version 14.29.30159.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\验证记录\库构建\Math4wpf\Math4wpf.dll
+
+File Type: DLL
+
+  Image has the following dependencies:
+
+    KERNEL32.dll
+    VCRUNTIME140.dll
+    api-ms-win-crt-runtime-l1-1-0.dll
+    mscoree.dll
+
+  Summary
+
+        1000 .data
+        1000 .nep
+        1000 .pdata
+        B000 .rdata
+        1000 .reloc
+        5000 .text

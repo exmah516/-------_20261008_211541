@@ -1,0 +1,1248 @@
+[
+  {
+    "file": "A_主端电脑\\运行\\can4wpf.dll",
+    "dependencies": [
+      "KERNEL32.dll",
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "mscoree.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\concrt140.dll",
+    "dependencies": [
+      "MSVCP140.dll",
+      "VCRUNTIME140_1.dll",
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\Cosmo.dll",
+    "dependencies": [
+      "KERNEL32.dll",
+      "vtkCommon.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\FLCatheter.dll",
+    "dependencies": [
+      "KERNEL32.dll",
+      "USER32.dll",
+      "MSVCP140.dll",
+      "SETUPAPI.dll",
+      "VCRUNTIME140_1.dll",
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-convert-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-utility-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\HCNetSDK.dll",
+    "dependencies": [
+      "WS2_32.dll",
+      "ADVAPI32.dll",
+      "RPCRT4.dll",
+      "WINMM.dll",
+      "HCCore.dll",
+      "KERNEL32.dll",
+      "MSWSOCK.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\Kitware.mummy.Runtime.dll",
+    "dependencies": []
+  },
+  {
+    "file": "A_主端电脑\\运行\\Kitware.mummy.Runtime.Unmanaged.dll",
+    "dependencies": [
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\Kitware.VTK.dll",
+    "dependencies": []
+  },
+  {
+    "file": "A_主端电脑\\运行\\Kitware.VTK.vtkCharts.Unmanaged.dll",
+    "dependencies": [
+      "Kitware.mummy.Runtime.Unmanaged.dll",
+      "vtkCharts.dll",
+      "vtkFiltering.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\Kitware.VTK.vtkCommon.Unmanaged.dll",
+    "dependencies": [
+      "ole32.dll",
+      "OLEAUT32.dll",
+      "Kitware.mummy.Runtime.Unmanaged.dll",
+      "vtkCommon.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\Kitware.VTK.vtkFiltering.Unmanaged.dll",
+    "dependencies": [
+      "Kitware.mummy.Runtime.Unmanaged.dll",
+      "vtkFiltering.dll",
+      "vtkCommon.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\Kitware.VTK.vtkGenericFiltering.Unmanaged.dll",
+    "dependencies": [
+      "Kitware.mummy.Runtime.Unmanaged.dll",
+      "vtkGenericFiltering.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\Kitware.VTK.vtkGeovis.Unmanaged.dll",
+    "dependencies": [
+      "Kitware.mummy.Runtime.Unmanaged.dll",
+      "vtkGeovis.dll",
+      "vtkViews.dll",
+      "vtkWidgets.dll",
+      "vtkCommon.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\Kitware.VTK.vtkGraphics.Unmanaged.dll",
+    "dependencies": [
+      "Kitware.mummy.Runtime.Unmanaged.dll",
+      "vtkGraphics.dll",
+      "vtkFiltering.dll",
+      "vtkCommon.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\Kitware.VTK.vtkHybrid.Unmanaged.dll",
+    "dependencies": [
+      "Kitware.mummy.Runtime.Unmanaged.dll",
+      "vtkHybrid.dll",
+      "vtkFiltering.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\Kitware.VTK.vtkImaging.Unmanaged.dll",
+    "dependencies": [
+      "Kitware.mummy.Runtime.Unmanaged.dll",
+      "vtkImaging.dll",
+      "vtkFiltering.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\Kitware.VTK.vtkInfovis.Unmanaged.dll",
+    "dependencies": [
+      "Kitware.mummy.Runtime.Unmanaged.dll",
+      "vtkInfovis.dll",
+      "vtkCommon.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\Kitware.VTK.vtkIO.Unmanaged.dll",
+    "dependencies": [
+      "Kitware.mummy.Runtime.Unmanaged.dll",
+      "vtkIO.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\Kitware.VTK.vtkParallel.Unmanaged.dll",
+    "dependencies": [
+      "Kitware.mummy.Runtime.Unmanaged.dll",
+      "vtkParallel.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\Kitware.VTK.vtkRendering.Unmanaged.dll",
+    "dependencies": [
+      "Kitware.mummy.Runtime.Unmanaged.dll",
+      "vtkRendering.dll",
+      "vtkCommon.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\Kitware.VTK.vtkViews.Unmanaged.dll",
+    "dependencies": [
+      "Kitware.mummy.Runtime.Unmanaged.dll",
+      "vtkViews.dll",
+      "vtkFiltering.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\Kitware.VTK.vtkVolumeRendering.Unmanaged.dll",
+    "dependencies": [
+      "Kitware.mummy.Runtime.Unmanaged.dll",
+      "vtkVolumeRendering.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\Kitware.VTK.vtkWidgets.Unmanaged.dll",
+    "dependencies": [
+      "Kitware.mummy.Runtime.Unmanaged.dll",
+      "vtkWidgets.dll",
+      "vtkGraphics.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\MasterConsole.exe",
+    "dependencies": []
+  },
+  {
+    "file": "A_主端电脑\\运行\\MasterConsole.Protocol.dll",
+    "dependencies": [
+      "mscoree.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\Math4wpf.dll",
+    "dependencies": [
+      "KERNEL32.dll",
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "mscoree.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\msvcm90.dll",
+    "dependencies": [
+      "MSVCR90.dll",
+      "KERNEL32.dll",
+      "ole32.dll",
+      "mscoree.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\msvcp140.dll",
+    "dependencies": [
+      "VCRUNTIME140.dll",
+      "VCRUNTIME140_1.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-locale-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-filesystem-l1-1-0.dll",
+      "api-ms-win-crt-time-l1-1-0.dll",
+      "api-ms-win-crt-environment-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll",
+      "api-ms-win-crt-convert-l1-1-0.dll",
+      "api-ms-win-crt-utility-l1-1-0.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\msvcp140_1.dll",
+    "dependencies": [
+      "MSVCP140.dll",
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\msvcp140_2.dll",
+    "dependencies": [
+      "MSVCP140.dll",
+      "VCRUNTIME140.dll",
+      "VCRUNTIME140_1.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-locale-l1-1-0.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\msvcp140_atomic_wait.dll",
+    "dependencies": [
+      "MSVCP140.dll",
+      "VCRUNTIME140_1.dll",
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-locale-l1-1-0.dll",
+      "ADVAPI32.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\msvcp140_codecvt_ids.dll",
+    "dependencies": [
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\msvcp90.dll",
+    "dependencies": [
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\msvcr90.dll",
+    "dependencies": [
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\PlayCtrl.dll",
+    "dependencies": [
+      "AudioRender.dll",
+      "KERNEL32.dll",
+      "USER32.dll",
+      "GDI32.dll",
+      "WINMM.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vccorlib140.dll",
+    "dependencies": [
+      "KERNEL32.dll",
+      "VCRUNTIME140_1.dll",
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "MSVCP140.dll",
+      "ole32.dll",
+      "OLEAUT32.dll",
+      "api-ms-win-core-winrt-string-l1-1-0.dll",
+      "api-ms-win-core-winrt-error-l1-1-0.dll",
+      "api-ms-win-core-winrt-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vcruntime140.dll",
+    "dependencies": [
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-convert-l1-1-0.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vcruntime140_1.dll",
+    "dependencies": [
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "VCRUNTIME140.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\VPIC.dll",
+    "dependencies": [
+      "vtksys.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkalglib.dll",
+    "dependencies": [
+      "MSVCP90.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkCharts.dll",
+    "dependencies": [
+      "vtkViews.dll",
+      "vtkInfovis.dll",
+      "vtkRendering.dll",
+      "OPENGL32.dll",
+      "vtkFiltering.dll",
+      "vtkCommon.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkCommon.dll",
+    "dependencies": [
+      "KERNEL32.dll",
+      "USER32.dll",
+      "GDI32.dll",
+      "vtksys.dll",
+      "WSOCK32.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkDICOMParser.dll",
+    "dependencies": [
+      "MSVCP90.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkexoIIc.dll",
+    "dependencies": [
+      "vtkNetCDF.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkexpat.dll",
+    "dependencies": [
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkFiltering.dll",
+    "dependencies": [
+      "vtkCommon.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkfreetype.dll",
+    "dependencies": [
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkftgl.dll",
+    "dependencies": [
+      "OPENGL32.dll",
+      "vtkfreetype.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkGenericFiltering.dll",
+    "dependencies": [
+      "vtkFiltering.dll",
+      "vtkGraphics.dll",
+      "vtkCommon.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkGeovis.dll",
+    "dependencies": [
+      "vtkWidgets.dll",
+      "vtkViews.dll",
+      "vtkproj4.dll",
+      "vtkInfovis.dll",
+      "vtkRendering.dll",
+      "vtkGraphics.dll",
+      "vtkImaging.dll",
+      "vtkIO.dll",
+      "vtkFiltering.dll",
+      "vtkCommon.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkGraphics.dll",
+    "dependencies": [
+      "vtkFiltering.dll",
+      "vtkverdict.dll",
+      "vtkCommon.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkHybrid.dll",
+    "dependencies": [
+      "KERNEL32.dll",
+      "USER32.dll",
+      "vtkRendering.dll",
+      "vtkIO.dll",
+      "vtkParallel.dll",
+      "vtkexoIIc.dll",
+      "AVICAP32.dll",
+      "OPENGL32.dll",
+      "vtkGraphics.dll",
+      "vtkImaging.dll",
+      "vtkFiltering.dll",
+      "vtkCommon.dll",
+      "vtksys.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkImaging.dll",
+    "dependencies": [
+      "vtkFiltering.dll",
+      "vtkCommon.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkInfovis.dll",
+    "dependencies": [
+      "vtkParallel.dll",
+      "vtklibxml2.dll",
+      "vtkalglib.dll",
+      "vtkGraphics.dll",
+      "vtkImaging.dll",
+      "vtkIO.dll",
+      "vtkFiltering.dll",
+      "vtkCommon.dll",
+      "vtksys.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkIO.dll",
+    "dependencies": [
+      "KERNEL32.dll",
+      "USER32.dll",
+      "ADVAPI32.dll",
+      "vtkFiltering.dll",
+      "vtkDICOMParser.dll",
+      "vtkNetCDF.dll",
+      "vtkNetCDF_cxx.dll",
+      "vtkmetaio.dll",
+      "vtkpng.dll",
+      "vtkzlib.dll",
+      "vtkjpeg.dll",
+      "vtktiff.dll",
+      "vtkexpat.dll",
+      "vtksys.dll",
+      "AVIFIL32.dll",
+      "vtkCommon.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkjpeg.dll",
+    "dependencies": [
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtklibxml2.dll",
+    "dependencies": [
+      "KERNEL32.dll",
+      "vtkzlib.dll",
+      "MSVCR90.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkmetaio.dll",
+    "dependencies": [
+      "ADVAPI32.dll",
+      "vtkzlib.dll",
+      "WSOCK32.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkNetCDF.dll",
+    "dependencies": [
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkNetCDF_cxx.dll",
+    "dependencies": [
+      "vtkNetCDF.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkParallel.dll",
+    "dependencies": [
+      "vtkRendering.dll",
+      "vtkIO.dll",
+      "VPIC.dll",
+      "Cosmo.dll",
+      "OPENGL32.dll",
+      "vtkexoIIc.dll",
+      "vtkGraphics.dll",
+      "vtkImaging.dll",
+      "vtkFiltering.dll",
+      "vtkCommon.dll",
+      "vtksys.dll",
+      "WS2_32.dll",
+      "vtkNetCDF.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkpng.dll",
+    "dependencies": [
+      "vtkzlib.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkproj4.dll",
+    "dependencies": [
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkRendering.dll",
+    "dependencies": [
+      "KERNEL32.dll",
+      "USER32.dll",
+      "GDI32.dll",
+      "ole32.dll",
+      "OLEAUT32.dll",
+      "vtkGraphics.dll",
+      "vtkImaging.dll",
+      "vtkIO.dll",
+      "vtkftgl.dll",
+      "vtkfreetype.dll",
+      "OPENGL32.dll",
+      "d3d9.dll",
+      "vtkFiltering.dll",
+      "vtkCommon.dll",
+      "vtksys.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtksys.dll",
+    "dependencies": [
+      "KERNEL32.dll",
+      "ADVAPI32.dll",
+      "WS2_32.dll",
+      "MSVCR90.dll",
+      "MSVCP90.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtktiff.dll",
+    "dependencies": [
+      "KERNEL32.dll",
+      "vtkzlib.dll",
+      "vtkjpeg.dll",
+      "MSVCR90.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkverdict.dll",
+    "dependencies": [
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkViews.dll",
+    "dependencies": [
+      "vtkInfovis.dll",
+      "vtkWidgets.dll",
+      "vtkRendering.dll",
+      "vtkGraphics.dll",
+      "vtkFiltering.dll",
+      "vtkCommon.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkVolumeRendering.dll",
+    "dependencies": [
+      "vtkRendering.dll",
+      "vtkIO.dll",
+      "OPENGL32.dll",
+      "vtkGraphics.dll",
+      "vtkImaging.dll",
+      "vtkFiltering.dll",
+      "vtkCommon.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkWidgets.dll",
+    "dependencies": [
+      "vtkRendering.dll",
+      "vtkHybrid.dll",
+      "OPENGL32.dll",
+      "vtkGraphics.dll",
+      "vtkImaging.dll",
+      "vtkFiltering.dll",
+      "vtkCommon.dll",
+      "MSVCP90.dll",
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\vtkzlib.dll",
+    "dependencies": [
+      "MSVCR90.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\HCNetSDKCom\\AnalyzeData.dll",
+    "dependencies": [
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\HCNetSDKCom\\AudioIntercom.dll",
+    "dependencies": [
+      "WINMM.dll",
+      "KERNEL32.dll",
+      "ole32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\HCNetSDKCom\\AudioRender.dll",
+    "dependencies": [
+      "WINMM.dll",
+      "DSOUND.dll",
+      "KERNEL32.dll",
+      "USER32.dll",
+      "ole32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\HCNetSDKCom\\HCAlarm.dll",
+    "dependencies": [
+      "WS2_32.dll",
+      "ADVAPI32.dll",
+      "RPCRT4.dll",
+      "WINMM.dll",
+      "HCCore.dll",
+      "HCCoreDevCfg.dll",
+      "KERNEL32.dll",
+      "MSWSOCK.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\HCNetSDKCom\\HCCoreDevCfg.dll",
+    "dependencies": [
+      "WS2_32.dll",
+      "ADVAPI32.dll",
+      "RPCRT4.dll",
+      "WINMM.dll",
+      "HCCore.dll",
+      "KERNEL32.dll",
+      "MSWSOCK.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\HCNetSDKCom\\HCDisplay.dll",
+    "dependencies": [
+      "WS2_32.dll",
+      "ADVAPI32.dll",
+      "RPCRT4.dll",
+      "WINMM.dll",
+      "HCCore.dll",
+      "HCCoreDevCfg.dll",
+      "KERNEL32.dll",
+      "MSWSOCK.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\HCNetSDKCom\\HCGeneralCfgMgr.dll",
+    "dependencies": [
+      "ADVAPI32.dll",
+      "WS2_32.dll",
+      "RPCRT4.dll",
+      "WINMM.dll",
+      "HCCore.dll",
+      "HCCoreDevCfg.dll",
+      "KERNEL32.dll",
+      "MSWSOCK.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\HCNetSDKCom\\HCIndustry.dll",
+    "dependencies": [
+      "WS2_32.dll",
+      "ADVAPI32.dll",
+      "RPCRT4.dll",
+      "WINMM.dll",
+      "HCCore.dll",
+      "HCCoreDevCfg.dll",
+      "KERNEL32.dll",
+      "MSWSOCK.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\HCNetSDKCom\\HCPlayBack.dll",
+    "dependencies": [
+      "WS2_32.dll",
+      "ADVAPI32.dll",
+      "RPCRT4.dll",
+      "WINMM.dll",
+      "HCCore.dll",
+      "HCCoreDevCfg.dll",
+      "KERNEL32.dll",
+      "MSWSOCK.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\HCNetSDKCom\\HCPreview.dll",
+    "dependencies": [
+      "ADVAPI32.dll",
+      "RPCRT4.dll",
+      "WS2_32.dll",
+      "WINMM.dll",
+      "HCCore.dll",
+      "HCCoreDevCfg.dll",
+      "KERNEL32.dll",
+      "MSWSOCK.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\HCNetSDKCom\\HCVoiceTalk.dll",
+    "dependencies": [
+      "ADVAPI32.dll",
+      "RPCRT4.dll",
+      "WS2_32.dll",
+      "WINMM.dll",
+      "HCCore.dll",
+      "HCCoreDevCfg.dll",
+      "KERNEL32.dll",
+      "MSWSOCK.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\HCNetSDKCom\\libiconv2.dll",
+    "dependencies": [
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\HCNetSDKCom\\OpenAL32.dll",
+    "dependencies": [
+      "KERNEL32.dll",
+      "USER32.dll",
+      "SHELL32.dll",
+      "ole32.dll",
+      "MSVCR100.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\HCNetSDKCom\\StreamTransClient.dll",
+    "dependencies": [
+      "WS2_32.dll",
+      "RPCRT4.dll",
+      "WINMM.dll",
+      "ADVAPI32.dll",
+      "KERNEL32.dll",
+      "MSWSOCK.dll"
+    ]
+  },
+  {
+    "file": "A_主端电脑\\运行\\HCNetSDKCom\\SystemTransform.dll",
+    "dependencies": [
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\ADS.exe",
+    "dependencies": [
+      "TcAdsDll.DLL",
+      "FLCatheter.dll",
+      "KERNEL32.dll",
+      "ole32.dll",
+      "MSVCP140.dll",
+      "WS2_32.dll",
+      "MFPlat.DLL",
+      "MF.dll",
+      "MFReadWrite.dll",
+      "bcrypt.dll",
+      "VCRUNTIME140_1.dll",
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-locale-l1-1-0.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll",
+      "api-ms-win-crt-convert-l1-1-0.dll",
+      "api-ms-win-crt-filesystem-l1-1-0.dll",
+      "api-ms-win-crt-conio-l1-1-0.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\concrt140.dll",
+    "dependencies": [
+      "MSVCP140.dll",
+      "VCRUNTIME140_1.dll",
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\FLCatheter.dll",
+    "dependencies": [
+      "KERNEL32.dll",
+      "USER32.dll",
+      "MSVCP140.dll",
+      "SETUPAPI.dll",
+      "VCRUNTIME140_1.dll",
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-convert-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-utility-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\msvcp140.dll",
+    "dependencies": [
+      "VCRUNTIME140.dll",
+      "VCRUNTIME140_1.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-locale-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-filesystem-l1-1-0.dll",
+      "api-ms-win-crt-time-l1-1-0.dll",
+      "api-ms-win-crt-environment-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll",
+      "api-ms-win-crt-convert-l1-1-0.dll",
+      "api-ms-win-crt-utility-l1-1-0.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\msvcp140_1.dll",
+    "dependencies": [
+      "MSVCP140.dll",
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\msvcp140_2.dll",
+    "dependencies": [
+      "MSVCP140.dll",
+      "VCRUNTIME140.dll",
+      "VCRUNTIME140_1.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-locale-l1-1-0.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\msvcp140_atomic_wait.dll",
+    "dependencies": [
+      "MSVCP140.dll",
+      "VCRUNTIME140_1.dll",
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-locale-l1-1-0.dll",
+      "ADVAPI32.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\msvcp140_codecvt_ids.dll",
+    "dependencies": [
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\TcAdsDll.dll",
+    "dependencies": [
+      "WS2_32.dll",
+      "VERSION.dll",
+      "KERNEL32.dll",
+      "USER32.dll",
+      "ADVAPI32.dll",
+      "ole32.dll",
+      "OLEAUT32.dll",
+      "RPCRT4.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\vccorlib140.dll",
+    "dependencies": [
+      "KERNEL32.dll",
+      "VCRUNTIME140_1.dll",
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "MSVCP140.dll",
+      "ole32.dll",
+      "OLEAUT32.dll",
+      "api-ms-win-core-winrt-string-l1-1-0.dll",
+      "api-ms-win-core-winrt-error-l1-1-0.dll",
+      "api-ms-win-core-winrt-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\vcruntime140.dll",
+    "dependencies": [
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-convert-l1-1-0.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\vcruntime140_1.dll",
+    "dependencies": [
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "VCRUNTIME140.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\本地调试台\\AdsControlUI.exe",
+    "dependencies": []
+  },
+  {
+    "file": "B_从端电脑\\运行\\本地调试台\\concrt140.dll",
+    "dependencies": [
+      "MSVCP140.dll",
+      "VCRUNTIME140_1.dll",
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\本地调试台\\msvcp140.dll",
+    "dependencies": [
+      "VCRUNTIME140.dll",
+      "VCRUNTIME140_1.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-locale-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-filesystem-l1-1-0.dll",
+      "api-ms-win-crt-time-l1-1-0.dll",
+      "api-ms-win-crt-environment-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll",
+      "api-ms-win-crt-convert-l1-1-0.dll",
+      "api-ms-win-crt-utility-l1-1-0.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\本地调试台\\msvcp140_1.dll",
+    "dependencies": [
+      "MSVCP140.dll",
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\本地调试台\\msvcp140_2.dll",
+    "dependencies": [
+      "MSVCP140.dll",
+      "VCRUNTIME140.dll",
+      "VCRUNTIME140_1.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-locale-l1-1-0.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\本地调试台\\msvcp140_atomic_wait.dll",
+    "dependencies": [
+      "MSVCP140.dll",
+      "VCRUNTIME140_1.dll",
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-locale-l1-1-0.dll",
+      "ADVAPI32.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\本地调试台\\msvcp140_codecvt_ids.dll",
+    "dependencies": [
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\本地调试台\\ScottPlot.dll",
+    "dependencies": [
+      "mscoree.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\本地调试台\\ScottPlot.WPF.dll",
+    "dependencies": [
+      "mscoree.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\本地调试台\\System.Drawing.Common.dll",
+    "dependencies": [
+      "mscoree.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\本地调试台\\System.Numerics.Vectors.dll",
+    "dependencies": [
+      "mscoree.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\本地调试台\\vccorlib140.dll",
+    "dependencies": [
+      "KERNEL32.dll",
+      "VCRUNTIME140_1.dll",
+      "VCRUNTIME140.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "MSVCP140.dll",
+      "ole32.dll",
+      "OLEAUT32.dll",
+      "api-ms-win-core-winrt-string-l1-1-0.dll",
+      "api-ms-win-core-winrt-error-l1-1-0.dll",
+      "api-ms-win-core-winrt-l1-1-0.dll",
+      "api-ms-win-crt-math-l1-1-0.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\本地调试台\\vcruntime140.dll",
+    "dependencies": [
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "api-ms-win-crt-stdio-l1-1-0.dll",
+      "api-ms-win-crt-convert-l1-1-0.dll",
+      "KERNEL32.dll"
+    ]
+  },
+  {
+    "file": "B_从端电脑\\运行\\本地调试台\\vcruntime140_1.dll",
+    "dependencies": [
+      "api-ms-win-crt-runtime-l1-1-0.dll",
+      "api-ms-win-crt-heap-l1-1-0.dll",
+      "api-ms-win-crt-string-l1-1-0.dll",
+      "VCRUNTIME140.dll",
+      "KERNEL32.dll"
+    ]
+  }
+]
