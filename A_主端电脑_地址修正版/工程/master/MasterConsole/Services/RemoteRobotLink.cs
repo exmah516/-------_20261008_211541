@@ -337,7 +337,7 @@ namespace MasterConsole.Services
                     Handle582Online = _handles != null && _handles.IsOnline(0),
                     Handle587Online = _handles != null && _handles.IsOnline(1),
                     HandleSdkMissing = _handles != null && _handles.SdkMissing,
-                    // 从端当前 swap_handle_roles=true：导管/轴1使用物理 587（ControlFrame.HandleB）。
+                    // 导管/轴1固定使用物理 587（ControlFrame.HandleB）。
                     CatheterReversePressed = _handles != null && ((_handles.GetSample(1).Buttons & 0x40) != 0),
                 };
             }

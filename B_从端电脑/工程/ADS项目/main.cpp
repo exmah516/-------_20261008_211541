@@ -48,23 +48,15 @@ int main(int argc, char* argv[])
 	diagnostic_path += L"ads_fault_diagnostics.log";
 	std::cout << "[ADS-DIAG] build=" << diagnostic_build << " " << __DATE__ << " " << __TIME__
 		<< "；故障记录位于 ADS.exe 同目录的 ads_fault_diagnostics.log" << std::endl;
-	constexpr DWORD physical_handle_582_serial = 582;
-	constexpr DWORD physical_handle_587_serial = 587;
+	constexpr DWORD serial_axis1_handle = 587;
+	constexpr DWORD serial_axis6_handle = 582;
 	// 主循环允许通信线程最多 300 ms 产出下一帧，避免低频 ADS 请求占用期间误触发连接保持。
 	constexpr DWORD ads_snapshot_wait_timeout_ms = 300;
 	// WPF 状态只用于显示；降低推送频率不会改变 100 Hz ADS、运动或实验记录节拍。
 	constexpr std::int64_t vis_publish_rate_hz = 15;
 	// 球囊递送时，轴4每运动一秒，轴6沿位置减少方向递进10 mm。
 	constexpr double axis4_coupled_axis6_speed_mm_s = 10.0;
-	// TRUE：交换两只物理手柄的角色，用 587 承担导管/axis1/582语义，用 582 承担导丝/axis6/587语义。
-	constexpr bool swap_handle_roles = true;
-	const DWORD serial_axis1_handle = swap_handle_roles ? physical_handle_587_serial : physical_handle_582_serial;
-	const DWORD serial_axis6_handle = swap_handle_roles ? physical_handle_582_serial : physical_handle_587_serial;
 	const char* hardcoded_ads_netid = "169.254.119.135.1.1";
-
-	std::cout << "手柄角色映射：导管/axis1/582语义 -> 物理 SN " << serial_axis1_handle
-		<< "，导丝/axis6/587语义 -> 物理 SN " << serial_axis6_handle
-		<< (swap_handle_roles ? "（已交换）。" : "（未交换）。") << std::endl;
 
 	// 工具模式：不进入运动环前先查看按键位掩码。
 	if (argc > 1 && (std::string(argv[1]) == "--buttons" || std::string(argv[1]) == "--btn"))
@@ -207,7 +199,6 @@ int main(int argc, char* argv[])
 			catheter_force_output_handle = &handle_axis1;
 			guidewire_force_output_handle = &handle_axis6;
 			handle_startup_locked = true;
-			std::cout << "双手柄模式已锁定（582/导管 + 587/导丝）。" << std::endl;
 		}
 		else if (axis1_ok || axis6_ok)
 		{
@@ -1519,8 +1510,7 @@ int main(int argc, char* argv[])
 
 		const unsigned char axis1_buttons = axis1_input_handle->buttons2;
 		const unsigned char axis6_buttons = axis6_input_handle->buttons2;
-		const unsigned char physical_587_buttons =
-			handle_axis1.serial() == 587 ? handle_axis1.buttons2 : handle_axis6.buttons2;
+		const unsigned char physical_587_buttons = handle_axis1.buttons2;
 		const bool catheter_b6_pressed = (axis1_buttons & cfg.btn_b6) != 0;
 		const bool guidewire_b6_pressed = (axis6_buttons & cfg.btn_b6) != 0;
 		const bool spacing_recovery_button_pressed =
@@ -1650,10 +1640,19 @@ int main(int argc, char* argv[])
 		const bool startup_sequence_active = startup.is_active();
 		if (spacing_recovery_button_press_edge)
 		{
-			spacing_recovery.restore_mode_selection = guidewire_mode == GuidewireMode::Independent
-				? (axis6_effective_reverse_pressed ? static_cast<int>(ModeSelection::GuidewireRetraction)
+			// 恢复后优先还原已确认的模式覆盖值，不能用本拍 B6 电平推断；
+			// 否则恢复组合键的采样边沿可能把递送误保存成回退。
+			const bool restore_guidewire = vis_reverse_override_active
+				? vis_reverse_override_target == 1
+				: (physical_mode_source == PhysicalModeSource::Guidewire ||
+					guidewire_mode == GuidewireMode::Independent);
+			const bool restore_reverse = vis_reverse_override_active
+				? vis_reverse_override_value
+				: (restore_guidewire ? axis6_effective_reverse_pressed : axis1_reverse_pressed);
+			spacing_recovery.restore_mode_selection = restore_guidewire
+				? (restore_reverse ? static_cast<int>(ModeSelection::GuidewireRetraction)
 					: static_cast<int>(ModeSelection::GuidewireDelivery))
-				: (axis1_reverse_pressed ? static_cast<int>(ModeSelection::CatheterRetraction)
+				: (restore_reverse ? static_cast<int>(ModeSelection::CatheterRetraction)
 					: static_cast<int>(ModeSelection::CatheterDelivery));
 			spacing_recovery.restore_physical_mode_source = static_cast<int>(physical_mode_source);
 			spacing_recovery.restore_vis_reverse_override_active = vis_reverse_override_active;
@@ -1915,7 +1914,6 @@ int main(int argc, char* argv[])
 					physical_mode_source = PhysicalModeSource::None;
 					single_handle_requested_mode = GuidewireMode::None;
 					std::cout << "单手柄模式：已切换到导管语义。" << std::endl;
-					std::cout << "按键说明：数字2切导丝；双手柄时可用对应手柄 B7 选择模式。" << std::endl;
 				}
 			}
 			else if (single_handle_mode && ch == '2')
@@ -1929,7 +1927,6 @@ int main(int argc, char* argv[])
 					physical_mode_source = PhysicalModeSource::None;
 					single_handle_requested_mode = GuidewireMode::Independent;
 					std::cout << "单手柄模式：已切换到导丝语义。" << std::endl;
-					std::cout << "按键说明：数字1回导管；双手柄时可用对应手柄 B7 选择模式。" << std::endl;
 				}
 			}
 			else if (ch == 'q' || ch == 'Q')

@@ -8,7 +8,7 @@ namespace MasterConsole.Services
     /// <summary>
     /// 主端手柄服务：独占 FLCatheter SDK，在专用线程里完成打开重试、采样、力输出。
     /// 所有 SDK 调用（除 SDK 自己的伺服回调线程外）都只发生在这一个线程，避免并发访问设备。
-    /// 手柄 A / B 对应物理序列号 582 / 587（协议约定，角色映射由从端决定）。
+    /// 手柄 A / B 对应物理序列号 582 / 587；从端固定使用 SN 587 为导管、SN 582 为导丝。
     /// </summary>
     public sealed class HandleService : IDisposable
     {

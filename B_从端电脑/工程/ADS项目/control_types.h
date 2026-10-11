@@ -118,7 +118,7 @@ struct ControlConfig
 	double transaction_merge_eps_mm = 1.5;
 	// 换手夹爪时序：持有者先夹 -> 等 T_clamp -> 移动者松 -> 等 T_release；回程对称。
 	DWORD axis_clamp_wait_ms = 100;
-	DWORD axis_release_wait_ms = 400;
+	DWORD axis_release_wait_ms = 600;
 	// 启动最终姿态下的 axis6-axis5 间距（窗口中点附近，避免落在端点）。
 	double startup_g_mm = 13.0;
 	// 标准启动中间夹持阶段的轴5/6间距；与运行时20 mm窗口宽度相互独立。
