@@ -12,6 +12,7 @@ namespace motion_sync
 	double from_left_to_rel(const AppContext& ctx, int axis_index, double from_left_mm);
 	double axis1_window_left_abs(const AppContext& ctx);
 	double axis1_window_right_abs(const AppContext& ctx);
+	double axis6_window_size_mm(const AppContext& ctx);
 
 	void calculate_axis6_window_from_axis5(
 		const AppContext& ctx,

@@ -44,6 +44,8 @@ struct RemoteGatewayConfig
 // main.cpp 在发布 VisState 的同时提供给网关的补充状态（VisState 本身不含这些量）。
 struct RemoteExtraState
 {
+	double axis1_net_distance_mm = 0.0;
+	double axis6_net_distance_mm = 0.0;
 	std::int8_t injector_dir[2] = {};
 	std::int8_t axis4_dir = 0;
 	bool y_valve_open = false;
@@ -161,6 +163,7 @@ private:
 	std::uint32_t last_sent_seq_ = 0;
 
 	bool session_active_ = false;
+	bool net_distance_enabled_ = false;
 	std::uint32_t session_id_ = 0;
 	unsigned char session_key_[16] = {};
 	bool lease_held_ = false;

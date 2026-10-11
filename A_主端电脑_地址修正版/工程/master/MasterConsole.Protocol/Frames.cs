@@ -72,6 +72,10 @@ namespace MasterConsole.Protocol
         /// <summary>预留：七轴距左限位（界面暂不显示）。长度 7。</summary>
         public float[] AxisFromLeft;
 
+        /// <summary>可选扩展：手柄控制下的实际净前进距离（mm），自动换手不计入。</summary>
+        public bool HasNetDistance;
+        public double Axis1NetDistanceMm, Axis6NetDistanceMm;
+
         public bool Has(StatusFlags f) => (Flags & f) != 0;
     }
 }

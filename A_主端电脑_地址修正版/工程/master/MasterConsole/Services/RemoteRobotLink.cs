@@ -212,11 +212,16 @@ namespace MasterConsole.Services
 
         public async Task<CommandResult> AcquireControlAsync()
         {
+            uint session = _session;
             var r = await RequestAsync(CommandMessages.Acquire, 5000);
             if (r.Ok)
             {
-                _acquiredAtMs = _clock.ElapsedMilliseconds;
-                _hasControl = true;
+                lock (_stateLock)
+                {
+                    if (!_connected || _session != session) return CommandResult.Rejected("链路已断开");
+                    _acquiredAtMs = _clock.ElapsedMilliseconds;
+                    _hasControl = true;
+                }
                 ConnectionChanged?.Invoke(this, EventArgs.Empty);
             }
             return r;
@@ -337,8 +342,6 @@ namespace MasterConsole.Services
                     Handle582Online = _handles != null && _handles.IsOnline(0),
                     Handle587Online = _handles != null && _handles.IsOnline(1),
                     HandleSdkMissing = _handles != null && _handles.SdkMissing,
-                    // 导管/轴1固定使用物理 587（ControlFrame.HandleB）。
-                    CatheterReversePressed = _handles != null && ((_handles.GetSample(1).Buttons & 0x40) != 0),
                 };
             }
         }
@@ -501,7 +504,7 @@ namespace MasterConsole.Services
                     _hasControl = false;
                     _inj1 = _inj2 = _axis4 = 0;
                     _handles?.ClearHaptic();
-                    Log("warn", "从端已收回控制权，请重新申请。");
+                    Log("warn", "从端已收回控制权，请断开后重新连接。");
                     ConnectionChanged?.Invoke(this, EventArgs.Empty);
                 }
                 StatusReceived?.Invoke(this, st);

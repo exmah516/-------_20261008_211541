@@ -93,22 +93,12 @@
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled">
                 <StackPanel>
-                <GroupBox Header="模式选择">
+                <GroupBox Header="全局方向">
                     <StackPanel>
-                        <UniformGrid Columns="2" Margin="2">
-                            <RadioButton Content="导管递送" GroupName="Mode" Style="{StaticResource ModeChipRadio}"
-                                         Click="ModeCathFwd_Click" IsChecked="{Binding ModeCathFwdSelected, Mode=OneWay}"/>
-                            <RadioButton Content="导管撤出" GroupName="Mode" Style="{StaticResource ModeChipRadio}"
-                                         Click="ModeCathRev_Click" IsChecked="{Binding ModeCathRevSelected, Mode=OneWay}"/>
-                            <RadioButton Content="导丝递送" GroupName="Mode" Style="{StaticResource ModeChipRadio}"
-                                         Click="ModeGuideFwd_Click" IsChecked="{Binding ModeGuideFwdSelected, Mode=OneWay}"/>
-                            <RadioButton Content="导丝撤出" GroupName="Mode" Style="{StaticResource ModeChipRadio}"
-                                         Click="ModeGuideRev_Click" IsChecked="{Binding ModeGuideRevSelected, Mode=OneWay}"/>
-                        </UniformGrid>
-                        <TextBlock Text="{Binding PhysicalButtonNoticeText}"
-                                   Style="{StaticResource ErrorText}"
-                                   FontSize="11" Margin="6,0,6,4"
-                                   TextWrapping="Wrap"/>
+                        <TextBlock Text="任一B6按住：撤出；两只均松开：递送。"
+                                   Margin="6" TextWrapping="Wrap"/>
+                        <TextBlock Text="换手中切换方向，完成后生效。"
+                                   Margin="6,0,6,4" TextWrapping="Wrap"/>
 
                          <!-- 屈曲恢复与导管递送中的轴1比例映射 -->
                         <Border BorderBrush="{StaticResource BorderBrush}"

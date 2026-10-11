@@ -22,6 +22,8 @@ namespace MasterConsole.Protocol.Tests
             TestControl(dir, key, session);
             TestHaptic(dir, key, session);
             TestStatus(dir, key, session);
+            TestStatusDistance(dir, key, session);
+            TestGlobalDirection(key, session);
             TestAuth(dir);
             TestSeqGuard();
 
@@ -96,6 +98,47 @@ namespace MasterConsole.Protocol.Tests
             bool ok = FrameCodec.TryDecodeStatus(want, want.Length, session, key, out _, out var d, out _);
             Check("Status 解码字段还原", ok && d.Has(StatusFlags.LeaseHeld) && !d.Has(StatusFlags.EstopHold)
                 && d.Cylinder2 == 10 && d.AxisFromLeft[6] == 17f && d.AdsActualHz == 99.5f && d.Axis4Active == 1);
+        }
+
+        private static void TestGlobalDirection(byte[] key, uint session)
+        {
+            foreach (bool reverse in new[] { false, true, false })
+            {
+                var frame = new StatusFrame
+                {
+                    Flags = StatusFlags.ControlActive | StatusFlags.LeaseHeld
+                        | (reverse ? StatusFlags.GlobalReverse : StatusFlags.None),
+                    AxisPos = new float[7], AxisFromLeft = new float[7],
+                };
+                byte[] bytes = FrameCodec.EncodeStatus(new FrameHeader { Session = session }, frame, key);
+                bool ok = FrameCodec.TryDecodeStatus(bytes, bytes.Length, session, key, out _, out var decoded, out _);
+                Check("全局方向置位/清零，保持其他标志和帧长度",
+                    ok && bytes.Length == 142 && decoded.Has(StatusFlags.GlobalReverse) == reverse
+                    && decoded.Has(StatusFlags.ControlActive) && decoded.Has(StatusFlags.LeaseHeld));
+            }
+        }
+
+        private static void TestStatusDistance(string dir, byte[] key, uint session)
+        {
+            byte[] legacy = ReadHex(dir, "status_frame.hex");
+            FrameCodec.TryDecodeStatus(legacy, legacy.Length, session, key, out var h, out var f, out _);
+            Check("旧从端不冒充零距离", !f.HasNetDistance);
+            f.HasNetDistance = true;
+            f.Axis1NetDistanceMm = 12.25;
+            f.Axis6NetDistanceMm = -3.125;
+            byte[] encoded = FrameCodec.EncodeStatus(h, f, key);
+            byte[] want = ReadHex(dir, "status_distance_frame.hex");
+            Check("扩展状态帧与独立 Python 向量逐字节一致", encoded.SequenceEqual(want));
+            Check("扩展状态还原正负净距离", FrameCodec.TryDecodeStatus(want, want.Length, session, key, out _, out var result, out _)
+                && result.HasNetDistance && result.Axis1NetDistanceMm == 12.25 && result.Axis6NetDistanceMm == -3.125
+                && result.AxisPos[0] == 1f);
+            byte[] bad = (byte[])want.Clone();
+            bad[ProtocolConstants.HeaderLen + ProtocolConstants.StatusPayloadLen] ^= 1;
+            Check("距离字段受 MAC 保护", !FrameCodec.TryDecodeStatus(bad, bad.Length, session, key, out _, out _, out var err)
+                && err == FrameError.BadMac);
+            Check("扩展帧截断被拒绝", !FrameCodec.TryDecodeStatus(want, want.Length - 1, session, key, out _, out _, out _));
+            Check("缓冲区过短不会抛异常", !FrameCodec.TryDecodeStatus(new byte[1], want.Length, session, key, out _, out _, out _));
+            Check("自动协商距离扩展", CommandMessages.Auth(new byte[32]).Contains("\"net_distance\":true"));
         }
 
         private static void TestAuth(string dir)

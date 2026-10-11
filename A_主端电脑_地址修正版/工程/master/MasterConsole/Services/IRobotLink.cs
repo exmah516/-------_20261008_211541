@@ -36,7 +36,6 @@ namespace MasterConsole.Services
         public bool Handle582Online { get; set; }
         public bool Handle587Online { get; set; }
         public bool HandleSdkMissing { get; set; }
-        public bool CatheterReversePressed { get; set; }
     }
 
     /// <summary>

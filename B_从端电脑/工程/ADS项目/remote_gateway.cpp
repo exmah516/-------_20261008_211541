@@ -818,6 +818,8 @@ bool RemoteGateway::handle_message(std::uintptr_t sock_handle, const std::string
 			std::lock_guard<std::mutex> lock(m_);
 			if (session_active_) end_session_locked("被新会话替换");
 			session_active_ = true;
+			net_distance_enabled_ = false;
+			get_bool(o, "net_distance", net_distance_enabled_);
 			session_id_ = sid;
 			std::memcpy(session_key_, full, 16);
 			lease_held_ = false;
@@ -1421,7 +1423,8 @@ void RemoteGateway::send_haptic(std::uintptr_t udp_handle)
 void RemoteGateway::tick_udp(std::uintptr_t udp_handle)
 {
 	const SOCKET us = static_cast<SOCKET>(udp_handle);
-	unsigned char out[rp::kStatusFrameLen];
+	unsigned char out[rp::kStatusDistanceFrameLen];
+	size_t out_len = rp::kStatusFrameLen;
 	sockaddr_in to{};
 	bool do_send = false;
 	{
@@ -1443,7 +1446,7 @@ void RemoteGateway::tick_udp(std::uintptr_t udp_handle)
 			if (silent > kControlFrameReleaseMs)
 			{
 				release_lease_locked("控制帧持续超时");
-				add_event("warn", "控制帧持续超时，已释放控制权，请重新申请。");
+				add_event("warn", "控制帧持续超时，已释放控制权，请断开后重新连接。");
 			}
 		}
 
@@ -1467,6 +1470,8 @@ void RemoteGateway::tick_udp(std::uintptr_t udp_handle)
 			if (v.startup_completed) flags |= rp::kFlagStartupCompleted;
 			if (v.ads_state == 2) flags |= rp::kFlagAdsHealthy;
 			if (ff_zeroing_.load()) flags |= rp::kFlagFfZeroing;
+			if ((v.guidewire_mode == 0 ? v.axis1_reverse : v.axis6_reverse))
+				flags |= rp::kFlagGlobalReverse;
 			sp.flags = flags;
 			sp.mode = v.guidewire_mode;
 			sp.phase = v.startup_phase;
@@ -1499,7 +1504,16 @@ void RemoteGateway::tick_udp(std::uintptr_t udp_handle)
 			std::memcpy(out, &h, rp::kHeaderLen);
 			std::memcpy(out + rp::kHeaderLen, &sp, sizeof(sp));
 			unsigned char mac[32] = {};
-			const size_t body = rp::kHeaderLen + sizeof(sp);
+			size_t body = rp::kHeaderLen + sizeof(sp);
+			if (net_distance_enabled_)
+			{
+				rp::NetDistancePayload distance{};
+				distance.axis1_mm = extra_.axis1_net_distance_mm;
+				distance.axis6_mm = extra_.axis6_net_distance_mm;
+				std::memcpy(out + body, &distance, sizeof(distance));
+				body += sizeof(distance);
+			}
+			out_len = body + rp::kMacLen;
 			if (hmac_sha256(session_key_, 16, out, body, mac))
 			{
 				std::memcpy(out + body, mac, rp::kMacLen);
@@ -1512,7 +1526,7 @@ void RemoteGateway::tick_udp(std::uintptr_t udp_handle)
 	}
 	if (do_send)
 	{
-		sendto(us, reinterpret_cast<const char*>(out), static_cast<int>(rp::kStatusFrameLen), 0,
+		sendto(us, reinterpret_cast<const char*>(out), static_cast<int>(out_len), 0,
 			reinterpret_cast<const sockaddr*>(&to), sizeof(to));
 	}
 }

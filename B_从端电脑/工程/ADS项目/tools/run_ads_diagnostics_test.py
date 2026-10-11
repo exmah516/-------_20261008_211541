@@ -12,9 +12,16 @@ vs = subprocess.check_output([str(vswhere), '-latest', '-products', '*', '-requi
                              text=True).strip()
 build = Path(tempfile.mkdtemp(prefix='ads-offline-diagnostics-'))
 test = sys.argv[1] if len(sys.argv) > 1 else 'ads_diagnostics_test'
-if test not in ('ads_diagnostics_test', 'remote_recovery_test', 'main_recovery_test'):
+if test not in ('ads_diagnostics_test', 'remote_recovery_test', 'main_recovery_test', 'handle_net_distance_test', 'net_distance_gateway_test'):
     raise SystemExit('Unknown offline test')
 extra_source = f'"{project / "plc_io.cpp"}" ' if test == 'ads_diagnostics_test' else ''
+if test == 'handle_net_distance_test':
+    source = (project / 'main.cpp').read_text(encoding='utf-8-sig')
+    for name, start, end in (
+        ('distance_sample', '\t\tauto handle_distance_follow_allowed', '\t\t// 9) 根据当前顶层模式'),
+        ('distance_output', '\t\tconst bool distance_follow_output', '\t\tconst std::uint64_t output_generation')):
+        lo = source.index(start)
+        (build / (name + '.inc')).write_text(source[lo:source.index(end, lo)], encoding='utf-8')
 if test == 'ads_diagnostics_test':
     rows = (project / 'tools/ads_symbol_sizes.tsv').read_text(encoding='utf-8').splitlines()
     entries = []

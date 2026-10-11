@@ -38,7 +38,6 @@ namespace AdsControlUI
 		private bool _hasUiSnapshot;
 		private bool _prevConnected;
 		private VisState _prevState;
-		private string _physicalButtonNoticeText = "";
 		private const int StopExperimentMaxAttempts = 3;
 		private static readonly TimeSpan StopExperimentRetryInterval = TimeSpan.FromMilliseconds(350);
 		private bool _stopExperimentCommandPending;
@@ -64,8 +63,6 @@ namespace AdsControlUI
 			connected = _client.IsConnected;
 			if (!_hasUiSnapshot)
 			{
-				if (state.physical_button_event_counter != 0)
-					_physicalButtonNoticeText = PhysicalButtonEventText(state.physical_button_event_code);
 				NotifyAllUiProperties();
                 _prevState = state;
                 _prevConnected = connected;
@@ -135,17 +132,8 @@ namespace AdsControlUI
                 prev.axis6_reverse != state.axis6_reverse)
             {
                 OnPropertyChanged(nameof(ModeText));
-                OnPropertyChanged(nameof(ModeCathFwdSelected));
-                OnPropertyChanged(nameof(ModeCathRevSelected));
-                OnPropertyChanged(nameof(ModeGuideFwdSelected));
-                OnPropertyChanged(nameof(ModeGuideRevSelected));
                 OnPropertyChanged(nameof(Axis1Reverse));
 				OnPropertyChanged(nameof(Axis6Reverse));
-			}
-			if (prev.physical_button_event_counter != state.physical_button_event_counter)
-			{
-				_physicalButtonNoticeText = PhysicalButtonEventText(state.physical_button_event_code);
-				OnPropertyChanged(nameof(PhysicalButtonNoticeText));
 			}
 
             if (prev.control_active != state.control_active)
@@ -197,11 +185,6 @@ namespace AdsControlUI
                 OnPropertyChanged(nameof(SpacingRecoveryInactive));
                 OnPropertyChanged(nameof(SpacingRecoveryStatusText));
                 OnPropertyChanged(nameof(ModeText));
-                OnPropertyChanged(nameof(ModeCathFwdSelected));
-                OnPropertyChanged(nameof(ModeCathRevSelected));
-                OnPropertyChanged(nameof(ModeGuideFwdSelected));
-                OnPropertyChanged(nameof(ModeGuideRevSelected));
-			OnPropertyChanged(nameof(PhysicalButtonNoticeText));
                 OnPropertyChanged(nameof(PhaseText));
             }
             if (Changed(prev.spacing_recovery_moved_mm, state.spacing_recovery_moved_mm, PosEpsilon) ||
@@ -212,11 +195,6 @@ namespace AdsControlUI
             // 即使后端拒绝进入且 phase 仍为 Idle，也要把 ToggleButton 校正回实际状态。
             OnPropertyChanged(nameof(SpacingRecoveryActive));
             OnPropertyChanged(nameof(SpacingRecoveryInactive));
-            // 模式切换被拒绝时，RadioButton 仍可能保留本地点击状态；按后端快照校正。
-            OnPropertyChanged(nameof(ModeCathFwdSelected));
-            OnPropertyChanged(nameof(ModeCathRevSelected));
-            OnPropertyChanged(nameof(ModeGuideFwdSelected));
-            OnPropertyChanged(nameof(ModeGuideRevSelected));
 			OnPropertyChanged(nameof(TrackingCompensationEnabled));
 			OnPropertyChanged(nameof(Axis1TrackingError));
 			OnPropertyChanged(nameof(Axis6TrackingError));
@@ -267,16 +245,11 @@ namespace AdsControlUI
             OnPropertyChanged(nameof(Cyl3Open));
             OnPropertyChanged(nameof(Cyl4Open));
             OnPropertyChanged(nameof(ModeText));
-            OnPropertyChanged(nameof(ModeCathFwdSelected));
-            OnPropertyChanged(nameof(ModeCathRevSelected));
-            OnPropertyChanged(nameof(ModeGuideFwdSelected));
-            OnPropertyChanged(nameof(ModeGuideRevSelected));
             OnPropertyChanged(nameof(Axis6SoftLimitHold));
             OnPropertyChanged(nameof(Axis6SoftLimitText));
             OnPropertyChanged(nameof(ControlActive));
             OnPropertyChanged(nameof(EstopHold));
             OnPropertyChanged(nameof(FfEnabled));
-			OnPropertyChanged(nameof(PhysicalButtonNoticeText));
 			OnPropertyChanged(nameof(ForceFeedbackHoldEnabled));
 			OnPropertyChanged(nameof(ForceFeedbackHoldActive));
 			OnPropertyChanged(nameof(ForceFeedbackHoldStatusText));
@@ -625,32 +598,12 @@ namespace AdsControlUI
             get
             {
                 if (SpacingRecoveryActive) return "屈曲恢复";
-                string mode = _state.guidewire_mode == 0 ? "导管" : "导丝";
-                bool rev = _state.guidewire_mode == 0 ? _state.axis1_reverse : _state.axis6_reverse;
-                return mode + (rev ? "撤出" : "递送");
+                return _state.axis1_reverse ? "撤出" : "递送";
             }
         }
 
         public bool Axis1Reverse => _state.axis1_reverse;
         public bool Axis6Reverse => _state.axis6_reverse;
-        public bool ModeCathFwdSelected => SpacingRecoveryInactive && _state.guidewire_mode == 0 && !_state.axis1_reverse;
-        public bool ModeCathRevSelected => SpacingRecoveryInactive && _state.guidewire_mode == 0 && _state.axis1_reverse;
-        public bool ModeGuideFwdSelected => SpacingRecoveryInactive && _state.guidewire_mode == 1 && !_state.axis6_reverse;
-        public bool ModeGuideRevSelected => SpacingRecoveryInactive && _state.guidewire_mode == 1 && _state.axis6_reverse;
-		public string PhysicalButtonNoticeText => _physicalButtonNoticeText;
-
-		private static string PhysicalButtonEventText(int eventCode)
-		{
-			switch (eventCode)
-			{
-				case 1: return "SN 587 B7：已选择导管递送";
-				case 2: return "SN 587 B7：已选择导管撤出";
-				case 3: return "SN 582 B7：已选择导丝递送";
-				case 4: return "SN 582 B7：已选择导丝撤出";
-				case 7: return "物理按钮冲突：两只手柄同时按下 B7，本次模式切换已忽略";
-				default: return "物理按钮触发";
-			}
-		}
         public bool Axis6SoftLimitHold => _state.axis6_soft_limit_hold;
         public string Axis6SoftLimitText => Axis6SoftLimitHold
             ? "轴6软件限位：当前动作已阻断，松手或回到安全窗口后自动重新评估。"
@@ -910,9 +863,6 @@ namespace AdsControlUI
 		public bool ResetCylinderManual(int index) =>
 			index >= 0 && index < 4 &&
 			_client.SendCommand(VisCommandType.ResetCylinderManual, index);
-
-        public void SetMode(int guidewireMode, int reverse) =>
-            _client.SendCommand(VisCommandType.SetReverseMode, guidewireMode, reverse);
 
         public void SetAxis1PostReturnLead(double leadMm) =>
             _client.SendCommand(

@@ -87,10 +87,6 @@ namespace AdsControlUI
 			button.SetCurrentValue(ToggleButton.IsCheckedProperty, manual);
         }
 
-        private void ModeCathFwd_Click(object sender, RoutedEventArgs e) => _vm.SetMode(0, 0);
-        private void ModeCathRev_Click(object sender, RoutedEventArgs e) => _vm.SetMode(0, 1);
-        private void ModeGuideFwd_Click(object sender, RoutedEventArgs e) => _vm.SetMode(1, 0);
-        private void ModeGuideRev_Click(object sender, RoutedEventArgs e) => _vm.SetMode(1, 1);
         private void SpacingRecovery_Click(object sender, RoutedEventArgs e)
         {
             if (sender is ToggleButton button)

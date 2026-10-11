@@ -18,6 +18,7 @@ constexpr size_t kMacLen = 8;
 constexpr size_t kControlFrameLen = 79;
 constexpr size_t kHapticFrameLen = 50;
 constexpr size_t kStatusFrameLen = 142;
+constexpr size_t kStatusDistanceFrameLen = 158;
 
 constexpr uint16_t kTcpPort = 32000;
 constexpr uint16_t kUdpPort = 32001;
@@ -35,6 +36,7 @@ enum StatusFlag : uint32_t {
 	kFlagStartupCompleted = 1u << 8,
 	kFlagAdsHealthy = 1u << 9,
 	kFlagFfZeroing = 1u << 10,
+	kFlagGlobalReverse = 1u << 11,
 };
 
 #pragma pack(push, 1)
@@ -86,6 +88,11 @@ struct StatusPayload {
 	float    axis_pos[7];
 	float    axis_from_left[7];
 };
+// 认证消息 net_distance=true 时，追加在原状态载荷之后，仍由整帧 MAC 保护。
+struct NetDistancePayload {
+	double axis1_mm;
+	double axis6_mm;
+};
 #pragma pack(pop)
 
 static_assert(sizeof(FrameHeader) == kHeaderLen, "帧头长度错误");
@@ -94,6 +101,8 @@ static_assert(sizeof(ControlPayload) == 55, "ControlPayload 长度错误");
 static_assert(sizeof(HapticOut) == 10, "HapticOut 长度错误");
 static_assert(sizeof(HapticPayload) == 26, "HapticPayload 长度错误");
 static_assert(sizeof(StatusPayload) == 118, "StatusPayload 长度错误");
+static_assert(sizeof(NetDistancePayload) == 16, "NetDistancePayload 长度错误");
+static_assert(kStatusFrameLen + sizeof(NetDistancePayload) == kStatusDistanceFrameLen, "扩展状态帧长度错误");
 static_assert(kHeaderLen + sizeof(ControlPayload) + kMacLen == kControlFrameLen, "ControlFrame 长度错误");
 static_assert(kHeaderLen + sizeof(HapticPayload) + kMacLen == kHapticFrameLen, "HapticFrame 长度错误");
 static_assert(kHeaderLen + sizeof(StatusPayload) + kMacLen == kStatusFrameLen, "StatusFrame 长度错误");

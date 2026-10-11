@@ -104,15 +104,16 @@ struct ControlConfig
 
 	// 基于左限位参考的爬行窗口。
 	double axis1_window_left_from_left_mm = 8.0;
-	double axis1_window_right_from_left_mm = 28.0;
+	double axis1_window_right_from_left_mm = 34.0;
 	// axis6 相对 axis5 的间距窗口 g = axis6_from_left - axis5_from_left，范围 [gmin, gmin+size]。
 	// 双手柄同时控制与单手柄导丝角色共用同一窗口（g_min = 0，axis5/6 机构允许接触）。
 	double catheter_axis6_window_size_mm = 26.0;
 	double catheter_axis6_window_min_gap_from_axis5_mm = 0.0;
 	double guidewire_axis6_window_size_mm = 26.0;
 	double guidewire_axis6_window_min_gap_from_axis5_mm = 0.0;
-	// 双手柄同时控制：非触发端（限位端）相对窗口端点内缩的距离；
-	// 该内缩后的限位端同时是换手后的重定位位置（axis1 窗口与 g 窗口共用）。
+	// 撤出时两条链路共用36 mm基础窗口，左侧参考保持不变。
+	double dual_retraction_window_size_mm = 36.0;
+	// 非触发端向外扩展的余量；g下端为接触位置，不外扩。
 	double relocation_inset_mm = 3.0;
 	// 一条链路触发换手时，另一条链路距其端点小于该值且未在远离，则并入同一事务。
 	double transaction_merge_eps_mm = 1.5;
@@ -411,9 +412,8 @@ struct SpacingRecoveryState
 	double moved_mm = 0.0;
 	double remaining_mm = 0.0;
 	bool limit_logged = false;
-	// 退出后恢复进入屈曲恢复前的模式来源、方向和界面覆盖。
+	// 单手柄调试退出时使用；双手柄方向始终以当前B6电平为准。
 	int restore_mode_selection = 1;
-	int restore_physical_mode_source = 0;
 	bool restore_vis_reverse_override_active = false;
 	bool restore_vis_reverse_override_value = false;
 	int restore_vis_reverse_override_target = 0;
@@ -434,7 +434,6 @@ struct SpacingRecoveryState
 		remaining_mm = 0.0;
 		limit_logged = false;
 		restore_mode_selection = 1;
-		restore_physical_mode_source = 0;
 		restore_vis_reverse_override_active = false;
 		restore_vis_reverse_override_value = false;
 		restore_vis_reverse_override_target = 0;
@@ -671,6 +670,7 @@ struct AppContext
 
 	// 模式与状态机。
 	GuidewireMode* guidewire_mode = nullptr;
+	bool* dual_reverse = nullptr;
 	CrawlState* axis1_crawl = nullptr;
 	CrawlState* axis6_crawl = nullptr;
 	StartupState* startup = nullptr;

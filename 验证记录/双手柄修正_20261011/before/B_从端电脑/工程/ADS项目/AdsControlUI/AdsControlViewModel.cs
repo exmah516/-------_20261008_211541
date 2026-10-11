@@ -1,0 +1,1111 @@
+using System;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+using System.Windows.Threading;
+
+namespace AdsControlUI
+{
+    public class AdsControlViewModel : INotifyPropertyChanged, IDisposable
+    {
+        private const double Axis1StrokeMm = 99.0;
+        private const double Axis3StrokeMm = 666.0;
+        private const double Axis5StrokeMm = 688.0;
+        private const double Axis6StrokeMm = 688.0;
+
+        private readonly VisPipeClient _client = new VisPipeClient();
+        private readonly DispatcherTimer _refreshTimer;
+        private VisState _state;
+
+        public event Action<VisState> StateUpdated;
+
+        public AdsControlViewModel()
+        {
+            ArmAxes = new ObservableCollection<ArmAxisControlModel>();
+            for (int axis = 1; axis <= 5; ++axis)
+                ArmAxes.Add(new ArmAxisControlModel(axis));
+
+            _client.Start();
+			_refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(66) };
+            _refreshTimer.Tick += (s, e) => RefreshFromPipe();
+            _refreshTimer.Start();
+        }
+
+		// 位置类显示值变化阈值，避免 66 ms 全量刷绑定。
+        private const double PosEpsilon = 1e-4;
+        private const double ForceEpsilon = 1e-6;
+
+		private bool _hasUiSnapshot;
+		private bool _prevConnected;
+		private VisState _prevState;
+		private string _physicalButtonNoticeText = "";
+		private const int StopExperimentMaxAttempts = 3;
+		private static readonly TimeSpan StopExperimentRetryInterval = TimeSpan.FromMilliseconds(350);
+		private bool _stopExperimentCommandPending;
+		private int _stopExperimentCommandAttempts;
+		private DateTime _nextStopExperimentRetryUtc;
+		private string _recordingCommandErrorText = "";
+
+        private void RefreshFromPipe()
+        {
+            bool connected = _client.IsConnected;
+            if (!_client.TryGetLatestState(out var state))
+            {
+				bool connectionChanged = _prevConnected != connected;
+                NotifyIfChanged(ref _prevConnected, connected, nameof(IsConnected));
+				if (connectionChanged)
+					NotifyAdsProperties();
+                return;
+            }
+
+			_state = state;
+			UpdateArmAxes(state);
+			UpdateStopExperimentCommand(state, connected);
+			connected = _client.IsConnected;
+			if (!_hasUiSnapshot)
+			{
+				if (state.physical_button_event_counter != 0)
+					_physicalButtonNoticeText = PhysicalButtonEventText(state.physical_button_event_code);
+				NotifyAllUiProperties();
+                _prevState = state;
+                _prevConnected = connected;
+                _hasUiSnapshot = true;
+                StateUpdated?.Invoke(state);
+                return;
+            }
+
+            var prev = _prevState;
+
+            // 轴位置与文本
+            if (AxisChanged(prev, state, 0))
+            {
+                OnPropertyChanged(nameof(Axis1Pos));
+                OnPropertyChanged(nameof(Axis1FromLeft));
+                OnPropertyChanged(nameof(Axis1EffectiveTravel));
+                OnPropertyChanged(nameof(Axis1StrokeText));
+                OnPropertyChanged(nameof(SpacingRecoveryStatusText));
+            }
+            if (AxisChanged(prev, state, 1))
+            {
+                OnPropertyChanged(nameof(Axis2Pos));
+                OnPropertyChanged(nameof(Axis2RotationText));
+            }
+            if (AxisChanged(prev, state, 2))
+            {
+                OnPropertyChanged(nameof(Axis3Pos));
+                OnPropertyChanged(nameof(Axis3FromLeft));
+                OnPropertyChanged(nameof(Axis3EffectiveTravel));
+                OnPropertyChanged(nameof(Axis3StrokeText));
+                OnPropertyChanged(nameof(SpacingRecoveryStatusText));
+            }
+            if (AxisChanged(prev, state, 3))
+            {
+                OnPropertyChanged(nameof(Axis4Pos));
+                OnPropertyChanged(nameof(Axis4RotationText));
+            }
+            if (AxisChanged(prev, state, 4))
+            {
+                OnPropertyChanged(nameof(Axis5Pos));
+                OnPropertyChanged(nameof(Axis5FromLeft));
+                OnPropertyChanged(nameof(Axis5EffectiveTravel));
+                OnPropertyChanged(nameof(Axis5StrokeText));
+            }
+            if (AxisChanged(prev, state, 5))
+            {
+                OnPropertyChanged(nameof(Axis6Pos));
+                OnPropertyChanged(nameof(Axis6FromLeft));
+                OnPropertyChanged(nameof(Axis6EffectiveTravel));
+                OnPropertyChanged(nameof(Axis6StrokeText));
+            }
+            if (AxisChanged(prev, state, 6))
+            {
+                OnPropertyChanged(nameof(Axis7Pos));
+                OnPropertyChanged(nameof(Axis7RotationText));
+            }
+
+            // 电缸开合（与属性阈值一致）
+            if (CylOpenChanged(prev, state, 0)) OnPropertyChanged(nameof(Cyl1Open));
+            if (CylOpenChanged(prev, state, 1)) OnPropertyChanged(nameof(Cyl2Open));
+            if (CylOpenChanged(prev, state, 2)) OnPropertyChanged(nameof(Cyl3Open));
+            if (CylOpenChanged(prev, state, 3)) OnPropertyChanged(nameof(Cyl4Open));
+
+            // 模式与方向
+			if (prev.guidewire_mode != state.guidewire_mode ||
+                prev.axis1_reverse != state.axis1_reverse ||
+                prev.axis6_reverse != state.axis6_reverse)
+            {
+                OnPropertyChanged(nameof(ModeText));
+                OnPropertyChanged(nameof(ModeCathFwdSelected));
+                OnPropertyChanged(nameof(ModeCathRevSelected));
+                OnPropertyChanged(nameof(ModeGuideFwdSelected));
+                OnPropertyChanged(nameof(ModeGuideRevSelected));
+                OnPropertyChanged(nameof(Axis1Reverse));
+				OnPropertyChanged(nameof(Axis6Reverse));
+			}
+			if (prev.physical_button_event_counter != state.physical_button_event_counter)
+			{
+				_physicalButtonNoticeText = PhysicalButtonEventText(state.physical_button_event_code);
+				OnPropertyChanged(nameof(PhysicalButtonNoticeText));
+			}
+
+            if (prev.control_active != state.control_active)
+            {
+                OnPropertyChanged(nameof(ControlActive));
+            }
+            if (prev.estop_hold != state.estop_hold)
+            {
+                OnPropertyChanged(nameof(EstopHold));
+            }
+			if (prev.ff_enabled != state.ff_enabled) OnPropertyChanged(nameof(FfEnabled));
+			if (prev.force_feedback_hold_enabled != state.force_feedback_hold_enabled ||
+				prev.force_feedback_hold_active != state.force_feedback_hold_active ||
+				prev.force_feedback_hold_owner != state.force_feedback_hold_owner)
+			{
+				OnPropertyChanged(nameof(ForceFeedbackHoldEnabled));
+				OnPropertyChanged(nameof(ForceFeedbackHoldActive));
+				OnPropertyChanged(nameof(ForceFeedbackHoldStatusText));
+			}
+            if (prev.cal_zeroed != state.cal_zeroed) OnPropertyChanged(nameof(CalZeroed));
+            if (prev.gravity_comp_enabled != state.gravity_comp_enabled) OnPropertyChanged(nameof(GravityCompEnabled));
+            if (prev.startup_waiting != state.startup_waiting) OnPropertyChanged(nameof(StartupWaiting));
+            if (prev.startup_completed != state.startup_completed)
+            {
+                OnPropertyChanged(nameof(StartupCompleted));
+            }
+            if (prev.startup_waiting != state.startup_waiting || prev.startup_completed != state.startup_completed)
+                OnPropertyChanged(nameof(PhaseText));
+            if (prev.selfcheck_status != state.selfcheck_status || prev.self_check_done != state.self_check_done)
+            {
+                OnPropertyChanged(nameof(CanStartControl));
+                OnPropertyChanged(nameof(SelfCheckStatusText));
+            }
+
+            if (prev.axis6_soft_limit_hold != state.axis6_soft_limit_hold)
+            {
+                OnPropertyChanged(nameof(Axis6SoftLimitHold));
+                OnPropertyChanged(nameof(Axis6SoftLimitText));
+            }
+
+            if (Changed(prev.force_582_f, state.force_582_f, ForceEpsilon)) OnPropertyChanged(nameof(Force582F));
+            if (Changed(prev.force_582_n, state.force_582_n, ForceEpsilon)) OnPropertyChanged(nameof(Force582N));
+            if (Changed(prev.force_582_theory_f, state.force_582_theory_f, ForceEpsilon)) OnPropertyChanged(nameof(Force582TheoryF));
+            if (Changed(prev.force_582_theory_n, state.force_582_theory_n, ForceEpsilon)) OnPropertyChanged(nameof(Force582TheoryN));
+
+            if (prev.spacing_recovery_phase != state.spacing_recovery_phase)
+            {
+                OnPropertyChanged(nameof(SpacingRecoveryActive));
+                OnPropertyChanged(nameof(SpacingRecoveryInactive));
+                OnPropertyChanged(nameof(SpacingRecoveryStatusText));
+                OnPropertyChanged(nameof(ModeText));
+                OnPropertyChanged(nameof(ModeCathFwdSelected));
+                OnPropertyChanged(nameof(ModeCathRevSelected));
+                OnPropertyChanged(nameof(ModeGuideFwdSelected));
+                OnPropertyChanged(nameof(ModeGuideRevSelected));
+			OnPropertyChanged(nameof(PhysicalButtonNoticeText));
+                OnPropertyChanged(nameof(PhaseText));
+            }
+            if (Changed(prev.spacing_recovery_moved_mm, state.spacing_recovery_moved_mm, PosEpsilon) ||
+                Changed(prev.spacing_recovery_remaining_mm, state.spacing_recovery_remaining_mm, PosEpsilon))
+            {
+                OnPropertyChanged(nameof(SpacingRecoveryStatusText));
+            }
+            // 即使后端拒绝进入且 phase 仍为 Idle，也要把 ToggleButton 校正回实际状态。
+            OnPropertyChanged(nameof(SpacingRecoveryActive));
+            OnPropertyChanged(nameof(SpacingRecoveryInactive));
+            // 模式切换被拒绝时，RadioButton 仍可能保留本地点击状态；按后端快照校正。
+            OnPropertyChanged(nameof(ModeCathFwdSelected));
+            OnPropertyChanged(nameof(ModeCathRevSelected));
+            OnPropertyChanged(nameof(ModeGuideFwdSelected));
+            OnPropertyChanged(nameof(ModeGuideRevSelected));
+			OnPropertyChanged(nameof(TrackingCompensationEnabled));
+			OnPropertyChanged(nameof(Axis1TrackingError));
+			OnPropertyChanged(nameof(Axis6TrackingError));
+			OnPropertyChanged(nameof(Axis1CompensationGain));
+			OnPropertyChanged(nameof(Axis6CompensationGain));
+			OnPropertyChanged(nameof(TrackingCompensationCanEnable));
+			OnPropertyChanged(nameof(TrackingCompensationToggleEnabled));
+			OnPropertyChanged(nameof(TrackingParametersEditable));
+			OnPropertyChanged(nameof(TrackingStatusText));
+            OnPropertyChanged(nameof(CanStartControl));
+            OnPropertyChanged(nameof(SelfCheckStatusText));
+			NotifyExperimentProperties();
+			NotifyAdsProperties();
+
+            NotifyIfChanged(ref _prevConnected, connected, nameof(IsConnected));
+			OnPropertyChanged(nameof(CanStartExperimentRecording));
+			OnPropertyChanged(nameof(CanOpenCameraPreview));
+            _prevState = state;
+            StateUpdated?.Invoke(state);
+        }
+
+        private void NotifyAllUiProperties()
+        {
+            OnPropertyChanged(nameof(Axis1Pos));
+            OnPropertyChanged(nameof(Axis2Pos));
+            OnPropertyChanged(nameof(Axis3Pos));
+            OnPropertyChanged(nameof(Axis4Pos));
+            OnPropertyChanged(nameof(Axis5Pos));
+            OnPropertyChanged(nameof(Axis6Pos));
+            OnPropertyChanged(nameof(Axis7Pos));
+            OnPropertyChanged(nameof(Axis1FromLeft));
+            OnPropertyChanged(nameof(Axis3FromLeft));
+            OnPropertyChanged(nameof(Axis5FromLeft));
+            OnPropertyChanged(nameof(Axis6FromLeft));
+            OnPropertyChanged(nameof(Axis1EffectiveTravel));
+            OnPropertyChanged(nameof(Axis3EffectiveTravel));
+            OnPropertyChanged(nameof(Axis5EffectiveTravel));
+            OnPropertyChanged(nameof(Axis6EffectiveTravel));
+            OnPropertyChanged(nameof(Axis1StrokeText));
+            OnPropertyChanged(nameof(Axis2RotationText));
+            OnPropertyChanged(nameof(Axis3StrokeText));
+            OnPropertyChanged(nameof(Axis4RotationText));
+            OnPropertyChanged(nameof(Axis5StrokeText));
+            OnPropertyChanged(nameof(Axis6StrokeText));
+            OnPropertyChanged(nameof(Axis7RotationText));
+            OnPropertyChanged(nameof(Cyl1Open));
+            OnPropertyChanged(nameof(Cyl2Open));
+            OnPropertyChanged(nameof(Cyl3Open));
+            OnPropertyChanged(nameof(Cyl4Open));
+            OnPropertyChanged(nameof(ModeText));
+            OnPropertyChanged(nameof(ModeCathFwdSelected));
+            OnPropertyChanged(nameof(ModeCathRevSelected));
+            OnPropertyChanged(nameof(ModeGuideFwdSelected));
+            OnPropertyChanged(nameof(ModeGuideRevSelected));
+            OnPropertyChanged(nameof(Axis6SoftLimitHold));
+            OnPropertyChanged(nameof(Axis6SoftLimitText));
+            OnPropertyChanged(nameof(ControlActive));
+            OnPropertyChanged(nameof(EstopHold));
+            OnPropertyChanged(nameof(FfEnabled));
+			OnPropertyChanged(nameof(PhysicalButtonNoticeText));
+			OnPropertyChanged(nameof(ForceFeedbackHoldEnabled));
+			OnPropertyChanged(nameof(ForceFeedbackHoldActive));
+			OnPropertyChanged(nameof(ForceFeedbackHoldStatusText));
+            OnPropertyChanged(nameof(CalZeroed));
+            OnPropertyChanged(nameof(Force582F));
+            OnPropertyChanged(nameof(Force582N));
+            OnPropertyChanged(nameof(Force582TheoryF));
+            OnPropertyChanged(nameof(Force582TheoryN));
+            OnPropertyChanged(nameof(GravityCompEnabled));
+            OnPropertyChanged(nameof(IsConnected));
+            OnPropertyChanged(nameof(Axis1Reverse));
+            OnPropertyChanged(nameof(Axis6Reverse));
+            OnPropertyChanged(nameof(StartupWaiting));
+            OnPropertyChanged(nameof(StartupCompleted));
+            OnPropertyChanged(nameof(PhaseText));
+            OnPropertyChanged(nameof(SpacingRecoveryActive));
+            OnPropertyChanged(nameof(SpacingRecoveryInactive));
+            OnPropertyChanged(nameof(SpacingRecoveryStatusText));
+			OnPropertyChanged(nameof(TrackingCompensationEnabled));
+			OnPropertyChanged(nameof(Axis1TrackingError));
+			OnPropertyChanged(nameof(Axis6TrackingError));
+			OnPropertyChanged(nameof(Axis1CompensationGain));
+			OnPropertyChanged(nameof(Axis6CompensationGain));
+			OnPropertyChanged(nameof(TrackingCompensationCanEnable));
+			OnPropertyChanged(nameof(TrackingCompensationToggleEnabled));
+			OnPropertyChanged(nameof(TrackingParametersEditable));
+			OnPropertyChanged(nameof(TrackingStatusText));
+			NotifyExperimentProperties();
+			NotifyAdsProperties();
+        }
+
+		private void NotifyExperimentProperties()
+		{
+			OnPropertyChanged(nameof(RecordingState));
+			OnPropertyChanged(nameof(RecordingStateText));
+			OnPropertyChanged(nameof(RecordingErrorText));
+			OnPropertyChanged(nameof(RecordingElapsedText));
+			OnPropertyChanged(nameof(RecordingLossText));
+			OnPropertyChanged(nameof(CanStartExperimentRecording));
+			OnPropertyChanged(nameof(CanStopExperimentRecording));
+			OnPropertyChanged(nameof(ExperimentNameEditable));
+			OnPropertyChanged(nameof(CameraStatusText));
+			OnPropertyChanged(nameof(CameraParameterText));
+			OnPropertyChanged(nameof(CameraRecordingElapsedText));
+			OnPropertyChanged(nameof(CameraRecording));
+			OnPropertyChanged(nameof(CanOpenCameraPreview));
+			OnPropertyChanged(nameof(ForceSampleValid));
+			OnPropertyChanged(nameof(CleanForceValid));
+			OnPropertyChanged(nameof(RawFnVoltage));
+			OnPropertyChanged(nameof(RawFtVoltage));
+			OnPropertyChanged(nameof(CleanForceN));
+			OnPropertyChanged(nameof(CleanHandleTorqueNm));
+		}
+
+		private void NotifyAdsProperties()
+		{
+			OnPropertyChanged(nameof(AdsState));
+			OnPropertyChanged(nameof(AdsHealthy));
+			OnPropertyChanged(nameof(HostCommTimeout));
+			OnPropertyChanged(nameof(AdsStateText));
+            OnPropertyChanged(nameof(CanStartControl));
+            OnPropertyChanged(nameof(SelfCheckStatusText));
+			NotifyManualControlProperties();
+		}
+
+		private void NotifyManualControlProperties()
+		{
+			OnPropertyChanged(nameof(CylinderManualAllowed));
+			OnPropertyChanged(nameof(Cyl1Manual));
+			OnPropertyChanged(nameof(Cyl2Manual));
+			OnPropertyChanged(nameof(Cyl3Manual));
+			OnPropertyChanged(nameof(Cyl4Manual));
+			OnPropertyChanged(nameof(ArmManualEnabled));
+			OnPropertyChanged(nameof(ArmManualAvailable));
+			OnPropertyChanged(nameof(ArmAxisControlsEnabled));
+			OnPropertyChanged(nameof(ArmManualStatusText));
+			OnPropertyChanged(nameof(ArmCartesianAvailable));
+			OnPropertyChanged(nameof(ArmCartesianStatusText));
+			OnPropertyChanged(nameof(ArmProgramAnglesText));
+			OnPropertyChanged(nameof(ArmZeroText));
+			OnPropertyChanged(nameof(Axis4ManualControlAllowed));
+			OnPropertyChanged(nameof(Axis4ManualStatusText));
+		}
+
+		private void UpdateArmAxes(VisState state)
+		{
+			for (int index = 0; index < ArmAxes.Count; ++index)
+				ArmAxes[index].UpdateFrom(state, index);
+		}
+
+		private void UpdateStopExperimentCommand(VisState state, bool connected)
+		{
+			if (state.recording_state != 2)
+			{
+				ResetStopExperimentCommand();
+				_recordingCommandErrorText = "";
+				return;
+			}
+
+			if (!connected)
+			{
+				if (_stopExperimentCommandPending)
+					_recordingCommandErrorText = "停止命令等待期间连接中断，请在重连后重试";
+				ResetStopExperimentCommand();
+				return;
+			}
+
+			if (!_stopExperimentCommandPending || DateTime.UtcNow < _nextStopExperimentRetryUtc)
+				return;
+
+			if (_stopExperimentCommandAttempts >= StopExperimentMaxAttempts)
+			{
+				ResetStopExperimentCommand();
+				_recordingCommandErrorText = "后端未确认停止命令，可再次点击“停止实验记录”";
+				return;
+			}
+
+			if (_client.SendCommand(VisCommandType.StopExperimentRecording))
+			{
+				_stopExperimentCommandAttempts++;
+				_nextStopExperimentRetryUtc = DateTime.UtcNow + StopExperimentRetryInterval;
+				return;
+			}
+
+			ResetStopExperimentCommand();
+			_recordingCommandErrorText = "停止命令发送失败，请等待连接恢复后重试";
+		}
+
+		private void ResetStopExperimentCommand()
+		{
+			_stopExperimentCommandPending = false;
+			_stopExperimentCommandAttempts = 0;
+			_nextStopExperimentRetryUtc = DateTime.MinValue;
+		}
+
+        private static bool Changed(double a, double b, double eps) => Math.Abs(a - b) > eps;
+
+        private static double AxisValue(VisState s, int index)
+        {
+            if (s.axis_pos_from_left != null && s.axis_pos_from_left.Length > index)
+                return s.axis_pos_from_left[index];
+            if (s.axis_pos != null && s.axis_pos.Length > index)
+                return s.axis_pos[index];
+            return 0.0;
+        }
+
+        private static bool AxisChanged(VisState prev, VisState cur, int index) =>
+            Changed(AxisValue(prev, index), AxisValue(cur, index), PosEpsilon);
+
+        private static bool CylOpen(VisState s, int index)
+        {
+            ushort v = (s.cylinder_cmd != null && s.cylinder_cmd.Length > index) ? s.cylinder_cmd[index] : (ushort)0;
+            // 与 Cyl1Open/Cyl2Open 等属性阈值一致：1/3 大开，2/4 小开
+            return (index == 0 || index == 2) ? (v > 200) : (v < 200);
+        }
+
+        private static bool CylOpenChanged(VisState prev, VisState cur, int index) =>
+            CylOpen(prev, index) != CylOpen(cur, index);
+
+        private void NotifyIfChanged(ref bool cache, bool value, string name)
+        {
+            if (cache == value) return;
+            cache = value;
+            OnPropertyChanged(name);
+        }
+
+        public bool IsConnected => _client.IsConnected;
+		public int AdsState => _state.ads_state;
+		public bool HostCommTimeout => _state.host_comm_timeout;
+        public bool AdsHealthy => IsConnected && AdsState == 2 && !HostCommTimeout;
+        public bool CanStartControl => IsConnected && AdsState == 2 &&
+            (_state.self_check_done ||
+             _state.selfcheck_status == 1 || _state.selfcheck_status == 3 || _state.selfcheck_status == 4);
+        public string SelfCheckStatusText => _state.self_check_done ? "自检完成" :
+            !IsConnected || AdsState != 2 ? "等待 ADS 通信" : _state.selfcheck_status switch
+        {
+            1 => "等待开始自检",
+            2 => "自检运行中",
+            3 => "PLC 拒绝目标参数",
+            4 => "上位机拒绝命令或 ADS 写入失败",
+            5 => "请求已发送，等待 PLC 确认",
+            _ => "等待 PLC 初始化"
+        };
+
+		public string AdsStateText
+		{
+			get
+			{
+				if (!IsConnected) return "上位机管道未连接";
+				if (HostCommTimeout) return "PLC 通信超时";
+				switch (AdsState)
+				{
+					case 0: return "ADS 未启动";
+					case 1: return "ADS 正在连接";
+					case 2: return "ADS 正常";
+					case 3: return "ADS 单拍软保持";
+					case 4: return "ADS 重连中";
+					case 5: return "PLC 已重启，等待人工恢复";
+					case 6: return "ADS 通信错误";
+					default: return $"ADS 未知状态（{AdsState}）";
+				}
+			}
+		}
+
+		public string AdsDiagnosticsText
+		{
+			get
+			{
+				string frequency = _state.ads_actual_hz > 0.0 &&
+					!double.IsNaN(_state.ads_actual_hz) && !double.IsInfinity(_state.ads_actual_hz)
+					? $"{_state.ads_actual_hz:F1} Hz"
+					: "-- Hz";
+				return $"实际频率 {frequency} · 数据龄 {FormatLatency(_state.ads_snapshot_age_us)} · RTT {FormatLatency(_state.ads_rtt_us)}";
+			}
+		}
+
+		public string AdsCounterText =>
+			$"失败 {_state.ads_failed_cycles} · 重连 {_state.ads_reconnect_count} · PLC 重启 {_state.plc_restart_count}";
+		public ObservableCollection<ArmAxisControlModel> ArmAxes { get; }
+		public bool ArmManualEnabled => _state.arm_manual_enable;
+		public bool ArmManualAvailable => AdsHealthy;
+		public bool ArmAxisControlsEnabled => ArmManualAvailable && ArmManualEnabled;
+		public bool ArmCartesianAvailable => ArmAxisControlsEnabled && _state.arm_snapshot_valid && !EstopHold;
+		public string ArmZeroText => !_state.arm_snapshot_valid ? "程序零位：无反馈"
+			: _state.arm_at_program_zero ? "程序零位：已到位" : "程序零位：未到位";
+		public string ArmProgramAnglesText => !_state.arm_snapshot_valid ? "程序角：--"
+			: $"程序角  {(GetArmAngle(1)-90):F2}°  {(GetArmAngle(2)-180):F2}°  {(GetArmAngle(3)-180):F2}°  {GetArmAngle(4):F2}°";
+		private double GetArmAngle(int index) => _state.arm_act_pos[index];
+		public string ArmCartesianStatusText
+		{
+			get
+			{
+				if (!_state.arm_snapshot_valid) return "定位臂协调接口无有效反馈";
+				if (_state.arm_cartesian_error != 0)
+					return $"协调运动错误 {_state.arm_cartesian_error}：{ArmMotionError(_state.arm_cartesian_error)}";
+				switch (_state.arm_cartesian_status) {
+				case 1: return $"协调运动 {_state.arm_curve_progress:P0}";
+				case 2: return "协调运动完成";
+				case 3: return "已在零位窗口内，未移动";
+				case 4: return _state.arm_curve_state == 1 ? "正在停止" : "已取消";
+				default: return "协调运动待命";
+				}
+			}
+		}
+		private static string ArmMotionError(int code)
+		{
+			switch (code) {
+			case 1001: return "参数未填写或无效";
+			case 1002: case 1102: case 1203: case 2006: return "轴位置越限";
+			case 1003: return "ADS命令失败";
+			case 1004: return "反馈失效或总使能关闭";
+			case 1005: return "操作续约超时";
+			case 1006: return "轴未上电、故障或存在单轴点动";
+			case 1007: return "PLC未确认命令";
+			case 1008: return "轴尚未静止";
+			case 1103: case 2005: return "速度或加速度限制";
+			case 1104: return "接近机械奇异位";
+			case 1105: return "逆解未收敛";
+			case 1202: return "归零参数无效";
+			case 1204: return "超过归零关节行程";
+			case 1205: return "超过末端位移或转角预算";
+			case 1206: return "归零轨迹过长";
+			case 1207: return "归零数值计算失败";
+			case 2001: return "PLC正在执行另一条曲线";
+			case 2002: return "曲线数据或时间无效";
+			case 2003: return "PLC使能、心跳、急停或周期条件不满足";
+			case 2004: return "曲线起点或轴参数不匹配";
+			case 2007: return "PLC切换或到位超时";
+			case 2008: return "PLC跟随误差或曲线导数越限";
+			default: return "PLC/NC执行错误";
+			}
+		}
+		public string ArmManualStatusText
+		{
+			get
+			{
+				if (!IsConnected) return "定位臂：上位机管道未连接";
+				if (!AdsHealthy) return $"定位臂：等待 ADS 正常（{AdsStateText}）";
+				return ArmManualEnabled
+					? "定位臂总使能已开启；各轴需单独上电后点动"
+					: "定位臂总使能已关闭";
+			}
+		}
+		public bool Axis4ManualControlAllowed =>
+			AdsHealthy && ControlActive && !EstopHold &&
+			!StartupWaiting && !SpacingRecoveryActive;
+		public string Axis4ManualStatusText
+		{
+			get
+			{
+				if (_state.axis4_manual_error)
+					return $"轴4点动错误 0x{_state.axis4_manual_error_id:X8}";
+				if (_state.axis4_manual_busy)
+					return "轴4正在点动";
+				if (_state.axis4_manual_done)
+					return "轴4点动完成";
+				return Axis4ManualControlAllowed ? "轴4点动待命" : "轴4点动当前被安全条件禁止";
+			}
+		}
+        public double Axis1Pos => GetAxisPos(0);
+        public double Axis2Pos => GetAxisPos(1);
+        public double Axis3Pos => GetAxisPos(2);
+        public double Axis4Pos => GetAxisPos(3);
+        public double Axis5Pos => GetAxisPos(4);
+        public double Axis6Pos => GetAxisPos(5);
+        public double Axis7Pos => GetAxisPos(6);
+
+        public double Axis1StrokeMax => Axis1StrokeMm;
+        public double Axis3StrokeMax => Axis3StrokeMm;
+        public double Axis5StrokeMax => Axis5StrokeMm;
+        public double Axis6StrokeMax => Axis6StrokeMm;
+
+        public double Axis1FromLeft => GetAxisFromLeft(0);
+        public double Axis3FromLeft => GetAxisFromLeft(2);
+        public double Axis5FromLeft => GetAxisFromLeft(4);
+        public double Axis6FromLeft => GetAxisFromLeft(5);
+
+        public double Axis1EffectiveTravel => GetEffectiveTravel(Axis1FromLeft, Axis1StrokeMm);
+        public double Axis3EffectiveTravel => GetEffectiveTravel(Axis3FromLeft, Axis3StrokeMm);
+        public double Axis5EffectiveTravel => GetEffectiveTravel(Axis5FromLeft, Axis5StrokeMm);
+        public double Axis6EffectiveTravel => GetEffectiveTravel(Axis6FromLeft, Axis6StrokeMm);
+
+        public string Axis1StrokeText => FormatLinearAxis("轴1", "导管推送", Axis1EffectiveTravel, Axis1FromLeft, Axis1StrokeMm);
+        public string Axis2RotationText => FormatRotationAxis("轴2", "导管旋转", Axis2Pos);
+        public string Axis3StrokeText => FormatLinearAxis("轴3", "递送", Axis3EffectiveTravel, Axis3FromLeft, Axis3StrokeMm);
+        public string Axis4RotationText => FormatRotationAxis("轴4", "点动旋转", Axis4Pos);
+        public string Axis5StrokeText => FormatLinearAxis("轴5", "镜像", Axis5EffectiveTravel, Axis5FromLeft, Axis5StrokeMm);
+        public string Axis6StrokeText => FormatLinearAxis("轴6", "导丝推送", Axis6EffectiveTravel, Axis6FromLeft, Axis6StrokeMm);
+        public string Axis7RotationText => FormatRotationAxis("轴7", "导丝旋转", Axis7Pos);
+
+        public bool Cyl1Open => (_state.cylinder_cmd?[0] ?? 0) > 200;
+        public bool Cyl2Open => (_state.cylinder_cmd?[1] ?? 0) < 200;
+        public bool Cyl3Open => (_state.cylinder_cmd?[2] ?? 0) > 200;
+        public bool Cyl4Open => (_state.cylinder_cmd?[3] ?? 0) < 200;
+		public bool CylinderManualAllowed => AdsHealthy && _state.cylinder_manual_allowed;
+		public bool Cyl1Manual => (_state.cylinder_manual_mask & 1) != 0;
+		public bool Cyl2Manual => (_state.cylinder_manual_mask & 2) != 0;
+		public bool Cyl3Manual => (_state.cylinder_manual_mask & 4) != 0;
+		public bool Cyl4Manual => (_state.cylinder_manual_mask & 8) != 0;
+
+		public bool IsCylinderManual(int index) =>
+			index >= 0 && index < 4 && (_state.cylinder_manual_mask & (1 << index)) != 0;
+
+        public string ModeText
+        {
+            get
+            {
+                if (SpacingRecoveryActive) return "屈曲恢复";
+                string mode = _state.guidewire_mode == 0 ? "导管" : "导丝";
+                bool rev = _state.guidewire_mode == 0 ? _state.axis1_reverse : _state.axis6_reverse;
+                return mode + (rev ? "撤出" : "递送");
+            }
+        }
+
+        public bool Axis1Reverse => _state.axis1_reverse;
+        public bool Axis6Reverse => _state.axis6_reverse;
+        public bool ModeCathFwdSelected => SpacingRecoveryInactive && _state.guidewire_mode == 0 && !_state.axis1_reverse;
+        public bool ModeCathRevSelected => SpacingRecoveryInactive && _state.guidewire_mode == 0 && _state.axis1_reverse;
+        public bool ModeGuideFwdSelected => SpacingRecoveryInactive && _state.guidewire_mode == 1 && !_state.axis6_reverse;
+        public bool ModeGuideRevSelected => SpacingRecoveryInactive && _state.guidewire_mode == 1 && _state.axis6_reverse;
+		public string PhysicalButtonNoticeText => _physicalButtonNoticeText;
+
+		private static string PhysicalButtonEventText(int eventCode)
+		{
+			switch (eventCode)
+			{
+				case 1: return "SN 587 B7：已选择导管递送";
+				case 2: return "SN 587 B7：已选择导管撤出";
+				case 3: return "SN 582 B7：已选择导丝递送";
+				case 4: return "SN 582 B7：已选择导丝撤出";
+				case 7: return "物理按钮冲突：两只手柄同时按下 B7，本次模式切换已忽略";
+				default: return "物理按钮触发";
+			}
+		}
+        public bool Axis6SoftLimitHold => _state.axis6_soft_limit_hold;
+        public string Axis6SoftLimitText => Axis6SoftLimitHold
+            ? "轴6软件限位：当前动作已阻断，松手或回到安全窗口后自动重新评估。"
+            : "轴6软件限位：正常（<= 670 mm）。";
+		public bool TrackingCompensationEnabled => _state.tracking_compensation_enabled;
+		public double Axis1TrackingError => _state.axis1_tracking_error_mm;
+		public double Axis6TrackingError => _state.axis6_tracking_error_mm;
+		public double Axis1CompensationGain => _state.axis1_compensation_gain;
+		public double Axis6CompensationGain => _state.axis6_compensation_gain;
+		public bool TrackingParametersEditable => !TrackingCompensationEnabled;
+		public bool TrackingCompensationCanEnable
+		{
+			get
+			{
+				bool forwardMode = (_state.guidewire_mode == 0 && !_state.axis1_reverse) ||
+					(_state.guidewire_mode == 1 && !_state.axis6_reverse);
+				return ControlActive && !EstopHold &&
+					!SpacingRecoveryActive && forwardMode &&
+					_state.axis1_phase == 0 && _state.axis6_phase == 0;
+			}
+		}
+		public bool TrackingCompensationToggleEnabled =>
+			TrackingCompensationEnabled || TrackingCompensationCanEnable;
+		public string TrackingStatusText
+		{
+			get
+			{
+				string compensation = TrackingCompensationEnabled ? "补偿已开启" : "补偿关闭";
+				return $"{compensation} · 轴1换手待补 {Axis1TrackingError:F3} mm / 增益 {Axis1CompensationGain:F3} · 轴6换手待补 {Axis6TrackingError:F3} mm / 增益 {Axis6CompensationGain:F3}";
+			}
+		}
+        public bool StartupWaiting => _state.startup_waiting;
+        public bool StartupCompleted => _state.startup_completed;
+
+        public string PhaseText
+        {
+            get
+            {
+                if (_state.spacing_recovery_phase == 1) return "夹爪准备中";
+                if (_state.spacing_recovery_phase == 2) return "手动恢复中";
+                if (_state.spacing_recovery_phase == 3) return "停止并同步";
+                if (_state.startup_completed) return "已就绪";
+                if (_state.startup_waiting) return "等待启动选择...";
+                return "待机中";
+            }
+        }
+
+        public bool ControlActive => _state.control_active;
+        public bool EstopHold => _state.estop_hold;
+        public bool FfEnabled => _state.ff_enabled;
+        public bool ForceFeedbackHoldEnabled => _state.force_feedback_hold_enabled;
+        public bool ForceFeedbackHoldActive => _state.force_feedback_hold_active;
+        public string ForceFeedbackHoldStatusText
+        {
+            get
+            {
+                if (!ForceFeedbackHoldEnabled) return "力反馈-保持：关闭（自动换手闭爪后保持 200 ms）";
+                if (!ForceFeedbackHoldActive) return "力反馈-保持：已启用";
+                switch (_state.force_feedback_hold_owner)
+                {
+                    case 1: return "力反馈-保持：导管保持中（200 ms）";
+                    case 2: return "力反馈-保持：导丝保持中（200 ms）";
+                    case 3: return "力反馈-保持：双侧保持中（200 ms）";
+                    default: return "力反馈-保持：保持中";
+                }
+            }
+        }
+        public bool CalZeroed => _state.cal_zeroed;
+        public double Force582F => _state.force_582_f;
+        public double Force582N => _state.force_582_n;
+        public double Force582TheoryF => _state.force_582_theory_f;
+        public double Force582TheoryN => _state.force_582_theory_n;
+        public bool GravityCompEnabled => _state.gravity_comp_enabled;
+        public VisState LatestState => _state;
+
+		public int RecordingState => _state.recording_state;
+		public bool CanStartExperimentRecording => IsConnected && (RecordingState == 0 || RecordingState == 4);
+		public bool CanStopExperimentRecording =>
+			IsConnected && RecordingState == 2 && !_stopExperimentCommandPending;
+		public bool ExperimentNameEditable => RecordingState == 0 || RecordingState == 4;
+		public bool CameraRecording => _state.camera_recording;
+		public bool CanOpenCameraPreview => IsConnected;
+		public bool ForceSampleValid => _state.force_sample_valid;
+		public bool CleanForceValid => _state.clean_force_valid;
+		public double RawFnVoltage => _state.fn_1_v;
+		public double RawFtVoltage => _state.ft_1_v;
+		public double CleanForceN => _state.clean_force_n;
+		public double CleanHandleTorqueNm => _state.clean_handle_torque_nm;
+
+		public string RecordingStateText
+		{
+			get
+			{
+				switch (RecordingState)
+				{
+					case 1: return "正在启动";
+					case 2: return _stopExperimentCommandPending ? "停止命令已发送，等待后端确认" : "记录中";
+					case 3: return "正在停止并封装";
+					case 4: return "启动失败";
+					default: return "空闲";
+				}
+			}
+		}
+
+		public string RecordingErrorText
+		{
+			get
+			{
+				if (!string.IsNullOrEmpty(_recordingCommandErrorText))
+					return _recordingCommandErrorText;
+				switch (_state.recording_error)
+				{
+					case 1: return "实验名称不是有效的 UTF-8 文本";
+					case 2: return "无法创建会话目录";
+					case 3: return "无法创建 force.csv";
+					case 4: return "无法创建 motion.csv";
+					case 5: return "force.csv 写入失败，记录已自动停止";
+					case 6: return "motion.csv 写入失败，记录已自动停止";
+					case 7: return "无法启动停止后台线程";
+					case 9: return "video_frames.csv 写入失败，统一记录已自动停止";
+					default: return "";
+				}
+			}
+		}
+
+		public string RecordingElapsedText => FormatElapsed(_state.recording_elapsed_us);
+		public string CameraRecordingElapsedText => FormatElapsed(_state.camera_recording_elapsed_us);
+
+		public string RecordingLossText
+		{
+			get
+			{
+				ulong dropped = _state.force_writer_dropped + _state.motion_writer_dropped;
+				ulong forceMissed = _state.force_schedule_missed;
+				ulong motionMissed = _state.motion_schedule_missed;
+				ulong missed = forceMissed + motionMissed;
+				return dropped == 0 && missed == 0
+					? "CSV 队列与采样调度正常"
+					: $"队列丢样 {dropped} · 调度错过：力 {forceMissed} / 位置 {motionMissed}";
+			}
+		}
+
+		public string CameraStatusText
+		{
+			get
+			{
+				switch (_state.camera_state)
+				{
+					case 1: return "正在打开摄像设备：OsmoAction4";
+					case 2: return "摄像设备预览中：OsmoAction4";
+					case 3: return "摄像设备录像中：OsmoAction4";
+					case 4: return "无法找到摄像设备：OsmoAction4";
+					case 5: return "摄像设备已断开：OsmoAction4";
+					case 6: return $"摄像设备错误：OsmoAction4（0x{unchecked((uint)_state.camera_error_code):X8}）";
+					default: return "摄像设备未打开：OsmoAction4";
+				}
+			}
+		}
+
+		public string CameraParameterText
+		{
+			get
+			{
+				if (_state.camera_width <= 0 || _state.camera_height <= 0)
+					return "等待实际视频参数";
+				double fps = _state.camera_fps_denominator > 0
+					? (double)_state.camera_fps_numerator / _state.camera_fps_denominator
+					: 0.0;
+				string input = _state.camera_input_format == 1 ? "H.264" :
+					(_state.camera_input_format == 2 ? "MJPEG" :
+					(_state.camera_input_format == 3 ? "RGB32" : "未知"));
+				return $"{_state.camera_width}×{_state.camera_height} · {fps:F1} fps · 输入 {input} · 输出 H.264 / 无音频";
+			}
+		}
+
+		private static string FormatElapsed(ulong elapsedUs)
+		{
+			TimeSpan value = TimeSpan.FromMilliseconds(elapsedUs / 1000.0);
+			return value.ToString(@"hh\:mm\:ss");
+		}
+
+		private static string FormatLatency(ulong elapsedUs)
+		{
+			if (elapsedUs == ulong.MaxValue)
+				return "--";
+			if (elapsedUs >= 1_000_000)
+				return $"{elapsedUs / 1_000_000.0:F2} s";
+			if (elapsedUs >= 1_000)
+				return $"{elapsedUs / 1_000.0:F1} ms";
+			return $"{elapsedUs} us";
+		}
+
+        public bool SpacingRecoveryActive => _state.spacing_recovery_phase != 0;
+        public bool SpacingRecoveryInactive => !SpacingRecoveryActive;
+        public string SpacingRecoveryStatusText
+        {
+            get
+            {
+                switch (_state.spacing_recovery_phase)
+                {
+                    case 1:
+                        return "夹爪准备中";
+                    case 2:
+                        return $"已恢复 {_state.spacing_recovery_moved_mm:F1} mm · 余量 {_state.spacing_recovery_remaining_mm:F1} mm";
+                    case 3:
+                        return "正在停止并同步";
+                    default:
+                        return $"轴1-轴3间距 {Axis3FromLeft - Axis1FromLeft:F1} mm";
+                }
+            }
+        }
+
+        private double GetAxisPos(int index)
+        {
+            if (_state.axis_pos_from_left != null && _state.axis_pos_from_left.Length > index)
+            {
+                return _state.axis_pos_from_left[index];
+            }
+
+            return (_state.axis_pos != null && _state.axis_pos.Length > index) ? _state.axis_pos[index] : 0.0;
+        }
+
+        private double GetAxisFromLeft(int index)
+        {
+            return (_state.axis_pos_from_left != null && _state.axis_pos_from_left.Length > index)
+                ? _state.axis_pos_from_left[index]
+                : 0.0;
+        }
+
+        private static double GetEffectiveTravel(double fromLeftMm, double fullStrokeMm)
+        {
+            return Clamp(fullStrokeMm - fromLeftMm, 0.0, fullStrokeMm);
+        }
+
+        private static double Clamp(double value, double min, double max)
+        {
+            if (value < min) return min;
+            if (value > max) return max;
+            return value;
+        }
+
+        private static string FormatLinearAxis(string axisName, string description, double effectiveTravel, double fromLeft, double fullStroke)
+        {
+            return $"{axisName} ({description}): 已行进 {effectiveTravel:F2}/{fullStroke:F0} mm，距左限位 {fromLeft:F2} mm";
+        }
+
+        private static string FormatRotationAxis(string axisName, string description, double angle)
+        {
+            return $"{axisName} ({description}): {angle:F2}°";
+        }
+
+		public bool SetCylinderManualPosition(int index, int position) =>
+			index >= 0 && index < 4 && position >= 0 && position <= 2000 &&
+			CylinderManualAllowed &&
+			_client.SendCommand(VisCommandType.SetCylinderManualPosition, index, position);
+
+		public bool ResetCylinderManual(int index) =>
+			index >= 0 && index < 4 &&
+			_client.SendCommand(VisCommandType.ResetCylinderManual, index);
+
+        public void SetMode(int guidewireMode, int reverse) =>
+            _client.SendCommand(VisCommandType.SetReverseMode, guidewireMode, reverse);
+
+        public void SetAxis1PostReturnLead(double leadMm) =>
+            _client.SendCommand(
+                VisCommandType.SetAxis1PostReturnLead,
+                (int)Math.Round(leadMm * 1000.0));
+
+        public void SetSpacingRecovery(bool enabled) =>
+            _client.SendCommand(VisCommandType.SetSpacingRecovery, enabled ? 1 : 0);
+
+        public void ZeroForceSensor() =>
+            _client.SendCommand(VisCommandType.ZeroForceSensor);
+
+        public void ToggleForceFeedback() =>
+            _client.SendCommand(VisCommandType.ToggleForceFeedback);
+
+        public void SetForceFeedbackHold(bool enabled) =>
+            _client.SendCommand(VisCommandType.SetForceFeedbackHold, enabled ? 1 : 0);
+
+        public void SetGravityCompensation(bool enabled) =>
+            _client.SendCommand(VisCommandType.SetGravityCompensation, enabled ? 1 : 0);
+
+		public void SetTrackingCompensation(bool enabled) =>
+			_client.SendCommand(VisCommandType.SetTrackingCompensation, enabled ? 1 : 0);
+
+		public void SetTrackingCompensationParam(int fieldId, double value) =>
+			_client.SendCommand(
+				VisCommandType.SetTrackingCompensationParam,
+				fieldId,
+				(int)Math.Round(value * 1000.0));
+
+		public void SendTrackingCompensationParams(
+			double axis1Kp, double axis1Ki, double axis1MaxGain, double axis1MaxError,
+			double axis6Kp, double axis6Ki, double axis6MaxGain, double axis6MaxError)
+		{
+			SetTrackingCompensationParam(0, axis1Kp);
+			SetTrackingCompensationParam(1, axis1Ki);
+			SetTrackingCompensationParam(2, axis1MaxGain);
+			SetTrackingCompensationParam(3, axis1MaxError);
+			SetTrackingCompensationParam(4, axis6Kp);
+			SetTrackingCompensationParam(5, axis6Ki);
+			SetTrackingCompensationParam(6, axis6MaxGain);
+			SetTrackingCompensationParam(7, axis6MaxError);
+		}
+
+        public void SelectDirectControl() =>
+            _client.SendCommand(VisCommandType.SelectDirectControl);
+
+        public void EmergencyRetractDevice() =>
+            _client.SendCommand(VisCommandType.EmergencyRetractDevice);
+
+        public void SendStartupParams(double a1, double a3, double a5, double a6, double a2deg, double a7deg, double speed)
+        {
+            _client.SendCommand(VisCommandType.SetStartupAxisPos, 1, (int)(a1 * 100));
+            _client.SendCommand(VisCommandType.SetStartupAxisPos, 3, (int)(a3 * 100));
+            _client.SendCommand(VisCommandType.SetStartupAxisPos, 5, (int)(a5 * 100));
+            _client.SendCommand(VisCommandType.SetStartupAxisPos, 6, (int)(a6 * 100));
+            _client.SendCommand(VisCommandType.SetStartupAxisDeg, 2, (int)(a2deg * 100));
+            _client.SendCommand(VisCommandType.SetStartupAxisDeg, 7, (int)(a7deg * 100));
+            _client.SendCommand(VisCommandType.SetStartupSpeed, (int)(speed * 100000));
+            _client.SendCommand(VisCommandType.ExecuteStartup);
+        }
+
+        // 自检已完成：直接在当前位置开始控制，不需要也不发送任何目标位置。
+        public bool StartDirectControl()
+        {
+            if (!CanStartControl) return false;
+            return _client.SendCommand(VisCommandType.SelectDirectControl);
+        }
+
+        public bool StartControl(double a1, double a3, double a5, double a6)
+        {
+            if (!CanStartControl) return false;
+            bool sent = _client.SendCommand(VisCommandType.SetSelfCheckAxisPos, 1, (int)Math.Round(a1 * 100)) &&
+                _client.SendCommand(VisCommandType.SetSelfCheckAxisPos, 3, (int)Math.Round(a3 * 100)) &&
+                _client.SendCommand(VisCommandType.SetSelfCheckAxisPos, 5, (int)Math.Round(a5 * 100)) &&
+                _client.SendCommand(VisCommandType.SetSelfCheckAxisPos, 6, (int)Math.Round(a6 * 100));
+            if (!sent) return false;
+            return _state.self_check_done
+                ? _client.SendCommand(VisCommandType.SelectDirectControl)
+                : _client.SendCommand(VisCommandType.StartSelfCheck);
+        }
+
+		public void StartExperimentRecording(string experimentName) =>
+			_client.SendCommand(
+				VisCommandType.StartExperimentRecording,
+				0,
+				0,
+				experimentName ?? string.Empty);
+
+		public bool StopExperimentRecording()
+		{
+			if (!CanStopExperimentRecording)
+				return false;
+
+			_recordingCommandErrorText = "";
+			if (!_client.SendCommand(VisCommandType.StopExperimentRecording))
+			{
+				ResetStopExperimentCommand();
+				_recordingCommandErrorText = "停止命令发送失败，请等待连接恢复后重试";
+				NotifyExperimentProperties();
+				return false;
+			}
+
+			_stopExperimentCommandPending = true;
+			_stopExperimentCommandAttempts = 1;
+			_nextStopExperimentRetryUtc = DateTime.UtcNow + StopExperimentRetryInterval;
+			NotifyExperimentProperties();
+			return true;
+		}
+
+		public void SetCameraPreview(bool enabled) =>
+			_client.SendCommand(VisCommandType.SetCameraPreview, enabled ? 1 : 0);
+
+		public void SetCleanForceMonitor(bool enabled) =>
+			_client.SendCommand(VisCommandType.SetCleanForceMonitor, enabled ? 1 : 0);
+
+		public void SetArmManualEnable(bool enabled) =>
+			_client.SendCommand(VisCommandType.SetArmManualEnable, enabled ? 1 : 0);
+		public bool SetArmCartesianJog(int mode, int speed) =>
+			_client.SendCommand(VisCommandType.SetArmCartesianJog, mode, speed);
+		public bool ReturnArmProgramZero() => _client.SendCommand(VisCommandType.ReturnArmProgramZero);
+		public void StopArmCartesian() => _client.SendCommand(VisCommandType.StopArmCartesian);
+		public void KeepArmCartesianAlive() => _client.SendCommand(VisCommandType.KeepArmCartesianAlive);
+		public bool SetArmCartesianParameter(int field, int value) =>
+			_client.SendCommand(VisCommandType.SetArmCartesianParameter, field, value);
+
+		public void SetArmAxisEnable(int axisNumber, bool enabled)
+		{
+			if (axisNumber < 1 || axisNumber > 5) return;
+			_client.SendCommand(VisCommandType.SetArmAxisEnable, axisNumber, enabled ? 1 : 0);
+		}
+
+		public void RequestArmAxisReset(int axisNumber)
+		{
+			if (axisNumber < 1 || axisNumber > 5) return;
+			_client.SendCommand(VisCommandType.RequestArmAxisReset, axisNumber);
+		}
+
+		public void SetArmAxisJog(int axisNumber, int direction)
+		{
+			if (axisNumber < 1 || axisNumber > 5 || direction < -1 || direction > 1) return;
+			_client.SendCommand(VisCommandType.SetArmAxisJog, axisNumber, direction);
+		}
+
+		public bool SetArmJogParameters(
+			int axisNumber, double velocity, double acceleration, double deceleration, double jerk)
+		{
+			if (axisNumber < 1 || axisNumber > 5) return false;
+			double[] values = { velocity, acceleration, deceleration, jerk };
+			bool success = true;
+			for (int parameter = 0; parameter < values.Length; ++parameter)
+			{
+				int fieldId = (axisNumber - 1) * 4 + parameter;
+				int fixedValue = (int)Math.Round(values[parameter] * 1000.0);
+				success &= _client.SendCommand(VisCommandType.SetArmJogParameter, fieldId, fixedValue);
+			}
+			return success;
+		}
+
+		public void SetAxis4ManualJog(int direction)
+		{
+			if (direction < -1 || direction > 1) return;
+			_client.SendCommand(VisCommandType.SetAxis4ManualJog, direction);
+		}
+
+		public void SetYValveOpen(bool open) =>
+			_client.SendCommand(VisCommandType.SetYValveOpen, open ? 1 : 0);
+
+		public void SetInjectorManualJog(int injectorNumber, int direction)
+		{
+			if (injectorNumber < 1 || injectorNumber > 2 || direction < -1 || direction > 1) return;
+			_client.SendCommand(VisCommandType.SetInjectorManualJog, injectorNumber, direction);
+		}
+
+		public void StopManualJogs()
+		{
+			StopArmCartesian();
+			SetAxis4ManualJog(0);
+			SetInjectorManualJog(1, 0);
+			SetInjectorManualJog(2, 0);
+			for (int axis = 1; axis <= 5; ++axis)
+				SetArmAxisJog(axis, 0);
+		}
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        private void OnPropertyChanged([CallerMemberName] string name = null) =>
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        public void Dispose()
+        {
+            _refreshTimer.Stop();
+			StopManualJogs();
+            _client.Dispose();
+        }
+    }
+}

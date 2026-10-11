@@ -155,8 +155,6 @@
                     <TextBlock Text="{Binding LinkName}" Style="{StaticResource CaptionText}" Margin="0,0,10,0"/>
                     <Button Content="{Binding ConnectButtonText}" Command="{Binding ConnectCommand}"
                             Style="{StaticResource PrimaryButton}" MinWidth="96" Margin="0,0,8,0"/>
-                    <Button Content="{Binding ControlButtonText}" Command="{Binding AcquireCommand}"
-                            IsEnabled="{Binding IsConnected}" MinWidth="96"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -221,7 +219,8 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="模式" Style="{StaticResource FieldLabelText}" Margin="0,0,10,0"/>
-                                <Border Grid.Column="1" Style="{StaticResource ModeChipDisplay}">
+                                <Border Grid.Column="1" Style="{StaticResource ModeChipDisplay}"
+                                        ToolTip="任一手柄B6按住为撤出，两只均松开为递送；换手期间的切换在完成后生效。">
                                     <TextBlock Text="{Binding ModeText}" HorizontalAlignment="Center" MinWidth="52"/>
                                 </Border>
                             </Grid>
@@ -313,10 +312,23 @@
                             </DockPanel>
                             <TextBlock Text="{Binding LastWarning}" Foreground="{StaticResource StatusRedBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
 
-                            <Border Background="{StaticResource SurfaceAltBrush}" CornerRadius="4" Padding="8,5" Margin="0,8,0,0">
-                                <TextBlock Text="七轴位置 / 行程（预留）" Foreground="{StaticResource TextMutedBrush}"
-                                           FontSize="11" HorizontalAlignment="Center"/>
-                            </Border>
+                            <Border Style="{StaticResource SectionDivider}"/>
+                            <Grid ToolTip="手柄控制下的实际净前进距离；撤出扣减，自动换手不计入。">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="100"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Column="1" Text="净前进距离" Style="{StaticResource CaptionText}" HorizontalAlignment="Right"/>
+                                <TextBlock Grid.Row="1" Text="轴 1" Style="{StaticResource FieldLabelText}" Margin="0,2"/>
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Axis1NetDistance}" Style="{StaticResource DataValueText}" HorizontalAlignment="Right"/>
+                                <TextBlock Grid.Row="2" Text="轴 6" Style="{StaticResource FieldLabelText}" Margin="0,2"/>
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Axis6NetDistance}" Style="{StaticResource DataValueText}" HorizontalAlignment="Right"/>
+                            </Grid>
                         </StackPanel>
                     </GroupBox>
 
@@ -363,14 +375,16 @@
                                         IsEnabled="{Binding CanStartControl}"
                                         Style="{StaticResource CompactButton}" Margin="0,6,0,0"/>
 
-                                <GroupBox Header="定位臂控制" Margin="0,8,0,0" Padding="6,4">
-                                    <StackPanel>
+                                <Border Style="{StaticResource SectionDivider}"/>
+                                <StackPanel>
                                         <Grid>
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                            <ToggleButton Content="总使能" Style="{StaticResource CompactToggle}" MinWidth="72"
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="定位臂控制" Style="{StaticResource FieldLabelText}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                            <ToggleButton Grid.Column="1" Content="总使能" Style="{StaticResource CompactToggle}" MinWidth="72"
                                                           IsEnabled="{Binding CanOperate}" Click="ArmManualEnable_Click"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding ArmFeedbackText}" Style="{StaticResource CaptionText}" Margin="8,0,0,0" TextWrapping="Wrap"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding ArmFeedbackText}" Style="{StaticResource CaptionText}" Margin="8,0,0,0" TextWrapping="Wrap"/>
                                         </Grid>
+                                        <StackPanel Visibility="Collapsed">
                                         <Grid Margin="0,6,0,0">
                                             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="58"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="54"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                                             <TextBlock Text="末端" Style="{StaticResource FieldLabelText}" VerticalAlignment="Center"/>
@@ -401,15 +415,15 @@
                                         </Grid>
                                         <TextBlock x:Name="ArmCartesianError" Style="{StaticResource ErrorText}" FontSize="10.5" TextWrapping="Wrap"/>
                                         <TextBlock Text="各轴：上电、复位、按住 Jog" Style="{StaticResource CaptionText}" FontSize="10.5" Margin="0,5,0,2"/>
-                                        <UniformGrid Columns="5">
-                                            <StackPanel Margin="0,0,3,0"><TextBlock Text="轴1" HorizontalAlignment="Center"/><ToggleButton Content="上电" Tag="1" Click="ArmAxisEnable_Click" IsEnabled="{Binding CanOperate}"/><Button Content="复位" Tag="1" Click="ArmAxisReset_Click" IsEnabled="{Binding CanOperate}"/><Button Content="−" Tag="1" CommandParameter="-1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/><Button Content="+" Tag="1" CommandParameter="1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/></StackPanel>
-                                            <StackPanel Margin="0,0,3,0"><TextBlock Text="轴2" HorizontalAlignment="Center"/><ToggleButton Content="上电" Tag="2" Click="ArmAxisEnable_Click" IsEnabled="{Binding CanOperate}"/><Button Content="复位" Tag="2" Click="ArmAxisReset_Click" IsEnabled="{Binding CanOperate}"/><Button Content="−" Tag="2" CommandParameter="-1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/><Button Content="+" Tag="2" CommandParameter="1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/></StackPanel>
-                                            <StackPanel Margin="0,0,3,0"><TextBlock Text="轴3" HorizontalAlignment="Center"/><ToggleButton Content="上电" Tag="3" Click="ArmAxisEnable_Click" IsEnabled="{Binding CanOperate}"/><Button Content="复位" Tag="3" Click="ArmAxisReset_Click" IsEnabled="{Binding CanOperate}"/><Button Content="−" Tag="3" CommandParameter="-1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/><Button Content="+" Tag="3" CommandParameter="1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/></StackPanel>
-                                            <StackPanel Margin="0,0,3,0"><TextBlock Text="轴4" HorizontalAlignment="Center"/><ToggleButton Content="上电" Tag="4" Click="ArmAxisEnable_Click" IsEnabled="{Binding CanOperate}"/><Button Content="复位" Tag="4" Click="ArmAxisReset_Click" IsEnabled="{Binding CanOperate}"/><Button Content="−" Tag="4" CommandParameter="-1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/><Button Content="+" Tag="4" CommandParameter="1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/></StackPanel>
-                                            <StackPanel><TextBlock Text="轴5" HorizontalAlignment="Center"/><ToggleButton Content="上电" Tag="5" Click="ArmAxisEnable_Click" IsEnabled="{Binding CanOperate}"/><Button Content="复位" Tag="5" Click="ArmAxisReset_Click" IsEnabled="{Binding CanOperate}"/><Button Content="−" Tag="5" CommandParameter="-1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/><Button Content="+" Tag="5" CommandParameter="1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/></StackPanel>
+                                        </StackPanel>
+                                        <UniformGrid Columns="5" Margin="0,6,0,0">
+                                            <StackPanel Margin="0,0,3,0"><TextBlock Text="轴1" HorizontalAlignment="Center"/><ToggleButton Style="{StaticResource CompactToggle}" Content="上电" Tag="1" Click="ArmAxisEnable_Click" IsEnabled="{Binding CanOperate}"/><Button Style="{StaticResource CompactButton}" Content="复位" Tag="1" Click="ArmAxisReset_Click" IsEnabled="{Binding CanOperate}"/><UniformGrid Columns="2"><Button Style="{StaticResource CompactHoldButton}" Content="−" Tag="1" CommandParameter="-1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/><Button Style="{StaticResource CompactHoldButton}" Content="+" Tag="1" CommandParameter="1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/></UniformGrid></StackPanel>
+                                            <StackPanel Margin="0,0,3,0"><TextBlock Text="轴2" HorizontalAlignment="Center"/><ToggleButton Style="{StaticResource CompactToggle}" Content="上电" Tag="2" Click="ArmAxisEnable_Click" IsEnabled="{Binding CanOperate}"/><Button Style="{StaticResource CompactButton}" Content="复位" Tag="2" Click="ArmAxisReset_Click" IsEnabled="{Binding CanOperate}"/><UniformGrid Columns="2"><Button Style="{StaticResource CompactHoldButton}" Content="−" Tag="2" CommandParameter="-1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/><Button Style="{StaticResource CompactHoldButton}" Content="+" Tag="2" CommandParameter="1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/></UniformGrid></StackPanel>
+                                            <StackPanel Margin="0,0,3,0"><TextBlock Text="轴3" HorizontalAlignment="Center"/><ToggleButton Style="{StaticResource CompactToggle}" Content="上电" Tag="3" Click="ArmAxisEnable_Click" IsEnabled="{Binding CanOperate}"/><Button Style="{StaticResource CompactButton}" Content="复位" Tag="3" Click="ArmAxisReset_Click" IsEnabled="{Binding CanOperate}"/><UniformGrid Columns="2"><Button Style="{StaticResource CompactHoldButton}" Content="−" Tag="3" CommandParameter="-1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/><Button Style="{StaticResource CompactHoldButton}" Content="+" Tag="3" CommandParameter="1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/></UniformGrid></StackPanel>
+                                            <StackPanel Margin="0,0,3,0"><TextBlock Text="轴4" HorizontalAlignment="Center"/><ToggleButton Style="{StaticResource CompactToggle}" Content="上电" Tag="4" Click="ArmAxisEnable_Click" IsEnabled="{Binding CanOperate}"/><Button Style="{StaticResource CompactButton}" Content="复位" Tag="4" Click="ArmAxisReset_Click" IsEnabled="{Binding CanOperate}"/><UniformGrid Columns="2"><Button Style="{StaticResource CompactHoldButton}" Content="−" Tag="4" CommandParameter="-1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/><Button Style="{StaticResource CompactHoldButton}" Content="+" Tag="4" CommandParameter="1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/></UniformGrid></StackPanel>
+                                            <StackPanel><TextBlock Text="轴5" HorizontalAlignment="Center"/><ToggleButton Style="{StaticResource CompactToggle}" Content="上电" Tag="5" Click="ArmAxisEnable_Click" IsEnabled="{Binding CanOperate}"/><Button Style="{StaticResource CompactButton}" Content="复位" Tag="5" Click="ArmAxisReset_Click" IsEnabled="{Binding CanOperate}"/><UniformGrid Columns="2"><Button Style="{StaticResource CompactHoldButton}" Content="−" Tag="5" CommandParameter="-1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/><Button Style="{StaticResource CompactHoldButton}" Content="+" Tag="5" CommandParameter="1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}"/></UniformGrid></StackPanel>
                                         </UniformGrid>
-                                    </StackPanel>
-                                </GroupBox>
+                                </StackPanel>
 
                                 <Border Style="{StaticResource SectionDivider}"/>
 

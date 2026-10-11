@@ -52,7 +52,7 @@ namespace MasterConsole.Protocol
         public static byte[] EncodeStatus(FrameHeader h, StatusFrame f, byte[] key)
         {
             h.Type = ProtocolConstants.TypeStatus;
-            return Seal(h, ProtocolConstants.StatusPayloadLen, w =>
+            return Seal(h, f.HasNetDistance ? ProtocolConstants.StatusDistancePayloadLen : ProtocolConstants.StatusPayloadLen, w =>
             {
                 w.Write(f.EchoTsMs);
                 w.Write(f.HoldMs);
@@ -77,6 +77,11 @@ namespace MasterConsole.Protocol
                 w.Write(f.AdsActualHz);
                 WriteFloats(w, f.AxisPos, 7);
                 WriteFloats(w, f.AxisFromLeft, 7);
+                if (f.HasNetDistance)
+                {
+                    w.Write(f.Axis1NetDistanceMm);
+                    w.Write(f.Axis6NetDistanceMm);
+                }
             }, key);
         }
 
@@ -95,7 +100,9 @@ namespace MasterConsole.Protocol
 
             int expectedLen = FrameLength(expectedType);
             if (expectedLen == 0) { error = FrameError.BadType; return false; }
-            if (buf == null || len != expectedLen) { error = FrameError.BadLength; return false; }
+            if (expectedType == ProtocolConstants.TypeStatus && len == ProtocolConstants.StatusDistanceFrameLen)
+                expectedLen = ProtocolConstants.StatusDistanceFrameLen;
+            if (buf == null || len > buf.Length || len != expectedLen) { error = FrameError.BadLength; return false; }
 
             using (var r = new BinaryReader(new MemoryStream(buf, 0, len, false)))
             {
@@ -181,6 +188,12 @@ namespace MasterConsole.Protocol
                 f.AdsActualHz = r.ReadSingle();
                 f.AxisPos = ReadFloats(r, 7);
                 f.AxisFromLeft = ReadFloats(r, 7);
+                f.HasNetDistance = p.Length == ProtocolConstants.StatusDistancePayloadLen;
+                if (f.HasNetDistance)
+                {
+                    f.Axis1NetDistanceMm = r.ReadDouble();
+                    f.Axis6NetDistanceMm = r.ReadDouble();
+                }
             }
             return true;
         }

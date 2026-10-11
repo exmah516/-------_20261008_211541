@@ -196,6 +196,7 @@
     <ClInclude Include="guidewire_mode.h" />
     <ClInclude Include="force_feedback.h" />
     <ClInclude Include="delivery_tracking.h" />
+    <ClInclude Include="handle_net_distance.h" />
     <ClInclude Include="arm_manual_ads_service.h" />
     <ClInclude Include="startup_sequence.h" />
     <ClInclude Include="ADS\Include\ADSComm1.h" />

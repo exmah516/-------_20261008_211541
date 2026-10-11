@@ -30,7 +30,17 @@ namespace motion_sync
 
 	double axis1_window_right_abs(const AppContext& ctx)
 	{
-		return from_left_to_abs(ctx, 0, ctx.cfg->axis1_window_right_from_left_mm);
+		const double right_mm = ctx.dual_reverse && *ctx.dual_reverse
+			? ctx.cfg->axis1_window_left_from_left_mm + ctx.cfg->dual_retraction_window_size_mm
+			: ctx.cfg->axis1_window_right_from_left_mm;
+		return from_left_to_abs(ctx, 0, right_mm);
+	}
+
+	double axis6_window_size_mm(const AppContext& ctx)
+	{
+		if (ctx.dual_reverse && *ctx.dual_reverse) return ctx.cfg->dual_retraction_window_size_mm;
+		return ctx.guidewire_mode && *ctx.guidewire_mode == GuidewireMode::Independent
+			? ctx.cfg->guidewire_axis6_window_size_mm : ctx.cfg->catheter_axis6_window_size_mm;
 	}
 
 	void calculate_axis6_window_from_axis5(
@@ -54,9 +64,7 @@ namespace motion_sync
 		const double gap_mm = guidewire_mode
 			? ctx.cfg->guidewire_axis6_window_min_gap_from_axis5_mm
 			: ctx.cfg->catheter_axis6_window_min_gap_from_axis5_mm;
-		const double size_mm = guidewire_mode
-			? ctx.cfg->guidewire_axis6_window_size_mm
-			: ctx.cfg->catheter_axis6_window_size_mm;
+		const double size_mm = axis6_window_size_mm(ctx);
 		window_start_abs = ctx.plc_leftlimit[5] + axis5_from_left_mm + gap_mm;
 		window_end_abs = window_start_abs + size_mm;
 	}

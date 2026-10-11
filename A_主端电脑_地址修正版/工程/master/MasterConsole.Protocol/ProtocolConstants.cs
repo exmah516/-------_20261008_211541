@@ -17,6 +17,8 @@ namespace MasterConsole.Protocol
         public const int ControlPayloadLen = 55;
         public const int HapticPayloadLen = 26;
         public const int StatusPayloadLen = 118;
+        public const int StatusDistancePayloadLen = StatusPayloadLen + 16;
+        public const int StatusDistanceFrameLen = HeaderLen + StatusDistancePayloadLen + MacLen; // 158
 
         public const int ControlFrameLen = HeaderLen + ControlPayloadLen + MacLen; // 79
         public const int HapticFrameLen = HeaderLen + HapticPayloadLen + MacLen;   // 50
@@ -47,5 +49,6 @@ namespace MasterConsole.Protocol
         StartupCompleted = 1u << 8,
         AdsHealthy = 1u << 9,
         FfZeroing = 1u << 10,
+        GlobalReverse = 1u << 11,
     }
 }

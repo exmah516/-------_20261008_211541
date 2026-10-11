@@ -75,7 +75,6 @@ namespace MasterConsole.ViewModels
             };
 
             ConnectCommand = new RelayCommand(ToggleConnect);
-            AcquireCommand = new RelayCommand(ToggleControl);
             PrepareCommand = new RelayCommand(Prepare);
             ForceFeedbackCommand = new RelayCommand(ToggleForceFeedback);
             CylinderCommand = new RelayCommand(p => ToggleCylinder(p));
@@ -100,7 +99,6 @@ namespace MasterConsole.ViewModels
         public ObservableCollection<LogItem> Log { get; } = new ObservableCollection<LogItem>();
 
         public ICommand ConnectCommand { get; }
-        public ICommand AcquireCommand { get; }
         public ICommand PrepareCommand { get; }
         public ICommand ForceFeedbackCommand { get; }
         public ICommand CylinderCommand { get; }
@@ -119,7 +117,6 @@ namespace MasterConsole.ViewModels
         public bool CanOperate => IsConnected && HasControl && StatusFresh;
 
         public string ConnectButtonText => _connecting ? "连接中…" : (IsConnected ? "断开" : "连接从端");
-        public string ControlButtonText => HasControl ? "释放控制权" : "申请控制权";
 
         private async void ToggleConnect()
         {
@@ -127,27 +124,34 @@ namespace MasterConsole.ViewModels
             if (IsConnected) { _link.Disconnect(); _hasStatus = false; RaiseConnectionProps(); return; }
             _connecting = true;
             RaiseConnectionProps();
-            try { await _link.ConnectAsync(); }
-            catch (Exception ex) { AddLog("error", "连接失败：" + ex.Message); }
+            try
+            {
+                await _link.ConnectAsync();
+                var result = await _link.AcquireControlAsync();
+                if (!result.Ok || !IsConnected || !HasControl)
+                {
+                    _link.Disconnect();
+                    AddLog("warn", "自动获取控制权失败：" + (result.Ok ? "连接已中断" : result.Reason) + "。请重新连接从端。");
+                }
+            }
+            catch (Exception ex)
+            {
+                _link.Disconnect();
+                AddLog("error", "连接失败：" + ex.Message);
+            }
             finally { _connecting = false; RaiseConnectionProps(); }
-        }
-
-        private async void ToggleControl()
-        {
-            if (!IsConnected) return;
-            var r = HasControl ? await _link.ReleaseControlAsync() : await _link.AcquireControlAsync();
-            if (!r.Ok) AddLog("warn", "控制权操作被拒绝：" + r.Reason);
-            RaiseConnectionProps();
         }
 
         private void RaiseConnectionProps()
         {
+            if (!IsConnected) _hasStatus = false;
+            foreach (var name in StatusPropertyNames) OnPropertyChanged(name);
             OnPropertyChanged(nameof(IsConnected));
             OnPropertyChanged(nameof(HasControl));
             OnPropertyChanged(nameof(CanOperate));
             OnPropertyChanged(nameof(CanStartControl));
+            OnPropertyChanged(nameof(CanRefreshHandles));
             OnPropertyChanged(nameof(ConnectButtonText));
-            OnPropertyChanged(nameof(ControlButtonText));
             OnPropertyChanged(nameof(StatusFresh));
             OnPropertyChanged(nameof(OperateHintText));
         }
@@ -157,7 +161,7 @@ namespace MasterConsole.ViewModels
             get
             {
                 if (!IsConnected) return "未连接从端：操作区已锁定。";
-                if (!HasControl) return "已连接，尚未持有控制权：请先点击“申请控制权”。";
+                if (!HasControl) return _connecting ? "正在自动获取控制权…" : "控制权已失效：请断开后重新连接从端。";
                 if (!StatusFresh) return "状态数据已过期：操作区已锁定。";
                 return "";
             }
@@ -174,10 +178,8 @@ namespace MasterConsole.ViewModels
         public bool YValveClosed => Has(StatusFlags.YValveClosed);
         public bool AdsHealthy => Has(StatusFlags.AdsHealthy);
 
-        /// <summary>模式只显示：0 导管 / 1 导丝（对应从端 guidewire_mode，当前仅作提示）。</summary>
-        public bool IsCatheterMode => _hasStatus && _s.Mode == 0;
-        public bool IsGuidewireMode => _hasStatus && _s.Mode == 1;
-        public string ModeText => !IsConnected ? "—" : (_stats.CatheterReversePressed ? "撤出" : "递送");
+        /// <summary>显示从端已生效的全局方向，换手期间保持当前方向。</summary>
+        public string ModeText => !IsConnected ? "—" : (Has(StatusFlags.GlobalReverse) ? "撤出" : "递送");
         public string PhaseText => !_hasStatus ? "未连接"
             : ControlActive ? "手柄控制中"
             : Has(StatusFlags.SelfCheckDone) ? "待开始控制"
@@ -191,6 +193,13 @@ namespace MasterConsole.ViewModels
         public string Force582N => FormatForce(_s.Force582N, "N·m");
         public string Force587F => FormatForce(_s.Force587F, "N");
         public string Force587N => FormatForce(_s.Force587N, "N·m");
+
+        public string Axis1NetDistance => FormatDistance(_s.Axis1NetDistanceMm);
+        public string Axis6NetDistance => FormatDistance(_s.Axis6NetDistanceMm);
+
+        private string FormatDistance(double mm)
+            => IsConnected && StatusFresh && _s.HasNetDistance && !double.IsNaN(mm) && !double.IsInfinity(mm)
+                ? mm.ToString("0.000", CultureInfo.InvariantCulture) + " mm" : "—";
 
         // 轴2(导管)和轴7(导丝)的角度指示器指针坐标计算
         public double Axis2PointerX => CalculatePointerX(_hasStatus ? _s.AxisPos[1] : 0.0);
@@ -417,6 +426,8 @@ namespace MasterConsole.ViewModels
             OnPropertyChanged(nameof(HandlesOnline));
             OnPropertyChanged(nameof(HandleText));
             OnPropertyChanged(nameof(ModeText));
+            OnPropertyChanged(nameof(Axis1NetDistance));
+            OnPropertyChanged(nameof(Axis6NetDistance));
             // 状态过期是由时间推移产生的，需要在这里重新评估。
             OnPropertyChanged(nameof(StatusFresh));
             OnPropertyChanged(nameof(CanOperate));
@@ -429,6 +440,7 @@ namespace MasterConsole.ViewModels
 
         private void OnStatus(StatusFrame f)
         {
+            if (!IsConnected) return;
             _s = f;
             _hasStatus = true;
             _lastStatusUtc = DateTime.UtcNow;
@@ -455,8 +467,9 @@ namespace MasterConsole.ViewModels
         private static readonly string[] StatusPropertyNames =
         {
             nameof(EstopHold), nameof(ControlActive), nameof(FfEnabled), nameof(FfZeroing), nameof(YValveClosed),
-            nameof(AdsHealthy), nameof(IsCatheterMode), nameof(IsGuidewireMode), nameof(ModeText), nameof(PhaseText), nameof(CanStartControl),
+            nameof(AdsHealthy), nameof(ModeText), nameof(PhaseText), nameof(CanStartControl),
             nameof(Force582F), nameof(Force582N), nameof(Force587F), nameof(Force587N),
+            nameof(Axis1NetDistance), nameof(Axis6NetDistance),
             nameof(Axis2PointerX), nameof(Axis2PointerY), nameof(Axis7PointerX), nameof(Axis7PointerY),
             nameof(PrepareStatusText), nameof(FfCaption), nameof(YValveCaption), nameof(Injector1Text), nameof(Injector2Text), nameof(Axis4Text),
             nameof(StatusFresh),

@@ -73,7 +73,7 @@ namespace MasterConsole.Protocol
             });
 
         public static string Auth(byte[] mac)
-            => Json.Serialize(new Dictionary<string, object> { ["t"] = "auth", ["mac"] = FrameAuth.ToHex(mac) });
+            => Json.Serialize(new Dictionary<string, object> { ["t"] = "auth", ["mac"] = FrameAuth.ToHex(mac), ["net_distance"] = true });
 
         public static string Acquire(int id) => Simple("acquire", id);
         public static string Release(int id) => Simple("release", id);
