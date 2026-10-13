@@ -30,15 +30,11 @@ namespace motion_sync
 
 	double axis1_window_right_abs(const AppContext& ctx)
 	{
-		const double right_mm = ctx.dual_reverse && *ctx.dual_reverse
-			? ctx.cfg->axis1_window_left_from_left_mm + ctx.cfg->dual_retraction_window_size_mm
-			: ctx.cfg->axis1_window_right_from_left_mm;
-		return from_left_to_abs(ctx, 0, right_mm);
+		return from_left_to_abs(ctx, 0, ctx.cfg->axis1_window_right_from_left_mm);
 	}
 
 	double axis6_window_size_mm(const AppContext& ctx)
 	{
-		if (ctx.dual_reverse && *ctx.dual_reverse) return ctx.cfg->dual_retraction_window_size_mm;
 		return ctx.guidewire_mode && *ctx.guidewire_mode == GuidewireMode::Independent
 			? ctx.cfg->guidewire_axis6_window_size_mm : ctx.cfg->catheter_axis6_window_size_mm;
 	}

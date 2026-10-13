@@ -95,27 +95,29 @@ struct ControlConfig
 	unsigned char btn_b6 = 0x40;
 	unsigned char btn_b7 = 0x80;
 
-	// 基于左限位参考的爬行窗口。
-	double axis1_window_left_from_left_mm = 8.0;
-	double axis1_window_right_from_left_mm = 34.0;
+	// 递送、撤出共用实际窗口边界，不再额外外扩。
+	double axis1_window_left_from_left_mm = 5.0;
+	double axis1_window_right_from_left_mm = 30.0;
 	// axis6 相对 axis5 的间距窗口 g = axis6_from_left - axis5_from_left，范围 [gmin, gmin+size]。
-	// 双手柄同时控制与单手柄导丝角色共用同一窗口（g_min = 0，axis5/6 机构允许接触）。
-	double catheter_axis6_window_size_mm = 26.0;
-	double catheter_axis6_window_min_gap_from_axis5_mm = 0.0;
-	double guidewire_axis6_window_size_mm = 26.0;
-	double guidewire_axis6_window_min_gap_from_axis5_mm = 0.0;
-	// 撤出时两条链路共用36 mm基础窗口，左侧参考保持不变。
-	double dual_retraction_window_size_mm = 36.0;
-	// 非触发端向外扩展的余量；g下端为接触位置，不外扩。
-	double relocation_inset_mm = 3.0;
-	// 一条链路触发换手时，另一条链路距其端点小于该值且未在远离，则并入同一事务。
-	double transaction_merge_eps_mm = 1.5;
+	// 双手柄与单手柄调试均使用 g = 1～33 mm。
+	double catheter_axis6_window_size_mm = 32.0;
+	double catheter_axis6_window_min_gap_from_axis5_mm = 1.0;
+	double guidewire_axis6_window_size_mm = 32.0;
+	double guidewire_axis6_window_min_gap_from_axis5_mm = 1.0;
+	// 主动换手使用固定间距目标。
+	double axis6_active_delivery_gap_mm = 28.0;
+	double axis6_active_retraction_gap_mm = 6.0;
+	// 被动目标距被动触发端为“轴1距主动端的剩余行程+3”，最多27 mm。
+	double axis6_passive_clearance_mm = 3.0;
+	double axis6_passive_distance_limit_mm = 27.0;
+	// 只允许轴1触发时合并距被动换手端不足此距离的轴6。
+	double transaction_merge_eps_mm = 5.0;
 	// 换手夹爪时序：持有者先夹 -> 等 T_clamp -> 移动者松 -> 等 T_release；回程对称。
 	DWORD axis_clamp_wait_ms = 100;
-	DWORD axis_release_wait_ms = 600;
-	// 启动最终姿态下的 axis6-axis5 间距（窗口中点附近，避免落在端点）。
+	DWORD axis_release_wait_ms = 200;
+	// 启动最终姿态下的 axis6-axis5 间距，独立于运行时换手目标。
 	double startup_g_mm = 13.0;
-	// 标准启动中间夹持阶段的轴5/6间距；与运行时20 mm窗口宽度相互独立。
+	// 标准启动中间夹持阶段的轴5/6间距，与运行时窗口相互独立。
 	double axis56_ready_gap_mm = 15.0;
 	double axis3_delivery_stop_from_left_mm = 20.0;
 	double axis3_delivery_release_hysteresis_mm = 2.0;
@@ -207,14 +209,14 @@ struct CylinderPreset
 	unsigned short cyl1_clamp = 5;
 	unsigned short cyl1_preclamp = 320;
 	unsigned short cyl2_open = 5;
-	unsigned short cyl2_clamp = 1800;
+	unsigned short cyl2_clamp = 1000;
 	unsigned short cyl2_preopen = 150;
 	unsigned short cyl2_preclamp = 400;
 	unsigned short cyl3_open = 450;
 	unsigned short cyl3_clamp = 50;
 	unsigned short cyl3_preclamp = 200;
 	unsigned short cyl4_open = 5;
-	unsigned short cyl4_clamp = 1800;
+	unsigned short cyl4_clamp = 1000;
 	unsigned short cyl4_preopen = 300;
 	unsigned short cyl4_preclamp = 300;
 	unsigned short cyl3_follow_release = 400;

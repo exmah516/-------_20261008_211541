@@ -2375,13 +2375,11 @@ int main(int argc, char* argv[])
 					const PlannedReturnLeg& leg = planned_return.legs[leg_index];
 					if (leg.axis_index == 0)
 					{
-						const double axis1_margin_mm =
-								planned_return.mode == PlannedReturnMode::Dual ? cfg.relocation_inset_mm : 0.0;
-							if (!is_within_range(
-								leg.target_abs,
-								axis1_crawl.min_abs() - axis1_margin_mm,
-								axis1_crawl.max_abs() + axis1_margin_mm,
-								cfg.crawl_arrive_tol_mm))
+						if (!is_within_range(
+							leg.target_abs,
+							axis1_crawl.min_abs(),
+							axis1_crawl.max_abs(),
+							cfg.crawl_arrive_tol_mm))
 						{
 							return false;
 						}
@@ -2401,15 +2399,11 @@ int main(int argc, char* argv[])
 								window_left_abs,
 								window_right_abs);
 						}
-						if (planned_return.mode == PlannedReturnMode::Dual)
-							{
-								window_right_abs += cfg.relocation_inset_mm;
-							}
-							if (!is_within_range(
-								leg.target_abs,
-								window_left_abs,
-								window_right_abs,
-								cfg.crawl_arrive_tol_mm))
+						if (!is_within_range(
+							leg.target_abs,
+							window_left_abs,
+							window_right_abs,
+							cfg.crawl_arrive_tol_mm))
 						{
 							return false;
 						}
@@ -3183,8 +3177,7 @@ int main(int argc, char* argv[])
 				const double axis56_gap_mm = axis6_from_left_mm - axis5_from_left_mm;
 				const double axis56_max_gap_mm =
 					cfg.catheter_axis6_window_min_gap_from_axis5_mm +
-					motion_sync::axis6_window_size_mm(ctx) +
-					(!single_handle_mode && !dual_reverse_active ? cfg.relocation_inset_mm : 0.0);
+					motion_sync::axis6_window_size_mm(ctx);
 				const bool prerequisites_ok =
 					startup.completed && startup.phase == StartupPhase::Done &&
 					control_active && !axis6_soft_limit_hold &&
@@ -3630,17 +3623,12 @@ int main(int argc, char* argv[])
 				const double tol = cfg.crawl_arrive_tol_mm;
 				const double gmin = cfg.catheter_axis6_window_min_gap_from_axis5_mm;
 				const double gmax = gmin + motion_sync::axis6_window_size_mm(ctx);
-				const double inset = cfg.relocation_inset_mm;
 				const double merge_eps = cfg.transaction_merge_eps_mm;
-				const double w1_left = axis1_crawl.min_abs();
-				const double w1_right = axis1_crawl.max_abs();
+				const double lo1 = axis1_crawl.min_abs();
+				const double hi1 = axis1_crawl.max_abs();
 				const bool reverse = axis1_reverse_pressed;
-				const bool axis6_reverse = reverse;
-				// 限位端相对窗口端点向外扩 inset（递送：远端限位外扩；撤出：近端限位外扩）。
-				const double lo1 = reverse ? (w1_left - inset) : w1_left;
-				const double hi1 = reverse ? w1_right : (w1_right + inset);
 				if (!axis1_crawl.window_active &&
-					is_within_range(axis1_abs, w1_left - inset, w1_right + inset, tol))
+					is_within_range(axis1_abs, lo1, hi1, tol))
 				{
 					capture_axis1_follow_baseline();
 					axis1_crawl.window_active = true;
@@ -3677,9 +3665,6 @@ int main(int argc, char* argv[])
 				const double cmd5_start = plc_init_pos[4] + axis5_base_rel +
 					(cmd1_start - plc_init_pos[0] - axis1_crawl.base_rel);
 				const double a5_left_cmd = cmd5_start - plc_leftlimit[4];
-				// g 的下端 gmin=0 为机构接触位置，不外扩；只有递送时的上限位外扩 inset。
-				const double g_wire_lo = gmin;
-				const double g_wire_hi = axis6_reverse ? gmax : (gmax + inset);
 				const double abs6_soft = plc_leftlimit[5] + cfg.axis6_soft_limit_from_left_mm;
 				const double g_start = (cmd6_start - plc_leftlimit[5]) - a5_left_cmd;
 				double d1 = inc1;
@@ -3691,8 +3676,8 @@ int main(int argc, char* argv[])
 				const double d6_before_gap = d6;
 				const double requested_gap_delta = d6 - d1;
 				// 已在窗外时只允许保持或回到窗内，不因缩窗自行跳变。
-				const double gap_delta_hi = (std::max)(g_wire_hi - g_start, 0.0);
-				const double gap_delta_lo = (std::min)(g_wire_lo - g_start, 0.0);
+				const double gap_delta_hi = (std::max)(gmax - g_start, 0.0);
+				const double gap_delta_lo = (std::min)(gmin - g_start, 0.0);
 				if (requested_gap_delta > gap_delta_hi)
 				{
 					const double closing = (std::max)(d6, 0.0) + (std::max)(-d1, 0.0);
@@ -3728,45 +3713,34 @@ int main(int argc, char* argv[])
 				// 按截断前的净间距变化识别触边；已经离开端点的输入不能再次换手。
 				const bool g_toward_hi = requested_gap_delta > 1e-9;
 				const bool g_toward_lo = requested_gap_delta < -1e-9;
-				const bool wire_hit_hi = (g_now >= g_wire_hi - tol) && axis6_reverse && d6_before_gap > 0.0 && g_toward_hi;
-				const bool wire_hit_lo = (g_now <= gmin + tol) && !axis6_reverse && d6_before_gap < 0.0 && g_toward_lo;
-				const bool cath_hit_hi = (g_now >= g_wire_hi - tol) && !reverse && d1_before_gap < 0.0 && g_toward_hi;
+				const bool wire_hit_hi = (g_now >= gmax - tol) && reverse && d6_before_gap > 0.0 && g_toward_hi;
+				const bool wire_hit_lo = (g_now <= gmin + tol) && !reverse && d6_before_gap < 0.0 && g_toward_lo;
+				const bool cath_hit_hi = (g_now >= gmax - tol) && !reverse && d1_before_gap < 0.0 && g_toward_hi;
 				const bool cath_hit_lo = (g_now <= gmin + tol) && reverse && d1_before_gap > 0.0 && g_toward_lo;
-				const bool hit_g_hi = wire_hit_hi || cath_hit_hi;
-				const bool hit_g_lo = !hit_g_hi && (wire_hit_lo || cath_hit_lo);
 				const bool trig_1_left = axis1_window_ok && !reverse &&
-					(cmd1 <= w1_left + tol) && inc1 < 0.0;
+					(cmd1 <= lo1 + tol) && inc1 < 0.0;
 				const bool trig_1_right = axis1_window_ok && reverse &&
-					(cmd1 >= w1_right - tol) && inc1 > 0.0;
-				bool do_g_hi = hit_g_hi;
-				bool do_g_lo = hit_g_lo;
-				bool do_1_left = trig_1_left;
-				bool do_1_right = trig_1_right;
-				// 合并换手：另一条链路距其触发端小于 merge_eps 且没有在远离，则并入同一事务。
-				if ((hit_g_hi || hit_g_lo) && !(trig_1_left || trig_1_right) && axis1_window_ok)
-				{
-					if (!reverse && cmd1 <= w1_left + merge_eps && inc1 <= 0.0) do_1_left = true;
-					else if (reverse && cmd1 >= w1_right - merge_eps && inc1 >= 0.0) do_1_right = true;
-				}
-				else if (!(hit_g_hi || hit_g_lo) && (trig_1_left || trig_1_right))
-				{
-					if (axis6_reverse && g_now >= g_wire_hi - merge_eps && !g_toward_lo) do_g_hi = true;
-					else if (!axis6_reverse && g_now <= gmin + merge_eps && !g_toward_hi) do_g_lo = true;
-				}
-
-				const bool want_axis1_leg = do_1_left || do_1_right;
-				const bool want_axis6_leg = do_g_hi || do_g_lo;
+					(cmd1 >= hi1 - tol) && inc1 > 0.0;
+				const bool want_axis1_leg = trig_1_left || trig_1_right;
+				// 仅轴1可合并临近被动端的轴6；主动换手必须由导丝自身触发。
+				const bool merge_axis6 = want_axis1_leg &&
+					(reverse ? g_now < gmin + merge_eps - 1e-9 : g_now > gmax - merge_eps + 1e-9);
+				const bool wire_caused_g = wire_hit_hi || wire_hit_lo;
+				const bool want_axis6_leg = wire_caused_g || cath_hit_hi || cath_hit_lo || merge_axis6;
 				if ((want_axis1_leg || want_axis6_leg) && !planned_return.active())
 				{
 					// 换手时axis3/5保持，g目标以axis5当前实际位置计算。
-					const double axis1_target_abs = do_1_left ? hi1 : lo1;
+					const double axis1_target_abs = trig_1_left ? hi1 : lo1;
 					const double axis5_left_now = axis5_abs - plc_leftlimit[4];
-					// 导丝自身触发 → 重定位到限位端（递送：gmax+inset；撤出：gmin）。
-					// 导管推动 g 触边 → 重定位到窗口中点，避免换手后立刻再次触边。
-					const bool wire_caused_g = axis6_reverse ? wire_hit_hi : wire_hit_lo;
+					// 同时换手按轴1换手后的位置预留行程，否则使用本次快照的实际位置。
+					const double axis1_after_return_abs = want_axis1_leg ? axis1_target_abs : axis1_abs;
+					const double axis1_remaining_mm = (std::max)(0.0,
+						reverse ? hi1 - axis1_after_return_abs : axis1_after_return_abs - lo1);
+					const double passive_distance_mm = (std::min)(cfg.axis6_passive_distance_limit_mm,
+						cfg.axis6_passive_clearance_mm + axis1_remaining_mm);
 					const double g_target = wire_caused_g
-						? (axis6_reverse ? gmin : (gmax + inset))
-						: (0.5 * (gmin + gmax));
+						? (reverse ? cfg.axis6_active_retraction_gap_mm : cfg.axis6_active_delivery_gap_mm)
+						: (reverse ? gmin + passive_distance_mm : gmax - passive_distance_mm);
 					double axis6_target_abs = plc_leftlimit[5] + axis5_left_now + g_target;
 					axis6_target_abs = (std::min)(axis6_target_abs, abs6_soft); // 越限只夹取，不停机
 					const bool use_axis6_leg = want_axis6_leg &&

@@ -24,6 +24,7 @@ parts = {
     'motion': between(source, '\t\t\t\tconst double tol = cfg.crawl_arrive_tol_mm;',
                       '\n\t\t\t}\n\t\t\telse\n\t\t\t{\n\t\t\t\t// 常规导管模式：'),
     'windows': between(sync, '\tdouble from_left_to_abs', '\tvoid lock_axis6_window_from_current'),
+    'target_safety': between(source, '\t\t\tauto planned_return_targets_safe =', '\t\t\tauto rebase_planned_return ='),
     'recovery_type': between(header, 'enum class SpacingRecoveryPhase', '// 启动准备是在'),
     'mode': between(source, '\tbool vis_reverse_override_active =', '\n\tauto request_mode_selection'),
     'direction': between(source, '\t\t// 换手/屈曲恢复期间冻结方向', '\t\tconst bool startup_sequence_active'),

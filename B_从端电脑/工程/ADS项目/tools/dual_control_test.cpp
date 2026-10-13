@@ -9,7 +9,7 @@
 using DWORD = unsigned long;
 using ULONGLONG = unsigned long long;
 enum class GuidewireMode { None, Independent };
-enum class PlannedReturnMode { Dual };
+enum class PlannedReturnMode { Dual, CatheterDelivery, CatheterRetraction };
 enum class PlannedReturnRebaseScope { Both };
 struct Config {
 #include "config.inc"
@@ -48,10 +48,8 @@ static void require(bool ok, const char* name) {
 }
 static bool close(double a, double b) { return std::abs(a-b)<1e-7; }
 static Outcome tick(Plant p, double raw1, double raw6, bool reverse_input=false,
-                    int axis4=0, double width1=26, double width6=26, bool window_active=true) {
+                    int axis4=0, bool window_active=true) {
     Config cfg;
-    cfg.axis1_window_right_from_left_mm=cfg.axis1_window_left_from_left_mm+width1;
-    cfg.catheter_axis6_window_size_mm=width6;
     auto gate=[&](double d) { return std::abs(d)>=cfg.linear_increment_noise_deadband_mm ? d : 0.0; };
     const double axis1_linear_increment_mm=gate(raw1), axis6_linear_increment_mm=gate(raw6);
     const bool axis1_reverse_pressed=reverse_input;
@@ -100,72 +98,183 @@ static void test_windows() {
     GuidewireMode mode=GuidewireMode::None;
     double left[7]={100,0,0,0,300,500,0}, init[7]={}, actual[7]={};
     AppContext ctx{&cfg,&reverse,&mode,left,init,actual};
-    require(close(motion_sync::axis1_window_left_abs(ctx),108),"axis1 left reference");
-    require(close(motion_sync::axis1_window_right_abs(ctx),134),"axis1 delivery width 26");
+    require(close(motion_sync::axis1_window_left_abs(ctx),105),"axis1 left reference 5");
+    require(close(motion_sync::axis1_window_right_abs(ctx),130),"axis1 delivery right 30");
     double lo=0,hi=0;
     motion_sync::calculate_axis6_window_from_axis5_abs(ctx,915,lo,hi);
-    require(close(lo,1115) && close(hi-lo,26),"wire delivery reference and width");
+    require(close(lo,1116) && close(hi,1148),"wire delivery gap 1 to 33 with distinct left references");
     reverse=true;
-    require(close(motion_sync::axis1_window_left_abs(ctx),108) &&
-            close(motion_sync::axis1_window_right_abs(ctx),144),"axis1 retraction width 36, same left");
+    require(close(motion_sync::axis1_window_left_abs(ctx),105) &&
+            close(motion_sync::axis1_window_right_abs(ctx),130),"axis1 retraction uses same 5 to 30 window");
     motion_sync::calculate_axis6_window_from_axis5_abs(ctx,915,lo,hi);
-    require(close(lo,1115) && close(hi-lo,36),"wire retraction width 36, same left");
+    require(close(lo,1116) && close(hi,1148),"wire retraction uses same 1 to 33 gap");
     ctx.dual_reverse=nullptr;
-    require(close(motion_sync::axis6_window_size_mm(ctx),26),"single-handle helper compatibility");
+    require(close(motion_sync::axis6_window_size_mm(ctx),32),"single-handle helper compatibility");
+    mode=GuidewireMode::Independent;
+    motion_sync::calculate_axis6_window_from_axis5_abs(ctx,915,lo,hi);
+    require(close(lo,1116) && close(hi,1148),"legacy wire helper uses same gap bounds");
+}
+
+static void test_passive_targets() {
+    // 显式列出不同剩余行程的预期目标，覆盖3 mm余量和27 mm封顶。
+    for (auto example : {std::array<double,2>{6,29}, {10,25}, {18,17},
+                         {28,7}, {29,6}, {30,6}, {40,6}}) {
+        auto r=tick({example[0],615,648},-0.1,0);
+        require(r.leg6 && !r.leg1 && close(r.target6-615,example[1]),
+                "delivery passive target follows axis1 remaining travel with 27mm cap");
+    }
+    for (auto example : {std::array<double,2>{5,28}, {6,28}, {7,27},
+                         {18,16}, {25,9}, {29,5}}) {
+        auto r=tick({example[0],615,616},0.1,0,true);
+        require(r.leg6 && !r.leg1 && close(r.target6-615,example[1]),
+                "retraction passive target follows axis1 remaining travel with 27mm cap");
+    }
+    auto r=tick({18,615,616},0,-0.1);
+    require(r.leg6 && !r.leg1 && close(r.target6-615,28),"active delivery returns to g28");
+    r=tick({18,615,648},0,0.1,true);
+    require(r.leg6 && !r.leg1 && close(r.target6-615,6),"active retraction returns to g6");
+    for (bool reverse : {false,true}) {
+        const double end1=reverse?30:5, active_end=reverse?33:1;
+        const double sign=reverse?1:-1;
+        r=tick({end1,615,615+active_end},0,sign*0.1,reverse);
+        require(r.leg6 && !r.leg1 && close(r.target6-615,reverse?6:28),
+                "wire active handoff does not pull in axis1 at its endpoint");
+        r=tick(r.after,sign*0.1,0,reverse);
+        require(r.leg1 && !r.leg6,"axis1 handoff after wire active return cannot immediately re-merge wire");
+        r=tick({end1,615,615+(reverse?1.0:33.0)},sign*0.1,0,reverse);
+        require(r.leg1 && r.leg6 && close(r.target6-615,reverse?28:6),
+                "passive merge uses 25mm of axis1 post-return travel and caps clearance at 27");
+    }
+}
+
+static void test_one_way_merge() {
+    auto r=tick({5,615,620},-0.1,0);
+    require(r.leg1 && !r.leg6,"delivery at g5 must not merge wire near its active end");
+    r=tick({5.1,615,643.1},-3,-0.2);
+    require(r.leg1 && !r.leg6,"moving delivery inputs reaching exactly g28 do not merge");
+    r=tick({29.9,615,620.9},3,0.2,true);
+    require(r.leg1 && !r.leg6,"moving retraction inputs reaching exactly g6 do not merge");
+    // 使用实际配置构造旧版也能触发的场景，防止只验证参数改动。
+    Config cfg;
+    const double lo=cfg.axis1_window_left_from_left_mm;
+    const double gmin=cfg.catheter_axis6_window_min_gap_from_axis5_mm;
+    r=tick({lo+1,615,615+gmin+0.2},0,-0.1);
+    require(r.leg6 && !r.leg1,"wire-only handoff never pulls in nearby stationary axis1");
+
+    for (bool reverse : {false,true}) {
+        const double end1=reverse?30:5;
+        const double passive_end=reverse?1:33, active_end=reverse?33:1;
+        const double sign=reverse?1:-1;
+        for (double distance : {0.,0.1,3.,4.99,5.,5.01}) {
+            const double gap=passive_end+sign*distance;
+            r=tick({end1,615,615+gap},sign*0.1,0,reverse);
+            require(r.leg1 && r.leg6==(distance<5),"axis1 merges wire only within strict 5mm of passive end");
+            if (r.leg6) require(close(r.target6-615,reverse?28:6),"merged wire uses passive target 6 or 28");
+        }
+        // 静止、趋近和远离的导丝输入均不改变已授权的距离判据。
+        for (double d6 : {-0.1,0.,0.1}) {
+            r=tick({end1,615,615+passive_end+sign*2},sign*0.1,d6,reverse);
+            require(r.leg1 && r.leg6 && close(r.target6-615,reverse?28:6),
+                    "axis1 merges nearby passive wire regardless of wire input");
+        }
+        for (double distance : {0.,0.1,2.,4.99,5.,10.,20.}) {
+            r=tick({end1,615,615+active_end-sign*distance},sign*0.1,0,reverse);
+            require(r.leg1 && !r.leg6,"axis1 cannot preempt wire active handoff at any non-passive location");
+        }
+        for (double axis1 : {4.,5.,5.2,6.,18.,29.,29.8,30.,31.}) {
+            r=tick({axis1,615,615+active_end},0,sign*0.1,reverse);
+            require(r.leg6 && !r.leg1,"wire handoff leaves stationary axis1 at any location");
+        }
+        r=tick({end1,615,615+active_end},sign*0.1,sign*0.2,reverse);
+        require(r.leg1 && r.leg6 && close(r.target6-615,reverse?6:28),
+                "independent active wire trigger keeps active target during axis1 handoff");
+        r=tick({18,615,615+passive_end+sign*2},sign*0.1,0,reverse);
+        require(!r.transaction,"near-passive-end alone cannot trigger an early handoff");
+    }
+}
+
+static void test_target_safety() {
+    Config cfg;
+    bool reverse=false;
+    GuidewireMode mode=GuidewireMode::None;
+    double left[7]={100,0,0,0,300,500,0}, init[7]={}, actual[7]={};
+    AppContext ctx{&cfg,&reverse,&mode,left,init,actual};
+    const double axis5_abs=400;
+    Crawl axis1_crawl{0,105,130}, axis6_crawl{0,601,633};
+    struct PlannedReturnLeg { int axis_index; double target_abs; };
+    struct { int leg_count=2; PlannedReturnLeg legs[2]={{0,105},{5,606}};
+             PlannedReturnMode mode=PlannedReturnMode::Dual; } planned_return;
+    auto is_within_range=[](double x,double lo,double hi,double tol) { return x>=lo-tol && x<=hi+tol; };
+    auto axis6_target_exceeds_soft_limit=[&](double x) { return x>left[5]+cfg.axis6_soft_limit_from_left_mm; };
+#include "target_safety.inc"
+    for (bool rev : {false,true}) {
+        reverse=rev;
+        for (double a1 : {105.,130.})
+        for (double a6 : {601.,604.,606.,616.,617.,628.,630.,633.}) {
+            planned_return.legs[0].target_abs=a1;
+            planned_return.legs[1].target_abs=a6;
+            require(planned_return_targets_safe(),"handoff endpoints and passive target accepted in both modes");
+        }
+        planned_return.legs[1].target_abs=606;
+        for (double a1 : {102.,133.}) {
+            planned_return.legs[0].target_abs=a1;
+            require(!planned_return_targets_safe(),"axis1 target cannot use former 3mm extension");
+        }
+        planned_return.legs[0].target_abs=105;
+        for (double a6 : {600.,636.,1200.}) {
+            planned_return.legs[1].target_abs=a6;
+            require(!planned_return_targets_safe(),"wire target cannot use extension or exceed absolute soft limit");
+        }
+    }
 }
 
 static void test_examples() {
-    auto r=tick({18,615,615},-1,-1);
-    require(!r.transaction && close(r.after.a1,17) && close(r.after.a6,614),"equal push at near boundary");
-    r=tick({18,615,644},-0.1,-0.1);
-    require(!r.transaction && close(r.after.a6-r.after.a5,29),"equal push at far boundary does not yield");
-    r=tick({18,615,644},-0.05,-0.1);
-    require(!r.transaction && close(r.after.a6-r.after.a5,28.95),"wire faster after return must not reverse handoff");
-    r=tick({18,615,644},-0.1,0);
-    require(r.leg6 && !r.leg1 && close(r.after.a6-r.after.a5,13),"passive far relocation keeps midpoint");
-    r=tick({18,615,615},1,0);
-    require(!r.transaction && close(r.after.a1,18) && close(r.after.a6,615),"passive near blocks only catheter pull");
-    r=tick({18,615,615},-1,0);
-    require(!r.transaction && close(r.after.a1,17) && close(r.after.a6,615),"passive near permits renewed catheter push");
-    r=tick({8.2,615,628},-0.1,0);
-    require(r.leg1 && !r.leg6 && close(r.target1,37),"delivery axis1 handoff target preserves 3mm margin");
-    r=tick({18,615,615.2},0,-0.1);
-    require(!r.leg1 && r.leg6 && close(r.target6-615,29),"active wire delivery handoff");
+    auto r=tick({18,615,616},-1,-1);
+    require(!r.transaction && close(r.after.a1,17) && close(r.after.a6,615),"equal push at near boundary");
+    r=tick({18,615,648},-0.1,-0.1);
+    require(!r.transaction && close(r.after.a6-r.after.a5,33),"equal push at far boundary does not yield");
+    r=tick({18,615,648},-0.05,-0.1);
+    require(!r.transaction && close(r.after.a6-r.after.a5,32.95),"wire faster after return must not reverse handoff");
+    r=tick({18,615,648},-0.1,0);
+    require(r.leg6 && !r.leg1 && close(r.after.a6-r.after.a5,17),"delivery passive target at axis1=18 is g17");
+    r=tick({18,615,616},1,0);
+    require(!r.transaction && close(r.after.a1,18) && close(r.after.a6,616),"passive near blocks only catheter pull");
+    r=tick({18,615,616},-1,0);
+    require(!r.transaction && close(r.after.a1,17) && close(r.after.a6,616),"passive near permits renewed catheter push");
+    r=tick({5.2,615,628},-0.1,0);
+    require(r.leg1 && !r.leg6 && close(r.target1,30),"delivery axis1 handoff uses endpoint without extension");
+    r=tick({18,615,616.2},0,-0.1);
+    require(!r.leg1 && r.leg6 && close(r.target6-615,28),"active wire delivery handoff");
     r=tick(r.after,-0.05,-0.1);
     require(!r.transaction,"active wire handoff cannot immediately become opposite passive handoff");
-    r=tick({8.2,615,616.4},-0.1,-0.2);
-    require(r.leg1 && r.leg6,"merge uses actual gap approach direction");
-    r=tick({8.2,615,616.4},-0.2,-0.1);
-    require(r.leg1 && !r.leg6,"do not merge wire while moving away from near end");
-    r=tick({8,615,644},-0.1,0.1);
-    require(r.leg1 && !r.leg6,"blocked catheter at near end cannot cause passive wire far relocation");
-    r=tick({44,615,615},0.1,-0.1,true);
-    require(r.leg1 && !r.leg6,"blocked catheter at far end cannot cause passive wire near relocation");
-    r=tick({18,615,644},0,0,false,1);
-    require(!r.transaction && close(r.after.a6,644),"axis4 jog cannot override global direction");
-    r=tick({18,615,644},1,1);
-    require(!r.transaction && close(r.after.a6-r.after.a5,29),"equal pull at delivery far boundary");
-    r=tick({44,615,640},1,0,true);
-    require(r.leg1 && close(r.target1,5),"retraction axis1 target 5, trigger 44");
-    r=tick({18,615,651},0,1,true);
-    require(r.leg6 && close(r.target6-615,0),"retraction wire trigger 36");
-    r=tick({18,615,615},1,0,true);
-    require(r.leg6 && close(r.target6-615,18),"retraction passive near midpoint 18");
-    r=tick({18,615,651},0.1,0.05,true);
-    require(!r.transaction && close(r.after.a6-r.after.a5,35.95),"retraction gap decreasing must not hit far");
-    r=tick({18,615,615},0.1,0.1,true);
-    require(!r.transaction && close(r.after.a6-r.after.a5,0),"equal pull at retraction near end");
+    r=tick({5,615,648},-0.1,0.1);
+    require(r.leg1 && r.leg6 && close(r.target6-615,6),"axis1 at delivery endpoint merges far passive wire");
+    r=tick({30,615,616},0.1,-0.1,true);
+    require(r.leg1 && r.leg6 && close(r.target6-615,28),"axis1 at retraction endpoint merges near passive wire");
+    r=tick({18,615,648},0,0,false,1);
+    require(!r.transaction && close(r.after.a6,648),"axis4 jog cannot override global direction");
+    r=tick({18,615,648},1,1);
+    require(!r.transaction && close(r.after.a6-r.after.a5,33),"equal pull at delivery far boundary");
+    r=tick({30,615,640},1,0,true);
+    require(r.leg1 && close(r.target1,5),"retraction axis1 target 5, trigger 30");
+    r=tick({18,615,648},0,1,true);
+    require(r.leg6 && close(r.target6-615,6),"retraction wire trigger 33 and target 6");
+    r=tick({18,615,616},1,0,true);
+    require(r.leg6 && close(r.target6-615,16),"retraction passive target at axis1=18 is g16");
+    r=tick({18,615,648},0.1,0.05,true);
+    require(!r.transaction && close(r.after.a6-r.after.a5,32.95),"retraction gap decreasing must not hit far");
+    r=tick({18,615,616},0.1,0.1,true);
+    require(!r.transaction && close(r.after.a6-r.after.a5,1),"equal pull at retraction near end");
     r=tick({40,615,650},0,0);
     require(!r.transaction && close(r.after.a1,40) && close(r.after.a6,650),"shrinking windows cannot cause movement");
     r=tick({40,615,650},-1,-2);
     require(!r.transaction && close(r.after.a1,39) && close(r.after.a6-r.after.a5,34),"out-of-window input can return toward bounds");
-    r=tick({40,615,650},1,0,false,0,26,26,false);
+    r=tick({40,615,650},1,0,false,0,false);
     require(!r.transaction && close(r.after.a1,40),"reconnect outside smaller window cannot move further outside");
     for (bool reverse : {false,true}) {
-        const double hi=reverse?36:29;
-        r=tick({18,615,615+hi},0,0,reverse);
+        r=tick({18,615,648},0,0,reverse);
         require(!r.transaction,"stationary far boundary never hands off");
-        r=tick({18,615,615},0,0,reverse);
+        r=tick({18,615,616},0,0,reverse);
         require(!r.transaction,"stationary near boundary never hands off");
     }
 }
@@ -212,9 +321,9 @@ static void test_direction_and_recovery() {
     }
     sample(0,0);
     planned_return.running=true;
-    require(!sample(0x40,0) && close(axis1_crawl.end_abs-axis1_crawl.start_abs,26),"handoff freezes delivery direction and window");
+    require(!sample(0x40,0) && close(axis1_crawl.end_abs-axis1_crawl.start_abs,25),"handoff freezes delivery direction and window");
     planned_return.running=false;
-    require(sample(0x40,0) && close(axis1_crawl.end_abs-axis1_crawl.start_abs,36),"pending B6 applies after handoff");
+    require(sample(0x40,0) && close(axis1_crawl.end_abs-axis1_crawl.start_abs,25),"pending B6 applies after handoff without changing window");
     planned_return.running=true;
     require(sample(0,0),"release during retraction handoff is deferred");
     planned_return.running=false;
@@ -244,9 +353,9 @@ static void test_direction_and_recovery() {
 static void test_constraints() {
     int n=0;
     for (bool rev : {false,true})
-    for (double a1 : {5.,8.,8.1,10.,18.,34.,37.,44.,46.})
+    for (double a1 : {4.,5.,5.1,7.9,18.,29.9,30.,31.,40.})
     for (double a5 : {615.,650.})
-    for (double gap : {-2.,0.,0.1,1.4,13.,28.9,29.,35.9,36.,40.})
+    for (double gap : {0.,0.9,1.,1.1,5.,5.9,6.,6.1,18.,27.9,28.,28.1,32.9,33.,36.})
     for (double d1 : {-3.,-0.2,0.,0.2,3.})
     for (double d6 : {-3.,-0.2,0.,0.2,3.}) {
         Plant p{a1,a5,a5+gap};
@@ -256,12 +365,15 @@ static void test_constraints() {
         require(x>=std::min(0.,d1)-1e-7 && x<=std::max(0.,d1)+1e-7,"catheter input cannot be amplified or reversed");
         require(y>=std::min(0.,d6)-1e-7 && y<=std::max(0.,d6)+1e-7,"wire input cannot be amplified or reversed");
         require(close(r.follow.a5-p.a5,x),"axis5 mirrors accepted catheter displacement");
-        require(g>=std::min(0.,gap)-1e-7 && g<=std::max(rev?36.:29.,gap)+1e-7,"joint gap bound and outside recovery");
-        require(r.follow.a1>=std::min(rev?5.:8.,a1)-1e-7 && r.follow.a1<=std::max(rev?44.:37.,a1)+1e-7,"axis1 bounds");
+        require(g>=std::min(1.,gap)-1e-7 && g<=std::max(33.,gap)+1e-7,"joint gap bound and outside recovery");
+        require(r.follow.a1>=std::min(5.,a1)-1e-7 && r.follow.a1<=std::max(30.,a1)+1e-7,"axis1 bounds without extensions");
         require(r.follow.a6<=std::max(p.a6,670.)+1e-7,"absolute axis6 soft limit");
         if (r.leg1) require(rev?r.target1<p.a1:r.target1>p.a1,"axis1 handoff cannot oppose global mode");
         if (r.leg6 && !rev && r.target6<p.a6-1e-7)
-            require(d1<0 && gap>=27.5,"delivery far-to-near is only passive catheter relief");
+            require((d1<0 && g>28.) || close(r.target6,670.),"delivery far-to-near is passive relief or absolute soft limit");
+        if (r.leg6 && rev && r.target6>p.a6+1e-7)
+            require(d1>0 && g<6.,"retraction near-to-far is only passive catheter relief");
+        if (d1==0) require(!r.leg1,"stationary catheter cannot be pulled into wire handoff");
         if (r.leg6) require(r.target6<=670.0+1e-7,"handoff target soft limit");
         ++n;
     }
@@ -292,25 +404,28 @@ static void test_trajectories() {
     std::ofstream csv("trajectories.csv");
     csv<<"mode,width,cat_input,wire_input,handoffs,cat_actual,wire_actual\n";
     for (bool rev : {false,true})
-    for (double width : {20.,26.})
     for (auto inputs : {std::array<double,2>{0.1,0}, {0,0.1}, {0.1,0.1}, {0.1,0.2}, {0.2,0.1}}) {
         Plant p{28,100,113};
         int count=0;
         double total1=0,total6=0;
         double sign=rev?1.:-1.;
         for (int i=0;i<1000;++i) {
-            auto r=tick(p,sign*inputs[0],sign*inputs[1],rev,0,width,26);
+            auto r=tick(p,sign*inputs[0],sign*inputs[1],rev);
             if (r.transaction) ++count;
             else { total1+=r.after.a1-p.a1; total6+=r.after.a6-p.a6; }
             p=r.after;
         }
         require(count<100,"trajectory cannot oscillate into repeated handoffs");
+        if (inputs[1]==0) require(count<15,"catheter-only travel cannot repeatedly hand off after short passive resets");
         require((inputs[0]==0 || sign*total1>70) && (inputs[1]==0 || sign*total6>70),"requested trajectories make progress");
-        csv<<(rev?"retraction":"delivery")<<','<<width<<','<<inputs[0]<<','<<inputs[1]<<','<<count<<','<<total1<<','<<total6<<'\n';
+        csv<<(rev?"retraction":"delivery")<<",25,"<<inputs[0]<<','<<inputs[1]<<','<<count<<','<<total1<<','<<total6<<'\n';
     }
 }
 int main() {
+    test_passive_targets();
+    test_one_way_merge();
     test_windows();
+    test_target_safety();
     test_examples();
     test_direction_and_recovery();
     test_direction_filter();
