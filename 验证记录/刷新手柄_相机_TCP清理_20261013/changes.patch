@@ -1,0 +1,2501 @@
+--- before/A_主端电脑_地址修正版/工程/docs/guides/实验记录与相机说明.md
++++ after/A_主端电脑_地址修正版/工程/docs/guides/实验记录与相机说明.md
+@@ -1,300 +1,304 @@
+-# 实验记录与 Action 4 相机说明
+-
+-更新时间：2026-08-03
+-适用模块：`ads_communication.*`、`experiment_recorder.*`、`async_csv_writer.h`、`action4_camera.*`、`main.cpp`、`AdsControlUI`
+-
+-## 1. 功能边界
+-
+-统一实验记录由 WPF 的“开始实验记录”和“停止实验记录”唯一控制。一次会话可同时包含：
+-
+-```text
+-force.csv
+-motion.csv
+-video.mp4                 # 相机成功时
+-video_frames.csv          # 相机成功时
+-force_transition_001.csv  # 会话中启动力过渡实验时
+-session.json
+-```
+-
+-开始记录不要求控制激活、力反馈开启、PI 开启、已经调零或相机在线。硬性条件只有：
+-
+-1. WPF 已连接 C++ 命名管道；
+-2. C++ 能创建会话目录；
+-3. `force.csv` 和 `motion.csv` 能打开并写入表头。
+-
+-记录开始/停止不改变机器人控制、力反馈开关、主从位移 PI、运动模式或力过渡状态机。停止统一记录时，正在运行的力过渡实验继续，只关闭其专用 CSV。
+-
+-## 2. 操作步骤
+-
+-1. 启动 `ADS.exe`，再启动 `AdsControlUI.exe`，确认界面已连接。
+-2. 在主界面“实验记录”区输入实验名称；可留空。
+-3. 需要检查视野时先打开“相机预览”，预览不要求先开始记录。
+-4. 点击“开始实验记录”。界面进入“记录中”即表示两个主 CSV 已创建；相机状态单独显示。
+-5. 实验结束点击“停止实验记录”。等待“正在停止并封装”回到“空闲”后，再关闭程序或移动文件。
+-
+-`Starting/Recording/Stopping` 期间重复开始/停止请求会被 UI 禁用或被 C++ 忽略。
+-
+-## 3. 会话目录与名称
+-
+-目录固定创建在 C++ 当前工作目录下：
+-
+-```text
+-records\YYYYMMDD\HHMMSS_实验名称[_001]\
+-```
+-
+-名称规则：
+-
+-- WPF 以 UTF-8 发送，C++ 转为 UTF-16 并使用宽字符 Windows API；
+-- 保留中文；控制字符和 `< > : " / \ | ? *` 替换为 `_`；
+-- 去掉首尾空白、末尾空白和末尾点号；
+-- 空名称使用 `session`；
+-- `CON/PRN/AUX/NUL/COM1..9/LPT1..9` 及带扩展名形式前置 `_`；
+-- 最多保留 64 个 UTF-16 code unit，不在高代理项中间截断；
+-- 同一秒同名目录已存在时依次使用 `_001`、`_002`，不覆盖旧数据。
+-
+-WPF 输入框使用外置标签和原生 `TextBox`，`MaxLength=64`。记录期间锁定编辑；中文 IME、退格、Delete、选择替换和撤销由 WPF 原生文本编辑处理。
+-
+-## 4. 统一时间轴
+-
+-`SessionClock` 在会话开始时记录：
+-
+-- `QueryPerformanceCounter` anchor；
+-- QPC frequency；
+-- 对应的 UTC FILETIME 起点。
+-
+-每行只写 `elapsed_us`，UTC 起止时间和 QPC 参数写入 `session.json`。这样避免每个控制拍做 UTC 转换。
+-
+-100 Hz ADS 通信线程在整次快速 Sum Read 调用前后各取一次 QPC，使用中点作为该统一快照的采样时刻。TCP DAQ 使用采集 worker 收到完整帧时的 QPC。视频使用 Source Reader 回调时 QPC，并保留设备源时间戳。
+-
+-力和位置记录由同一组主机侧 ADS 快照序号驱动：
+-
+-- ADS 快速快照：100 Hz，QPC 绝对截止时间约每 10 ms 一次；
+-- `force.csv`：每个 ADS 尝试序号最多写一行，目标 100 Hz；
+-- `motion.csv`：取偶数 `attempt_sequence`，目标 50 Hz、约 20 ms；
+-- 主循环一次排空自上拍以来的主机侧快照队列，不伪造历史数据；队列溢出、序号空洞、会话开始前帧和重复帧均单独计数。
+-
+-快照序号是 C++ `AdsFastSnapshot::attempt_sequence`，不是 PLC `write_sequence`。PLC 不为记录器维护环形缓冲；主机侧仅用 2048 帧队列跨越控制主循环与 CSV 入队节奏。30 fps 视频帧间隔约 33.3 ms，因此只能保证帧时间戳映射，不能把真实曝光事件描述为小于 10 ms 的曝光时间分辨率。
+-
+-## 5. force.csv
+-
+-固定表头：
+-
+-```text
+-sample_index,elapsed_us,sample_valid,calibrated_valid,
+-fn_1_raw_v,ft_1_raw_v,fn_1_zero_v,ft_1_zero_v,
+-clean_force_n,clean_handle_torque_nm,
+-fn_2_raw_v,ft_2_raw_v,fn_2_zero_v,ft_2_zero_v,
+-clean_force_2_n,clean_handle_torque_2_nm
+-```
+-
+-纯净值严格定义为：
+-
+-```text
+-clean_force_n = 0.701461986 * (fn_raw_v - fn_zero_v)
+-clean_handle_torque_nm = 0.620117055 * (ft_raw_v - ft_zero_v) * 3.0 * 0.001
+-clean_force_2_n = 1.139996290 * (fn_2_raw_v - fn_2_zero_v)
+-clean_handle_torque_2_nm = 0.130548347 * (ft_2_raw_v - ft_2_zero_v) * 3.0 * 0.001
+-```
+-
+-四式分别使用 FN1、FT1、FN2、FT2 的 `F_direct` 斜率。CSV 保留两组传感器的原始 V 和装机零点 V；固定截距已在 `F(raw)-F(raw_zero)` 中抵消。
+-
+-纯净值不经过重力补偿、串扰矩阵、`k_feedback`、死区、限幅、轴向符号、模式门控、快退锁存、PI 或力过渡处理。
+-
+-有效性语义：
+-
+-| 情况 | `sample_valid` | `calibrated_valid` | 原始电压 | 零点/纯净值 |
+-|---|---:|---:|---|---|
+-| 采样成功且已调零 | 1 | 1 | 数值 | 数值 |
+-| 采样成功但未调零 | 1 | 0 | 数值 | `NaN` |
+-| ADS/TCP 采样失败或过旧 | 0 | 0 | `NaN` | `NaN` |
+-
+-ADS 为力源时，`force.csv` 直接消费每个 100 Hz 快速快照，不再从更高频/更低频的“最新值”二次截取。失败快照仍保留该时刻，写成 `sample_valid=0` 和 `NaN`；恢复后的新快照不会回填故障空洞。TCP_DAQ 为显式力源时，行时刻仍由 ADS 快照槽确定，仅当最近 TCP 帧与该时刻足够接近才标记有效。仅使用 TCP 回退源、只有 PI 开启且没有统一会话时，力健康消费节流为约 20 Hz 且不产生文件；ADS 快速 Sum Read 本身仍维持 100 Hz。
+-
+-## 6. motion.csv
+-
+-固定表头：
+-
+-```text
+-sample_index,elapsed_us,position_valid,
+-axis1_from_left_mm..axis7_from_left_mm,
+-axis1_handle_valid,
+-axis1_handle_linear_raw,axis1_handle_linear_filtered,
+-axis1_handle_rotation_raw,axis1_handle_rotation_filtered,
+-axis6_handle_valid,
+-axis6_handle_linear_raw,axis6_handle_linear_filtered,
+-axis6_handle_rotation_raw,axis6_handle_rotation_filtered
+-```
+-
+-7 轴位置来自同一份 PLC 快照：
+-
+-```text
+-axisN_from_left_mm = Act_pos[N] + init_pos[N] - leftlimit[N]
+-```
+-
+-7 轴位置直接来自偶数序号的 100 Hz 统一快照，不额外补做 ADS 读取。读取失败时 `position_valid=0` 且 7 轴为 `NaN`。两只逻辑手柄按 QPC 选取距离该位置快照最近、相差不超过 10 ms 的输入；没有足够接近的手柄样本时对应 `handle_valid=0`，其四个值为 `NaN`。
+-
+-单手柄模式下两个逻辑角色可映射到同一个已就绪物理输入；实际序列号和 `single_handle_mode` 写在 `session.json`。
+-
+-## 7. 力过渡专用表
+-
+-力过渡状态机与磁盘解耦：
+-
+-- 没有统一会话时可正常运行，不创建文件；
+-- 只有在“开始力过渡实验”的瞬间统一会话已经处于 Recording，才创建 `force_transition_001.csv`；
+-- 会话在力过渡中途才开始时不补建残缺表；
+-- 统一会话在力过渡中途停止时专用表关闭，状态机继续；
+-- 同一会话后续实验使用 `_002`、`_003`。
+-
+-表头：
+-
+-```text
+-elapsed_us,valid,trial_id,velocity_level,repeat_in_level,
+-phase_code,phase_elapsed_ms,v_ratio,axis1_from_left_mm,
+-clean_force_n,clean_handle_torque_nm
+-```
+-
+-`valid=0` 时位置或纯净力不可用，相应测量值写 `NaN`。相位编号见 [力过渡实验使用说明.md](力过渡实验使用说明.md)。
+-
+-## 8. 异步写盘与故障
+-
+-`AsyncCsvWriter<Row>` 是单生产者/单消费者环形队列。控制线程只复制一行并移动原子 head；后台线程负责文件写入、每 64 行 flush、停止排空和错误检测。
+-
+-行为约定：
+-
+-- 队列满时丢当前行并累计 dropped；
+-- `force.csv`、`motion.csv`、力过渡专用表或 `video_frames.csv` 发生致命写盘错误时，统一会话自动进入 Stopping；
+-- 自动停止会尽力封装已有 MP4，并写最终 `session.json`；
+-- 自动停止不关闭 PI、力反馈或机器人运动控制；
+-- 程序正常退出复用 `stop_and_wait("program_exit")`，等待 CSV 排空和 MP4 Finalize。
+-
+-两个主 CSV 在开始阶段任一失败时，本次启动回滚，不留下空会话目录。相机打开、编码或设备错误不影响两个主 CSV，会话继续。
+-
+-ADS 单拍失败、软保持和自动重连不会自动停止统一会话。记录器继续按快照尝试序号写入无效行，并在 `session.json` 记录失败、重连和序号空洞。PLC 重启/应用重载会让运动控制进入更严格的人工恢复锁定，但记录会话仍保持开启，便于保留故障前后证据；现场可根据实验规程手动停止会话。
+-
+-## 9. Action 4 探测与录像
+-
+-### 9.1 设备定位
+-
+-Media Foundation 枚举视频采集设备，优先匹配 symbolic link 中的：
+-
+-```text
+-VID_2CA3&PID_0023
+-```
+-
+-找不到 VID/PID 时按 friendly name `OsmoAction4` 备用匹配。找不到设备时状态为 `Missing`，UI 显示：
+-
+-```text
+-无法找到摄像设备：OsmoAction4
+-```
+-
+-会话仍记录两个主 CSV，不创建空 MP4。
+-
+-### 9.2 格式选择
+-
+-候选顺序：
+-
+-1. 1920x1080@30 H.264；
+-2. 1920x1080@30 MJPEG；
+-3. 1280x720@30 H.264/MJPEG/可解码格式。
+-
+-H.264 候选必须带 `MF_MT_MPEG_SEQUENCE_HEADER`，并在最多 60 个输入样本内出现首个 clean point；失败后尝试下一候选。MJPEG/720p 候选也会预读首个有效样本，预读样本保留为正式首帧。
+-
+-当前输出固定为：
+-
+-```text
+-MP4 / H.264 / 无音频 / 20 Mbps / 实际输入分辨率与 30 fps
+-```
+-
+-相机本体的防抖、视场和其他成像设置由相机端负责。程序通过 UVC/Media Foundation 录制，不调用 DJI 移动端控制 API，也不能把相机本体的“2.7K 4:3”菜单设置强制写入 UVC 流。
+-
+-### 9.3 当前 H.264 管线限制
+-
+-代码会优先选择并验证相机原生 H.264 候选，但当前 Source Reader 随后统一解码为 RGB32，再由 Sink Writer 编码成 H.264。也就是说，**目前不是压缩码流直接复用**。
+-
+-这保证了同一采集流可同时用于 1280x720 BGRA 预览和 MP4，但会增加相机 worker 的 CPU/GPU 编解码负担。`video_frames.csv` 的 `keyframe` 是输入样本 clean-point 标志，在转码路径下不等同于最终 MP4 编码器的精确关键帧位置。若后续必须实现原生 H.264 直通，需要增加独立 H.264 解码支路供预览，并在 Action 4 实机上验证 SPS/PPS、时间戳和 MP4 sink input type。
+-
+-## 10. video_frames.csv
+-
+-表头：
+-
+-```text
+-frame_index,source_timestamp_100ns,callback_elapsed_us,keyframe,discontinuity
+-```
+-
+-- `source_timestamp_100ns`：Media Foundation 源时间戳；
+-- `callback_elapsed_us`：读取该帧时映射到统一会话 QPC 的时间；
+-- `keyframe`：输入样本 clean-point 标志；
+-- `discontinuity`：输入 discontinuity 或 stream tick；
+-- 相邻源时间戳超过 1.5 帧时累计 `dropped_frames`；
+-- 旁车队列丢行和 writer 错误另写入 `session.json`。
+-
+-写 MP4 前将源时间戳减去首帧时间，保证文件从 0 开始。每个输入样本设置 30 fps 帧时长。
+-
+-## 11. 相机状态与拔线行为
+-
+-状态枚举：
+-
+-```text
+-Closed / Opening / Previewing / Recording / Missing / Disconnected / Error
+-```
+-
+-录像中拔线：
+-
+-1. 停止接收新帧；
+-2. 尽力 Finalize 已写 MP4 和关闭旁车；
+-3. 状态保持 `Disconnected`，两个主 CSV 继续；
+-4. 当前会话不自动重连，不创建第二视频段；
+-5. 下一会话或重新打开预览才重新探测。
+-
+-正常停止会等待编码器启动中的竞态完成，再等待 MP4 Finalize，避免 UI 已回到 Idle 但后台仍在写上一个会话文件。
+-
+-## 12. 预览
+-
+-预览可独立打开。C++ 将采集帧缩放为 1280x720 BGRA32，写入版本化双缓冲共享内存并触发命名事件；WPF 复核写前/写后 sequence，避免撕裂。
+-
+-预览支持窗口最大化、1x 到 8x 鼠标滚轮缩放、左键拖拽和平移、一键适应居中。变换不修改录制原图。
+-
+-关闭预览窗口：
+-
+-- 未录像：释放相机采集；
+-- 正在录像：停止发布预览帧，录像继续。
+-
+-共享内存布局和名称见 [可视化界面架构说明.md](可视化界面架构说明.md)。
+-
+-## 13. session.json
+-
+-最终元数据包含：
+-
+-- 原始/清洗后实验名称；
+-- UTC 起止时间、QPC anchor/frequency；
+-- 力/位置目标采样率（100/50 Hz）；
+-- axis1/axis6 逻辑手柄序列号和单手柄模式；
+-- 两个主 writer、力过渡 writer 的 dropped 和调度 missed；
+-- ADS 连接终态、实际频率、快照数据龄、RTT、失败/连续失败、重连、PLC 重启和主机快照队列丢帧；
+-- force/motion/力过渡各自的首末主机快照序号、接受数、无效数、会话前拒绝、重复拒绝和序号空洞；
+-- 停止原因；
+-- 相机终态、原生输入格式、输出 H.264/无音频、实际宽高帧率；
+-- 视频帧数、源时间戳丢帧数、旁车丢行、旁车错误和 HRESULT。
+-
+-记录启动时先写一份 `utc_end=null` 的元数据；停止封装完成后覆盖为最终版本。
+-
+-## 14. 已完成验证与实机待验
+-
+-2026-07-29 已完成（统一会话/相机基础版）：
+-
+-- C++ 与 WPF x64 Debug/Release 构建；
+-- 协议 C++ `static_assert` 和 C# wire size 校验；
+-- 无相机合成会话：中文/非法字符、空名称、保留名、`_001`；
+-- `force.csv` 16 列、`motion.csv` 20 列和 `NaN` 语义；
+-- 旧版节拍冒烟曾验证 CSV 时间戳单调；其行数和间隔不作为当前 100/50 Hz 快照版的验收依据；
+-- 相机缺失时 `session.json` 保持 `Missing`，不生成空视频。
+-
+-当前版本仍需完成：
+-
+-1. 在真实 PLC 上核对 `force.csv` 约 100 Hz、`motion.csv` 约 50 Hz，QPC 单调且没有会话前帧或重复序号混入；
+-2. 人工制造单拍失败、超过 100 ms 断线重连和 PLC 重启，核对 CSV 空洞及 `session.json.ads` 计数；
+-3. 1080p/30 预览和实际输入格式回退；
+-4. MP4 可解码、无音频、分辨率/帧率/时长；
+-5. 预览缩放、平移、关闭预览后录像继续；
+-6. 录像中拔线后的 MP4 Finalize 和 `Disconnected`；
+-7. 15 分钟 CPU、内存、CSV 队列和视频帧压力测试。
++# 实验记录与 Action 4 相机说明
++> 当前版本（2026-10-13）：DJI Action 4 录像/预览及 TCP 传感器采集已从活动构建中移除；力数据统一来自 ADS/PLC，主端已移除“刷新手柄”按钮及功能。旧相机源码与协议预留字段仅作兼容归档。
++>
++> 当前统一会话只生成 `force.csv`、`motion.csv`、`session.json`，不生成 `video.mp4` 或 `video_frames.csv`；海康监控转发仍保留。以下相机/TCP章节是历史资料。
++
++
++更新时间：2026-08-03
++适用模块：`ads_communication.*`、`experiment_recorder.*`、`async_csv_writer.h`、`action4_camera.*`、`main.cpp`、`AdsControlUI`
++
++## 1. 功能边界
++
++统一实验记录由 WPF 的“开始实验记录”和“停止实验记录”唯一控制。一次会话可同时包含：
++
++```text
++force.csv
++motion.csv
++video.mp4                 # 相机成功时
++video_frames.csv          # 相机成功时
++force_transition_001.csv  # 会话中启动力过渡实验时
++session.json
++```
++
++开始记录不要求控制激活、力反馈开启、PI 开启、已经调零或相机在线。硬性条件只有：
++
++1. WPF 已连接 C++ 命名管道；
++2. C++ 能创建会话目录；
++3. `force.csv` 和 `motion.csv` 能打开并写入表头。
++
++记录开始/停止不改变机器人控制、力反馈开关、主从位移 PI、运动模式或力过渡状态机。停止统一记录时，正在运行的力过渡实验继续，只关闭其专用 CSV。
++
++## 2. 操作步骤
++
++1. 启动 `ADS.exe`，再启动 `AdsControlUI.exe`，确认界面已连接。
++2. 在主界面“实验记录”区输入实验名称；可留空。
++3. 需要检查视野时先打开“相机预览”，预览不要求先开始记录。
++4. 点击“开始实验记录”。界面进入“记录中”即表示两个主 CSV 已创建；相机状态单独显示。
++5. 实验结束点击“停止实验记录”。等待“正在停止并封装”回到“空闲”后，再关闭程序或移动文件。
++
++`Starting/Recording/Stopping` 期间重复开始/停止请求会被 UI 禁用或被 C++ 忽略。
++
++## 3. 会话目录与名称
++
++目录固定创建在 C++ 当前工作目录下：
++
++```text
++records\YYYYMMDD\HHMMSS_实验名称[_001]\
++```
++
++名称规则：
++
++- WPF 以 UTF-8 发送，C++ 转为 UTF-16 并使用宽字符 Windows API；
++- 保留中文；控制字符和 `< > : " / \ | ? *` 替换为 `_`；
++- 去掉首尾空白、末尾空白和末尾点号；
++- 空名称使用 `session`；
++- `CON/PRN/AUX/NUL/COM1..9/LPT1..9` 及带扩展名形式前置 `_`；
++- 最多保留 64 个 UTF-16 code unit，不在高代理项中间截断；
++- 同一秒同名目录已存在时依次使用 `_001`、`_002`，不覆盖旧数据。
++
++WPF 输入框使用外置标签和原生 `TextBox`，`MaxLength=64`。记录期间锁定编辑；中文 IME、退格、Delete、选择替换和撤销由 WPF 原生文本编辑处理。
++
++## 4. 统一时间轴
++
++`SessionClock` 在会话开始时记录：
++
++- `QueryPerformanceCounter` anchor；
++- QPC frequency；
++- 对应的 UTC FILETIME 起点。
++
++每行只写 `elapsed_us`，UTC 起止时间和 QPC 参数写入 `session.json`。这样避免每个控制拍做 UTC 转换。
++
++100 Hz ADS 通信线程在整次快速 Sum Read 调用前后各取一次 QPC，使用中点作为该统一快照的采样时刻。TCP DAQ 使用采集 worker 收到完整帧时的 QPC。视频使用 Source Reader 回调时 QPC，并保留设备源时间戳。
++
++力和位置记录由同一组主机侧 ADS 快照序号驱动：
++
++- ADS 快速快照：100 Hz，QPC 绝对截止时间约每 10 ms 一次；
++- `force.csv`：每个 ADS 尝试序号最多写一行，目标 100 Hz；
++- `motion.csv`：取偶数 `attempt_sequence`，目标 50 Hz、约 20 ms；
++- 主循环一次排空自上拍以来的主机侧快照队列，不伪造历史数据；队列溢出、序号空洞、会话开始前帧和重复帧均单独计数。
++
++快照序号是 C++ `AdsFastSnapshot::attempt_sequence`，不是 PLC `write_sequence`。PLC 不为记录器维护环形缓冲；主机侧仅用 2048 帧队列跨越控制主循环与 CSV 入队节奏。30 fps 视频帧间隔约 33.3 ms，因此只能保证帧时间戳映射，不能把真实曝光事件描述为小于 10 ms 的曝光时间分辨率。
++
++## 5. force.csv
++
++固定表头：
++
++```text
++sample_index,elapsed_us,sample_valid,calibrated_valid,
++fn_1_raw_v,ft_1_raw_v,fn_1_zero_v,ft_1_zero_v,
++clean_force_n,clean_handle_torque_nm,
++fn_2_raw_v,ft_2_raw_v,fn_2_zero_v,ft_2_zero_v,
++clean_force_2_n,clean_handle_torque_2_nm
++```
++
++纯净值严格定义为：
++
++```text
++clean_force_n = 0.701461986 * (fn_raw_v - fn_zero_v)
++clean_handle_torque_nm = 0.620117055 * (ft_raw_v - ft_zero_v) * 3.0 * 0.001
++clean_force_2_n = 1.139996290 * (fn_2_raw_v - fn_2_zero_v)
++clean_handle_torque_2_nm = 0.130548347 * (ft_2_raw_v - ft_2_zero_v) * 3.0 * 0.001
++```
++
++四式分别使用 FN1、FT1、FN2、FT2 的 `F_direct` 斜率。CSV 保留两组传感器的原始 V 和装机零点 V；固定截距已在 `F(raw)-F(raw_zero)` 中抵消。
++
++纯净值不经过重力补偿、串扰矩阵、`k_feedback`、死区、限幅、轴向符号、模式门控、快退锁存、PI 或力过渡处理。
++
++有效性语义：
++
++| 情况 | `sample_valid` | `calibrated_valid` | 原始电压 | 零点/纯净值 |
++|---|---:|---:|---|---|
++| 采样成功且已调零 | 1 | 1 | 数值 | 数值 |
++| 采样成功但未调零 | 1 | 0 | 数值 | `NaN` |
++| ADS/TCP 采样失败或过旧 | 0 | 0 | `NaN` | `NaN` |
++
++ADS 为力源时，`force.csv` 直接消费每个 100 Hz 快速快照，不再从更高频/更低频的“最新值”二次截取。失败快照仍保留该时刻，写成 `sample_valid=0` 和 `NaN`；恢复后的新快照不会回填故障空洞。TCP_DAQ 为显式力源时，行时刻仍由 ADS 快照槽确定，仅当最近 TCP 帧与该时刻足够接近才标记有效。仅使用 TCP 回退源、只有 PI 开启且没有统一会话时，力健康消费节流为约 20 Hz 且不产生文件；ADS 快速 Sum Read 本身仍维持 100 Hz。
++
++## 6. motion.csv
++
++固定表头：
++
++```text
++sample_index,elapsed_us,position_valid,
++axis1_from_left_mm..axis7_from_left_mm,
++axis1_handle_valid,
++axis1_handle_linear_raw,axis1_handle_linear_filtered,
++axis1_handle_rotation_raw,axis1_handle_rotation_filtered,
++axis6_handle_valid,
++axis6_handle_linear_raw,axis6_handle_linear_filtered,
++axis6_handle_rotation_raw,axis6_handle_rotation_filtered
++```
++
++7 轴位置来自同一份 PLC 快照：
++
++```text
++axisN_from_left_mm = Act_pos[N] + init_pos[N] - leftlimit[N]
++```
++
++7 轴位置直接来自偶数序号的 100 Hz 统一快照，不额外补做 ADS 读取。读取失败时 `position_valid=0` 且 7 轴为 `NaN`。两只逻辑手柄按 QPC 选取距离该位置快照最近、相差不超过 10 ms 的输入；没有足够接近的手柄样本时对应 `handle_valid=0`，其四个值为 `NaN`。
++
++单手柄模式下两个逻辑角色可映射到同一个已就绪物理输入；实际序列号和 `single_handle_mode` 写在 `session.json`。
++
++## 7. 力过渡专用表
++
++力过渡状态机与磁盘解耦：
++
++- 没有统一会话时可正常运行，不创建文件；
++- 只有在“开始力过渡实验”的瞬间统一会话已经处于 Recording，才创建 `force_transition_001.csv`；
++- 会话在力过渡中途才开始时不补建残缺表；
++- 统一会话在力过渡中途停止时专用表关闭，状态机继续；
++- 同一会话后续实验使用 `_002`、`_003`。
++
++表头：
++
++```text
++elapsed_us,valid,trial_id,velocity_level,repeat_in_level,
++phase_code,phase_elapsed_ms,v_ratio,axis1_from_left_mm,
++clean_force_n,clean_handle_torque_nm
++```
++
++`valid=0` 时位置或纯净力不可用，相应测量值写 `NaN`。相位编号见 [力过渡实验使用说明.md](力过渡实验使用说明.md)。
++
++## 8. 异步写盘与故障
++
++`AsyncCsvWriter<Row>` 是单生产者/单消费者环形队列。控制线程只复制一行并移动原子 head；后台线程负责文件写入、每 64 行 flush、停止排空和错误检测。
++
++行为约定：
++
++- 队列满时丢当前行并累计 dropped；
++- `force.csv`、`motion.csv`、力过渡专用表或 `video_frames.csv` 发生致命写盘错误时，统一会话自动进入 Stopping；
++- 自动停止会尽力封装已有 MP4，并写最终 `session.json`；
++- 自动停止不关闭 PI、力反馈或机器人运动控制；
++- 程序正常退出复用 `stop_and_wait("program_exit")`，等待 CSV 排空和 MP4 Finalize。
++
++两个主 CSV 在开始阶段任一失败时，本次启动回滚，不留下空会话目录。相机打开、编码或设备错误不影响两个主 CSV，会话继续。
++
++ADS 单拍失败、软保持和自动重连不会自动停止统一会话。记录器继续按快照尝试序号写入无效行，并在 `session.json` 记录失败、重连和序号空洞。PLC 重启/应用重载会让运动控制进入更严格的人工恢复锁定，但记录会话仍保持开启，便于保留故障前后证据；现场可根据实验规程手动停止会话。
++
++## 9. Action 4 探测与录像
++
++### 9.1 设备定位
++
++Media Foundation 枚举视频采集设备，优先匹配 symbolic link 中的：
++
++```text
++VID_2CA3&PID_0023
++```
++
++找不到 VID/PID 时按 friendly name `OsmoAction4` 备用匹配。找不到设备时状态为 `Missing`，UI 显示：
++
++```text
++无法找到摄像设备：OsmoAction4
++```
++
++会话仍记录两个主 CSV，不创建空 MP4。
++
++### 9.2 格式选择
++
++候选顺序：
++
++1. 1920x1080@30 H.264；
++2. 1920x1080@30 MJPEG；
++3. 1280x720@30 H.264/MJPEG/可解码格式。
++
++H.264 候选必须带 `MF_MT_MPEG_SEQUENCE_HEADER`，并在最多 60 个输入样本内出现首个 clean point；失败后尝试下一候选。MJPEG/720p 候选也会预读首个有效样本，预读样本保留为正式首帧。
++
++当前输出固定为：
++
++```text
++MP4 / H.264 / 无音频 / 20 Mbps / 实际输入分辨率与 30 fps
++```
++
++相机本体的防抖、视场和其他成像设置由相机端负责。程序通过 UVC/Media Foundation 录制，不调用 DJI 移动端控制 API，也不能把相机本体的“2.7K 4:3”菜单设置强制写入 UVC 流。
++
++### 9.3 当前 H.264 管线限制
++
++代码会优先选择并验证相机原生 H.264 候选，但当前 Source Reader 随后统一解码为 RGB32，再由 Sink Writer 编码成 H.264。也就是说，**目前不是压缩码流直接复用**。
++
++这保证了同一采集流可同时用于 1280x720 BGRA 预览和 MP4，但会增加相机 worker 的 CPU/GPU 编解码负担。`video_frames.csv` 的 `keyframe` 是输入样本 clean-point 标志，在转码路径下不等同于最终 MP4 编码器的精确关键帧位置。若后续必须实现原生 H.264 直通，需要增加独立 H.264 解码支路供预览，并在 Action 4 实机上验证 SPS/PPS、时间戳和 MP4 sink input type。
++
++## 10. video_frames.csv
++
++表头：
++
++```text
++frame_index,source_timestamp_100ns,callback_elapsed_us,keyframe,discontinuity
++```
++
++- `source_timestamp_100ns`：Media Foundation 源时间戳；
++- `callback_elapsed_us`：读取该帧时映射到统一会话 QPC 的时间；
++- `keyframe`：输入样本 clean-point 标志；
++- `discontinuity`：输入 discontinuity 或 stream tick；
++- 相邻源时间戳超过 1.5 帧时累计 `dropped_frames`；
++- 旁车队列丢行和 writer 错误另写入 `session.json`。
++
++写 MP4 前将源时间戳减去首帧时间，保证文件从 0 开始。每个输入样本设置 30 fps 帧时长。
++
++## 11. 相机状态与拔线行为
++
++状态枚举：
++
++```text
++Closed / Opening / Previewing / Recording / Missing / Disconnected / Error
++```
++
++录像中拔线：
++
++1. 停止接收新帧；
++2. 尽力 Finalize 已写 MP4 和关闭旁车；
++3. 状态保持 `Disconnected`，两个主 CSV 继续；
++4. 当前会话不自动重连，不创建第二视频段；
++5. 下一会话或重新打开预览才重新探测。
++
++正常停止会等待编码器启动中的竞态完成，再等待 MP4 Finalize，避免 UI 已回到 Idle 但后台仍在写上一个会话文件。
++
++## 12. 预览
++
++预览可独立打开。C++ 将采集帧缩放为 1280x720 BGRA32，写入版本化双缓冲共享内存并触发命名事件；WPF 复核写前/写后 sequence，避免撕裂。
++
++预览支持窗口最大化、1x 到 8x 鼠标滚轮缩放、左键拖拽和平移、一键适应居中。变换不修改录制原图。
++
++关闭预览窗口：
++
++- 未录像：释放相机采集；
++- 正在录像：停止发布预览帧，录像继续。
++
++共享内存布局和名称见 [可视化界面架构说明.md](可视化界面架构说明.md)。
++
++## 13. session.json
++
++最终元数据包含：
++
++- 原始/清洗后实验名称；
++- UTC 起止时间、QPC anchor/frequency；
++- 力/位置目标采样率（100/50 Hz）；
++- axis1/axis6 逻辑手柄序列号和单手柄模式；
++- 两个主 writer、力过渡 writer 的 dropped 和调度 missed；
++- ADS 连接终态、实际频率、快照数据龄、RTT、失败/连续失败、重连、PLC 重启和主机快照队列丢帧；
++- force/motion/力过渡各自的首末主机快照序号、接受数、无效数、会话前拒绝、重复拒绝和序号空洞；
++- 停止原因；
++- 相机终态、原生输入格式、输出 H.264/无音频、实际宽高帧率；
++- 视频帧数、源时间戳丢帧数、旁车丢行、旁车错误和 HRESULT。
++
++记录启动时先写一份 `utc_end=null` 的元数据；停止封装完成后覆盖为最终版本。
++
++## 14. 已完成验证与实机待验
++
++2026-07-29 已完成（统一会话/相机基础版）：
++
++- C++ 与 WPF x64 Debug/Release 构建；
++- 协议 C++ `static_assert` 和 C# wire size 校验；
++- 无相机合成会话：中文/非法字符、空名称、保留名、`_001`；
++- `force.csv` 16 列、`motion.csv` 20 列和 `NaN` 语义；
++- 旧版节拍冒烟曾验证 CSV 时间戳单调；其行数和间隔不作为当前 100/50 Hz 快照版的验收依据；
++- 相机缺失时 `session.json` 保持 `Missing`，不生成空视频。
++
++当前版本仍需完成：
++
++1. 在真实 PLC 上核对 `force.csv` 约 100 Hz、`motion.csv` 约 50 Hz，QPC 单调且没有会话前帧或重复序号混入；
++2. 人工制造单拍失败、超过 100 ms 断线重连和 PLC 重启，核对 CSV 空洞及 `session.json.ads` 计数；
++3. 1080p/30 预览和实际输入格式回退；
++4. MP4 可解码、无音频、分辨率/帧率/时长；
++5. 预览缩放、平移、关闭预览后录像继续；
++6. 录像中拔线后的 MP4 Finalize 和 `Disconnected`；
++7. 15 分钟 CPU、内存、CSV 队列和视频帧压力测试。
+--- before/A_主端电脑_地址修正版/工程/master/MasterConsole/Services/HandleService.cs
++++ after/A_主端电脑_地址修正版/工程/master/MasterConsole/Services/HandleService.cs
+@@ -49,12 +49,8 @@
+         private readonly object _lock = new object();
+         private readonly Stopwatch _clock = Stopwatch.StartNew();
+         private readonly Thread _thread;
+-        private readonly ManualResetEventSlim _refreshDone = new ManualResetEventSlim(false);
+         private volatile bool _stop;
+         private volatile bool _sdkMissing;
+-        private int _refreshRequested;
+-        private int _refreshResultMask;
+-        private int _refreshInProgress;
+ 
+         public HandleService()
+         {
+@@ -66,23 +62,6 @@
+         public bool SdkMissing => _sdkMissing;
+ 
+         public bool IsOnline(int slot) => slot >= 0 && slot < 2 && _dev[slot].Online;
+-
+-        /// <summary>在手柄线程中立即重读两只设备，返回本次成功采样的位掩码（bit0=582，bit1=587）。</summary>
+-        public int RefreshNow(int timeoutMs = 500)
+-        {
+-            if (Interlocked.Exchange(ref _refreshInProgress, 1) != 0) return -1;
+-            try
+-            {
+-                _refreshDone.Reset();
+-                Interlocked.Exchange(ref _refreshRequested, 1);
+-                if (!_refreshDone.Wait(timeoutMs)) return 0;
+-                return Volatile.Read(ref _refreshResultMask);
+-            }
+-            finally
+-            {
+-                Volatile.Write(ref _refreshInProgress, 0);
+-            }
+-        }
+ 
+         /// <summary>取最新采样；打开失败、读取失败或采样过期时 Valid=false。</summary>
+         public HandleSample GetSample(int slot)
+@@ -134,18 +113,6 @@
+                 while (!_stop)
+                 {
+                     long now = _clock.ElapsedMilliseconds;
+-                    if (Interlocked.Exchange(ref _refreshRequested, 0) != 0)
+-                    {
+-                        int mask = 0;
+-                        foreach (var d in _dev)
+-                        {
+-                            if (d.Id < 0) TryOpen(d);
+-                            if (d.Id >= 0 && PollOne(d, now)) mask |= d.Serial == SerialA ? 1 : 2;
+-                            else if (d.Id >= 0) CloseDevice(d);
+-                        }
+-                        Volatile.Write(ref _refreshResultMask, mask);
+-                        _refreshDone.Set();
+-                    }
+                     foreach (var d in _dev)
+                     {
+                         if (d.Id < 0)
+@@ -168,7 +135,6 @@
+             catch (EntryPointNotFoundException) { _sdkMissing = true; }
+             finally
+             {
+-                _refreshDone.Set();
+                 foreach (var d in _dev)
+                 {
+                     try { if (d.Id >= 0) { ZeroForce(d); CloseDevice(d); } } catch { }
+--- before/A_主端电脑_地址修正版/工程/master/MasterConsole/Services/IRobotLink.cs
++++ after/A_主端电脑_地址修正版/工程/master/MasterConsole/Services/IRobotLink.cs
+@@ -66,9 +66,6 @@
+         /// <summary>开始控制：已到达器械准备位置后，在当前位置直接进入手柄控制。</summary>
+         Task<CommandResult> StartControlAsync();
+ 
+-        /// <summary>重读主端手柄并请求从端按成功读取的手柄重建中立基准。</summary>
+-        Task<CommandResult> RefreshHandlesAsync();
+-
+         Task<CommandResult> SetArmManualEnableAsync(bool enabled);
+         Task<CommandResult> SetArmAxisEnableAsync(int axis, bool enabled);
+         Task<CommandResult> ResetArmAxisAsync(int axis);
+--- before/A_主端电脑_地址修正版/工程/master/MasterConsole/Services/RemoteRobotLink.cs
++++ after/A_主端电脑_地址修正版/工程/master/MasterConsole/Services/RemoteRobotLink.cs
+@@ -247,15 +247,6 @@
+         public Task<CommandResult> StartControlAsync()
+             => RequestAsync(id => CommandMessages.StartControl(id), 10000);
+ 
+-        public async Task<CommandResult> RefreshHandlesAsync()
+-        {
+-            int mask = _handles?.RefreshNow() ?? 0;
+-            if (mask < 0) return CommandResult.Rejected("刷新已在进行中");
+-            var result = await RequestAsync(id => CommandMessages.RefreshHandles(id, mask), 5000);
+-            if (!result.Ok) return result;
+-            return CommandResult.DoneWithReason(HandleRefreshMessage(mask));
+-        }
+-
+         public Task<CommandResult> SetArmManualEnableAsync(bool enabled)
+             => RequestAsync(id => CommandMessages.ArmManualEnable(id, enabled), 5000);
+ 
+@@ -289,12 +280,6 @@
+             if (!_connected || !_hasControl) return;
+             _ = RequestAsync(id => CommandMessages.ArmCartesianAlive(id), 2000);
+         }
+-
+-        private static string HandleRefreshMessage(int mask)
+-            => mask == 3 ? "两只手柄已重读并建立新中立基准。"
+-             : mask == 1 ? "仅手柄 582 重读成功；587 保留原状态和基准。"
+-             : mask == 2 ? "仅手柄 587 重读成功；582 保留原状态和基准。"
+-             : "本次未读到有效手柄；原状态和基准已保留。";
+ 
+         public Task<CommandResult> SetForceFeedbackAsync(bool enable)
+             => RequestAsync(id => CommandMessages.ForceFeedback(id, enable), 15000);
+--- before/A_主端电脑_地址修正版/工程/master/MasterConsole/Services/SimulatedRobotLink.cs
++++ after/A_主端电脑_地址修正版/工程/master/MasterConsole/Services/SimulatedRobotLink.cs
+@@ -161,9 +161,6 @@
+             Log("info", "已在当前位置开始控制（模拟）。");
+             return CommandResult.Done();
+         }
+-
+-        public Task<CommandResult> RefreshHandlesAsync()
+-            => Task.FromResult(CommandResult.DoneWithReason("模拟链路：已刷新手柄基准。"));
+ 
+         public Task<CommandResult> SetArmManualEnableAsync(bool enabled)
+             => Task.FromResult(CommandResult.DoneWithReason($"模拟链路：定位臂总使能{(enabled ? "已开启" : "已关闭")}。"));
+--- before/A_主端电脑_地址修正版/工程/master/MasterConsole/ViewModels/MainViewModel.cs
++++ after/A_主端电脑_地址修正版/工程/master/MasterConsole/ViewModels/MainViewModel.cs
+@@ -60,8 +60,6 @@
+         private string _prepareError = "";
+         private string _linkStatsText = "";
+         private LinkStats _stats = new LinkStats();
+-        private bool _refreshingHandles;
+-        private string _handleRefreshText = "未刷新";
+         private string _armFeedbackText = "定位臂命令待发送";
+ 
+         public MainViewModel(IRobotLink link)
+@@ -80,7 +78,6 @@
+             CylinderCommand = new RelayCommand(p => ToggleCylinder(p));
+             YValveCommand = new RelayCommand(ToggleYValve);
+             StartControlCommand = new RelayCommand(StartControl);
+-            RefreshHandlesCommand = new RelayCommand(RefreshHandles);
+ 
+             _link.ConnectionChanged += (s, e) => _ui.BeginInvoke(new Action(RaiseConnectionProps));
+             _link.StatusReceived += (s, f) => _ui.BeginInvoke(new Action(() => OnStatus(f)));
+@@ -104,7 +101,6 @@
+         public ICommand CylinderCommand { get; }
+         public ICommand YValveCommand { get; }
+         public ICommand StartControlCommand { get; }
+-        public ICommand RefreshHandlesCommand { get; }
+ 
+         // ============================================================ 连接与控制权
+ 
+@@ -150,7 +146,6 @@
+             OnPropertyChanged(nameof(HasControl));
+             OnPropertyChanged(nameof(CanOperate));
+             OnPropertyChanged(nameof(CanStartControl));
+-            OnPropertyChanged(nameof(CanRefreshHandles));
+             OnPropertyChanged(nameof(ConnectButtonText));
+             OnPropertyChanged(nameof(StatusFresh));
+             OnPropertyChanged(nameof(OperateHintText));
+@@ -187,7 +182,6 @@
+ 
+         /// <summary>已到达准备位置、尚未进入手柄控制时可点“开始控制”。</summary>
+         public bool CanStartControl => CanOperate && !ControlActive;
+-        public bool CanRefreshHandles => CanOperate && !_refreshingHandles;
+ 
+         public string Force582F => FormatForce(_s.Force582F, "N");
+         public string Force582N => FormatForce(_s.Force582N, "N·m");
+@@ -280,32 +274,6 @@
+             await Report("开始控制", r);
+         }
+ 
+-        private async void RefreshHandles()
+-        {
+-            if (!CanRefreshHandles) return;
+-            _refreshingHandles = true;
+-            _handleRefreshText = "正在刷新…";
+-            OnPropertyChanged(nameof(CanRefreshHandles));
+-            OnPropertyChanged(nameof(HandleRefreshText));
+-            try
+-            {
+-                var result = await _link.RefreshHandlesAsync();
+-                _handleRefreshText = result.Ok ? result.Reason : "刷新失败：" + result.Reason;
+-                AddLog(result.Ok ? "info" : "warn", _handleRefreshText);
+-            }
+-            catch (Exception ex)
+-            {
+-                _handleRefreshText = "刷新失败：" + ex.Message;
+-                AddLog("error", _handleRefreshText);
+-            }
+-            finally
+-            {
+-                _refreshingHandles = false;
+-                OnPropertyChanged(nameof(CanRefreshHandles));
+-                OnPropertyChanged(nameof(HandleRefreshText));
+-            }
+-        }
+-
+         private async void ToggleForceFeedback()
+         {
+             if (FfZeroing) return; // 零点采集期间不响应
+@@ -374,7 +342,6 @@
+         public string HandleText => _stats.HandleSdkMissing
+             ? "手柄 SDK 未加载（缺 FLCatheter.dll）"
+             : "582 " + (_stats.Handle582Online ? "在线" : "离线") + " / 587 " + (_stats.Handle587Online ? "在线" : "离线");
+-        public string HandleRefreshText => _handleRefreshText;
+         public string ArmFeedbackText => _armFeedbackText;
+ 
+         public async Task SetArmManualEnableAsync(bool enabled) =>
+@@ -432,7 +399,6 @@
+             OnPropertyChanged(nameof(StatusFresh));
+             OnPropertyChanged(nameof(CanOperate));
+             OnPropertyChanged(nameof(CanStartControl));
+-            OnPropertyChanged(nameof(CanRefreshHandles));
+             OnPropertyChanged(nameof(OperateHintText));
+         }
+ 
+@@ -460,7 +426,6 @@
+             foreach (var name in StatusPropertyNames) OnPropertyChanged(name);
+             OnPropertyChanged(nameof(CanOperate));
+             OnPropertyChanged(nameof(CanStartControl));
+-            OnPropertyChanged(nameof(CanRefreshHandles));
+             OnPropertyChanged(nameof(OperateHintText));
+         }
+ 
+--- before/A_主端电脑_地址修正版/工程/master/MasterConsole/Views/MainWindow.xaml
++++ after/A_主端电脑_地址修正版/工程/master/MasterConsole/Views/MainWindow.xaml
+@@ -232,13 +232,6 @@
+                                 <Border Grid.Column="3"/>
+                             </Grid>
+ 
+-                            <DockPanel Margin="0,8,0,0">
+-                                <Button DockPanel.Dock="Left" Content="刷新手柄" Command="{Binding RefreshHandlesCommand}"
+-                                        IsEnabled="{Binding CanRefreshHandles}"
+-                                        Style="{StaticResource CompactButton}" Padding="12,5"/>
+-                                <TextBlock Text="{Binding HandleRefreshText}" Style="{StaticResource CaptionText}"
+-                                           Margin="8,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap"/>
+-                            </DockPanel>
+                             <TextBlock Text="{Binding LastWarning}" Foreground="{StaticResource StatusRedBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+ 
+                             <Border Style="{StaticResource SectionDivider}"/>
+--- before/A_主端电脑_地址修正版/工程/master/MasterConsole.Protocol/FrameAuth.cs
++++ after/A_主端电脑_地址修正版/工程/master/MasterConsole.Protocol/FrameAuth.cs
+@@ -95,9 +95,6 @@
+         public static string StartControl(int id)
+             => Cmd(id, "start_control");
+ 
+-        public static string RefreshHandles(int id, int successMask)
+-            => Cmd(id, "refresh_handles", ("success_mask", successMask));
+-
+         public static string ArmManualEnable(int id, bool enable)
+             => Cmd(id, "arm_manual_enable", ("enable", enable));
+         public static string ArmAxisEnable(int id, int axis, bool enable)
+--- before/A_主端电脑_地址修正版/工程/tools/MasterUiCheck.cs
++++ after/A_主端电脑_地址修正版/工程/tools/MasterUiCheck.cs
+@@ -169,7 +169,6 @@
+         public Task<CommandResult> ReleaseControlAsync() { HasControl = false; return Done(); }
+         public Task<CommandResult> PreparePositionAsync(double a, double b) { return Done(); }
+         public Task<CommandResult> StartControlAsync() { return Done(); }
+-        public Task<CommandResult> RefreshHandlesAsync() { return Done(); }
+         public Task<CommandResult> SetArmManualEnableAsync(bool on) { return Done(); }
+         public Task<CommandResult> SetArmAxisEnableAsync(int axis, bool on) { return Done(); }
+         public Task<CommandResult> ResetArmAxisAsync(int axis) { return Done(); }
+--- before/B_从端电脑/工程/ADS项目/ADS.vcxproj
++++ after/B_从端电脑/工程/ADS项目/ADS.vcxproj
+@@ -152,8 +152,6 @@
+   </ItemDefinitionGroup>
+   <ItemGroup>
+     <ClCompile Include="control_types.cpp" />
+-    <ClCompile Include="tcp_force_daq.cpp" />
+-    <ClCompile Include="action4_camera.cpp" />
+     <ClCompile Include="experiment_recorder.cpp" />
+     <ClCompile Include="vis_server.cpp" />
+     <ClCompile Include="remote_gateway.cpp" />
+@@ -182,10 +180,8 @@
+   </ItemGroup>
+   <ItemGroup>
+     <ClInclude Include="control_types.h" />
+-    <ClInclude Include="action4_camera.h" />
+     <ClInclude Include="async_csv_writer.h" />
+     <ClInclude Include="experiment_recorder.h" />
+-    <ClInclude Include="tcp_force_daq.h" />
+     <ClInclude Include="force_calibration.h" />
+     <ClInclude Include="vis_server.h" />
+     <ClInclude Include="remote_gateway.h" />
+--- before/B_从端电脑/工程/ADS项目/ADS.vcxproj.filters
++++ after/B_从端电脑/工程/ADS项目/ADS.vcxproj.filters
+@@ -16,9 +16,6 @@
+   </ItemGroup>
+   <ItemGroup>
+     <ClCompile Include="control_types.cpp">
+-      <Filter>源文件</Filter>
+-    </ClCompile>
+-    <ClCompile Include="tcp_force_daq.cpp">
+       <Filter>源文件</Filter>
+     </ClCompile>
+     <ClCompile Include="plc_io.cpp">
+@@ -60,9 +57,6 @@
+     <ClCompile Include="vis_server.cpp">
+       <Filter>源文件</Filter>
+     </ClCompile>
+-    <ClCompile Include="action4_camera.cpp">
+-      <Filter>源文件</Filter>
+-    </ClCompile>
+     <ClCompile Include="experiment_recorder.cpp">
+       <Filter>源文件</Filter>
+     </ClCompile>
+@@ -75,9 +69,6 @@
+   </ItemGroup>
+   <ItemGroup>
+     <ClInclude Include="control_types.h">
+-      <Filter>头文件</Filter>
+-    </ClInclude>
+-    <ClInclude Include="tcp_force_daq.h">
+       <Filter>头文件</Filter>
+     </ClInclude>
+     <ClInclude Include="plc_io.h">
+@@ -122,9 +113,6 @@
+     <ClInclude Include="vis_server.h">
+       <Filter>头文件</Filter>
+     </ClInclude>
+-    <ClInclude Include="action4_camera.h">
+-      <Filter>头文件</Filter>
+-    </ClInclude>
+     <ClInclude Include="async_csv_writer.h">
+       <Filter>头文件</Filter>
+     </ClInclude>
+--- before/B_从端电脑/工程/ADS项目/AdsControlUI/AdsControlUI.csproj
++++ after/B_从端电脑/工程/ADS项目/AdsControlUI/AdsControlUI.csproj
+@@ -14,4 +14,9 @@
+     <PackageReference Include="ScottPlot.WPF" Version="4.1.74" />
+     <None Include="..\..\Runtime\VC142\*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+   </ItemGroup>
++  <ItemGroup>
++    <!-- 大疆相机源码保留在磁盘中，当前不参与构建。 -->
++    <Page Remove="CameraPreviewWindow.xaml" />
++    <Compile Remove="CameraPreviewWindow.xaml.cs" />
++  </ItemGroup>
+ </Project>
+--- before/B_从端电脑/工程/ADS项目/AdsControlUI/AdsControlViewModel.cs
++++ after/B_从端电脑/工程/ADS项目/AdsControlUI/AdsControlViewModel.cs
+@@ -211,7 +211,6 @@
+ 
+             NotifyIfChanged(ref _prevConnected, connected, nameof(IsConnected));
+ 			OnPropertyChanged(nameof(CanStartExperimentRecording));
+-			OnPropertyChanged(nameof(CanOpenCameraPreview));
+             _prevState = state;
+             StateUpdated?.Invoke(state);
+         }
+@@ -291,11 +290,6 @@
+ 			OnPropertyChanged(nameof(CanStartExperimentRecording));
+ 			OnPropertyChanged(nameof(CanStopExperimentRecording));
+ 			OnPropertyChanged(nameof(ExperimentNameEditable));
+-			OnPropertyChanged(nameof(CameraStatusText));
+-			OnPropertyChanged(nameof(CameraParameterText));
+-			OnPropertyChanged(nameof(CameraRecordingElapsedText));
+-			OnPropertyChanged(nameof(CameraRecording));
+-			OnPropertyChanged(nameof(CanOpenCameraPreview));
+ 			OnPropertyChanged(nameof(ForceSampleValid));
+ 			OnPropertyChanged(nameof(CleanForceValid));
+ 			OnPropertyChanged(nameof(RawFnVoltage));
+@@ -684,8 +678,6 @@
+ 		public bool CanStopExperimentRecording =>
+ 			IsConnected && RecordingState == 2 && !_stopExperimentCommandPending;
+ 		public bool ExperimentNameEditable => RecordingState == 0 || RecordingState == 4;
+-		public bool CameraRecording => _state.camera_recording;
+-		public bool CanOpenCameraPreview => IsConnected;
+ 		public bool ForceSampleValid => _state.force_sample_valid;
+ 		public bool CleanForceValid => _state.clean_force_valid;
+ 		public double RawFnVoltage => _state.fn_1_v;
+@@ -701,7 +693,7 @@
+ 				{
+ 					case 1: return "正在启动";
+ 					case 2: return _stopExperimentCommandPending ? "停止命令已发送，等待后端确认" : "记录中";
+-					case 3: return "正在停止并封装";
++					case 3: return "正在停止并保存";
+ 					case 4: return "启动失败";
+ 					default: return "空闲";
+ 				}
+@@ -723,14 +715,12 @@
+ 					case 5: return "force.csv 写入失败，记录已自动停止";
+ 					case 6: return "motion.csv 写入失败，记录已自动停止";
+ 					case 7: return "无法启动停止后台线程";
+-					case 9: return "video_frames.csv 写入失败，统一记录已自动停止";
+ 					default: return "";
+ 				}
+ 			}
+ 		}
+ 
+ 		public string RecordingElapsedText => FormatElapsed(_state.recording_elapsed_us);
+-		public string CameraRecordingElapsedText => FormatElapsed(_state.camera_recording_elapsed_us);
+ 
+ 		public string RecordingLossText
+ 		{
+@@ -743,39 +733,6 @@
+ 				return dropped == 0 && missed == 0
+ 					? "CSV 队列与采样调度正常"
+ 					: $"队列丢样 {dropped} · 调度错过：力 {forceMissed} / 位置 {motionMissed}";
+-			}
+-		}
+-
+-		public string CameraStatusText
+-		{
+-			get
+-			{
+-				switch (_state.camera_state)
+-				{
+-					case 1: return "正在打开摄像设备：OsmoAction4";
+-					case 2: return "摄像设备预览中：OsmoAction4";
+-					case 3: return "摄像设备录像中：OsmoAction4";
+-					case 4: return "无法找到摄像设备：OsmoAction4";
+-					case 5: return "摄像设备已断开：OsmoAction4";
+-					case 6: return $"摄像设备错误：OsmoAction4（0x{unchecked((uint)_state.camera_error_code):X8}）";
+-					default: return "摄像设备未打开：OsmoAction4";
+-				}
+-			}
+-		}
+-
+-		public string CameraParameterText
+-		{
+-			get
+-			{
+-				if (_state.camera_width <= 0 || _state.camera_height <= 0)
+-					return "等待实际视频参数";
+-				double fps = _state.camera_fps_denominator > 0
+-					? (double)_state.camera_fps_numerator / _state.camera_fps_denominator
+-					: 0.0;
+-				string input = _state.camera_input_format == 1 ? "H.264" :
+-					(_state.camera_input_format == 2 ? "MJPEG" :
+-					(_state.camera_input_format == 3 ? "RGB32" : "未知"));
+-				return $"{_state.camera_width}×{_state.camera_height} · {fps:F1} fps · 输入 {input} · 输出 H.264 / 无音频";
+ 			}
+ 		}
+ 
+@@ -973,9 +930,6 @@
+ 			return true;
+ 		}
+ 
+-		public void SetCameraPreview(bool enabled) =>
+-			_client.SendCommand(VisCommandType.SetCameraPreview, enabled ? 1 : 0);
+-
+ 		public void SetCleanForceMonitor(bool enabled) =>
+ 			_client.SendCommand(VisCommandType.SetCleanForceMonitor, enabled ? 1 : 0);
+ 
+--- before/B_从端电脑/工程/ADS项目/AdsControlUI/MainWindow.xaml
++++ after/B_从端电脑/工程/ADS项目/AdsControlUI/MainWindow.xaml
+@@ -466,10 +466,6 @@
+                                         Click="StopExperimentRecording_Click"
+                                         IsEnabled="{Binding CanStopExperimentRecording}"
+                                         Padding="14,8" Margin="0,0,8,4"/>
+-                                <Button Content="相机预览"
+-                                        Click="ShowCameraPreview_Click"
+-                                        IsEnabled="{Binding CanOpenCameraPreview}"
+-                                        Padding="14,8" Margin="0,0,8,4"/>
+                             </WrapPanel>
+                             <Grid>
+                                 <Grid.ColumnDefinitions>
+@@ -485,10 +481,6 @@
+                                 <TextBlock Grid.Column="2" Text="{Binding RecordingElapsedText}"
+                                            Style="{StaticResource DataValueText}" FontWeight="SemiBold"/>
+                             </Grid>
+-                            <TextBlock Text="{Binding CameraStatusText}"
+-                                       Style="{StaticResource CaptionText}" Margin="0,6,0,0" TextWrapping="Wrap"/>
+-                            <TextBlock Text="{Binding CameraParameterText}"
+-                                       Style="{StaticResource CaptionText}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                             <TextBlock Text="{Binding RecordingErrorText}"
+                                        Style="{StaticResource ErrorText}" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                         </StackPanel>
+--- before/B_从端电脑/工程/ADS项目/AdsControlUI/MainWindow.xaml.cs
++++ after/B_从端电脑/工程/ADS项目/AdsControlUI/MainWindow.xaml.cs
+@@ -11,7 +11,6 @@
+         private readonly AdsControlViewModel _vm;
+         private ForceRealtimeWindow _forceWindow;
+         private CleanForceWindow _cleanForceWindow;
+-        private CameraPreviewWindow _cameraPreviewWindow;
+ 		private readonly DispatcherTimer _manualJogKeepaliveTimer;
+ 		private int _activeArmJogAxis;
+ 		private int _activeArmJogDirection;
+@@ -41,7 +40,6 @@
+             _vm.StateUpdated -= Vm_StateUpdated;
+             _forceWindow?.Close();
+             _cleanForceWindow?.Close();
+-            _cameraPreviewWindow?.Close();
+             _vm.Dispose();
+             base.OnClosed(e);
+         }
+@@ -473,7 +471,6 @@
+ 				_programReturnActive = false;
+             _forceWindow?.AddState(state);
+ 			_cleanForceWindow?.AddState(state);
+-			_cameraPreviewWindow?.OnState(state);
+         }
+ 
+ 		private void StartExperimentRecording_Click(object sender, RoutedEventArgs e)
+@@ -486,26 +483,6 @@
+ 		{
+ 			if (_vm.CanStopExperimentRecording)
+ 				_vm.StopExperimentRecording();
+-		}
+-
+-		private void ShowCameraPreview_Click(object sender, RoutedEventArgs e)
+-		{
+-			if (_cameraPreviewWindow == null)
+-			{
+-				_cameraPreviewWindow = new CameraPreviewWindow { Owner = this };
+-				_cameraPreviewWindow.Closed += (s, args) =>
+-				{
+-					_vm.SetCameraPreview(false);
+-					_cameraPreviewWindow = null;
+-				};
+-				_vm.SetCameraPreview(true);
+-				_cameraPreviewWindow.Show();
+-			}
+-			else
+-			{
+-				_cameraPreviewWindow.Activate();
+-			}
+-			_cameraPreviewWindow?.OnState(_vm.LatestState);
+ 		}
+ 
+ 		private void ShowCleanForce_Click(object sender, RoutedEventArgs e)
+--- before/B_从端电脑/工程/ADS项目/AdsControlUI/VisProtocol.cs
++++ after/B_从端电脑/工程/ADS项目/AdsControlUI/VisProtocol.cs
+@@ -50,7 +50,7 @@
+         // axis6 当前软限位阻断状态。必须与 C++ VisState 末尾字段一致。
+         [MarshalAs(UnmanagedType.I1)] public bool axis6_soft_limit_hold;
+ 
+-        // 统一实验记录、纯净力与 Action 4 状态。必须与 C++ VisState 顺序完全一致。
++        // 统一实验记录与纯净力状态。必须与 C++ VisState 顺序完全一致。
+         public int recording_state;
+         public int recording_error;
+         public ulong recording_elapsed_us;
+@@ -62,6 +62,7 @@
+         [MarshalAs(UnmanagedType.I1)] public bool clean_force_valid;
+         public double clean_force_n;
+         public double clean_handle_torque_nm;
++        // 预留旧版相机状态字段，保持管道布局兼容；当前均为零。
+         public int camera_state;
+         public int camera_input_format;
+         public int camera_width;
+@@ -158,7 +159,7 @@
+         SetAxis1PostReturnLead = 24,
+         StartExperimentRecording = 25,
+         StopExperimentRecording = 26,
+-        SetCameraPreview = 27,
++        // 命令号 27 已停用，保留编号。
+         SetCleanForceMonitor = 28,
+ 		SetArmManualEnable = 29,
+ 		SetArmAxisEnable = 30,
+@@ -179,6 +180,6 @@
+ 		KeepArmCartesianAlive = 45,
+ 		SetSelfCheckAxisPos = 46,
+         StartSelfCheck = 47,
+-        RefreshHandles = 48,
++        // 命令号 48 已停用，保留编号。
+ 	}
+ }
+--- before/B_从端电脑/工程/ADS项目/control_types.h
++++ after/B_从端电脑/工程/ADS项目/control_types.h
+@@ -24,7 +24,6 @@
+ 	double& b_axis1);
+ void copy_positions(const double* src, double* dst, int count);
+ 
+-class TcpForceDaqClient;
+ class AdsCommunicationService;
+ 
+ struct AxisReturnAdsSymbols
+@@ -73,12 +72,6 @@
+ 		axis0_filtered += axis0_alpha * (axis0_raw - axis0_filtered);
+ 		axis1_filtered += axis1_alpha * (axis1_raw - axis1_filtered);
+ 	}
+-};
+-
+-enum class ForceSampleSource
+-{
+-	ADS,
+-	TCP_DAQ
+ };
+ 
+ struct ControlConfig
+@@ -178,14 +171,6 @@
+ 	// 手柄低通滤波。
+ 	double linear_handle_alpha = 0.25;
+ 	double rotational_handle_alpha = 0.20;
+-	// 力反馈与 CSV 中 ft_1/fn_1 的采样来源：ADS(PLC变量) 或 TCP_DAQ(采集卡直连)。
+-	// 轴1力/扭矩优先由 PLC 映射后的 ADS 原始 INT 提供；TCP 仅保留代码回退路径。
+-	ForceSampleSource force_sample_source = ForceSampleSource::ADS;
+-	// TCP 采集卡连接参数（仅 force_sample_source=TCP_DAQ 时生效）。
+-	const char* tcp_force_daq_ip = "192.168.1.30";
+-	unsigned short tcp_force_daq_port = 502;
+-	// 可选：指定 ITCP 从哪块本机网卡出去；留空时由 Windows 路由表决定。
+-	const char* tcp_force_daq_local_ip = "";
+ 	// 开始控制时的低速定位仅使用于已完成自检的目标校正。
+ 	DWORD startup_clamp_settle_delay_ms = 300;
+ 	DWORD startup_recovery_stage_delay_ms = 2000;
+@@ -655,8 +640,6 @@
+ 	// 配置与预设。
+ 	const ControlConfig* cfg = nullptr;
+ 	const CylinderPreset* cyl = nullptr;
+-	ForceSampleSource force_sample_source = ForceSampleSource::ADS;
+-	TcpForceDaqClient* tcp_force_daq = nullptr;
+ 
+ 	// PLC 镜像缓存。
+ 	double* pos = nullptr;
+--- before/B_从端电脑/工程/ADS项目/experiment_recorder.cpp
++++ after/B_从端电脑/工程/ADS项目/experiment_recorder.cpp
+@@ -132,32 +132,6 @@
+ 		return std::fprintf(fp, "%.10g", value) >= 0;
+ 	}
+ 
+-	const char* camera_state_text(Action4CameraState state)
+-	{
+-		switch (state)
+-		{
+-		case Action4CameraState::Closed: return "Closed";
+-		case Action4CameraState::Opening: return "Opening";
+-		case Action4CameraState::Previewing: return "Previewing";
+-		case Action4CameraState::Recording: return "Recording";
+-		case Action4CameraState::Missing: return "Missing";
+-		case Action4CameraState::Disconnected: return "Disconnected";
+-		case Action4CameraState::Error: return "Error";
+-		default: return "Unknown";
+-		}
+-	}
+-
+-	const char* camera_format_text(Action4InputFormat format)
+-	{
+-		switch (format)
+-		{
+-		case Action4InputFormat::H264: return "H264";
+-		case Action4InputFormat::Mjpeg: return "MJPEG";
+-		case Action4InputFormat::Rgb32: return "RGB32";
+-		default: return "Unknown";
+-		}
+-	}
+-
+ 	const char* ads_connection_state_text(AdsConnectionState state)
+ 	{
+ 		switch (state)
+@@ -226,7 +200,6 @@
+ ExperimentRecorder::~ExperimentRecorder()
+ {
+ 	stop_and_wait("program_exit");
+-	camera_.shutdown();
+ }
+ 
+ void ExperimentRecorder::normalize_force_row(ForceCsvRow& row)
+@@ -501,8 +474,6 @@
+ 			session_directory_ = candidate;
+ 			force_path_ = join_path(candidate, L"force.csv");
+ 			motion_path_ = join_path(candidate, L"motion.csv");
+-			video_path_ = join_path(candidate, L"video.mp4");
+-			video_frames_path_ = join_path(candidate, L"video_frames.csv");
+ 			metadata_path_ = join_path(candidate, L"session.json");
+ 			return true;
+ 		}
+@@ -597,7 +568,6 @@
+ 
+ 	write_session_json(false, std::string());
+ 	state_.store(ExperimentRecordingState::Recording, std::memory_order_release);
+-	camera_.start_recording(video_path_, video_frames_path_, clock_.anchor_qpc(), clock_.frequency());
+ 	return true;
+ }
+ 
+@@ -653,14 +623,6 @@
+ void ExperimentRecorder::stop_worker(std::string reason)
+ {
+ 	bool cleanup_failed = false;
+-	try
+-	{
+-		(void)camera_.stop_recording_and_wait();
+-	}
+-	catch (...)
+-	{
+-		cleanup_failed = true;
+-	}
+ 	try { force_writer_.stop(); }
+ 	catch (...) { cleanup_failed = true; }
+ 	try { motion_writer_.stop(); }
+@@ -690,11 +652,6 @@
+ 	{
+ 		error_.store(ExperimentRecordingError::MotionWriterFailed, std::memory_order_release);
+ 		stop_async("motion_writer_error");
+-	}
+-	else if (camera_.timing_writer_failed())
+-	{
+-		error_.store(ExperimentRecordingError::VideoFrameWriterFailed, std::memory_order_release);
+-		stop_async("video_frame_writer_error");
+ 	}
+ }
+ 
+@@ -858,16 +815,6 @@
+ 	return current >= baseline ? current - baseline : current;
+ }
+ 
+-void ExperimentRecorder::set_camera_preview(bool enabled)
+-{
+-	camera_.set_preview_enabled(enabled);
+-}
+-
+-Action4CameraSnapshot ExperimentRecorder::camera_snapshot() const
+-{
+-	return camera_.snapshot();
+-}
+-
+ ExperimentRecorderSnapshot ExperimentRecorder::snapshot() const
+ {
+ 	ExperimentRecorderSnapshot result;
+@@ -908,7 +855,6 @@
+ 	result.ads_duplicate_rejected =
+ 		force_ads_duplicate_rejected_.load(std::memory_order_acquire) +
+ 		motion_ads_duplicate_rejected_.load(std::memory_order_acquire);
+-	result.camera = camera_.snapshot();
+ 	return result;
+ }
+ 
+@@ -918,7 +864,6 @@
+ 	{
+ 		return;
+ 	}
+-	const Action4CameraSnapshot camera = camera_.snapshot();
+ 	AdsCommunicationStats ads_baseline{};
+ 	AdsCommunicationStats ads_latest{};
+ 	bool ads_metrics_available = false;
+@@ -946,7 +891,7 @@
+ 		: 0;
+ 	std::ostringstream json;
+ 	json << "{\n";
+-	json << "  \"schema_version\": 3,\n";
++	json << "  \"schema_version\": 4,\n";
+ 	json << "  \"experiment_name_raw\": \"" << json_escape(raw_name_utf8_) << "\",\n";
+ 	json << "  \"experiment_name_cleaned\": \"" << json_escape(wide_to_utf8(cleaned_name_)) << "\",\n";
+ 	json << "  \"utc_start\": \"" << format_utc_filetime(clock_.utc_start_filetime_100ns()) << "\",\n";
+@@ -1063,23 +1008,7 @@
+ 	json << "  \"stop_reason\": ";
+ 	if (final) json << "\"" << json_escape(stop_reason) << "\"";
+ 	else json << "null";
+-	json << ",\n";
+-	json << "  \"camera\": {\n";
+-	json << "    \"device_name\": \"OsmoAction4\",\n";
+-	json << "    \"state\": \"" << camera_state_text(camera.state) << "\",\n";
+-	json << "    \"input_format\": \"" << camera_format_text(camera.input_format) << "\",\n";
+-	json << "    \"output_codec\": \"H264\",\n";
+-	json << "    \"audio\": false,\n";
+-	json << "    \"width\": " << camera.width << ",\n";
+-	json << "    \"height\": " << camera.height << ",\n";
+-	json << "    \"fps_numerator\": " << camera.fps_numerator << ",\n";
+-	json << "    \"fps_denominator\": " << camera.fps_denominator << ",\n";
+-	json << "    \"frame_count\": " << camera.frame_count << ",\n";
+-	json << "    \"dropped_frames\": " << camera.dropped_frames << ",\n";
+-	json << "    \"timing_rows_dropped\": " << camera.timing_rows_dropped << ",\n";
+-	json << "    \"timing_writer_error\": " << (camera.timing_writer_error ? "true" : "false") << ",\n";
+-	json << "    \"error_code\": " << camera.error_code << "\n";
+-	json << "  }\n";
++	json << "\n";
+ 	json << "}\n";
+ 
+ 	std::FILE* fp = nullptr;
+--- before/B_从端电脑/工程/ADS项目/experiment_recorder.h
++++ after/B_从端电脑/工程/ADS项目/experiment_recorder.h
+@@ -1,6 +1,5 @@
+ #pragma once
+ 
+-#include "action4_camera.h"
+ #include "ads_communication.h"
+ #include "async_csv_writer.h"
+ 
+@@ -28,8 +27,7 @@
+ 	OpenMotionCsvFailed = 4,
+ 	ForceWriterFailed = 5,
+ 	MotionWriterFailed = 6,
+-	StopThreadFailed = 7,
+-	VideoFrameWriterFailed = 9
++	StopThreadFailed = 7
+ };
+ 
+ struct ExperimentStartInfo
+@@ -112,7 +110,6 @@
+ 	std::uint64_t motion_missed = 0;
+ 	std::uint64_t ads_pre_session_rejected = 0;
+ 	std::uint64_t ads_duplicate_rejected = 0;
+-	Action4CameraSnapshot camera;
+ };
+ 
+ class ExperimentRecorder
+@@ -131,8 +128,6 @@
+ 
+ 	void update_ads_communication_stats(const AdsCommunicationStats& stats);
+ 
+-	void set_camera_preview(bool enabled);
+-	Action4CameraSnapshot camera_snapshot() const;
+ 	ExperimentRecorderSnapshot snapshot() const;
+ 	bool is_recording() const { return state_.load(std::memory_order_acquire) == ExperimentRecordingState::Recording; }
+ 	const SessionClock& clock() const { return clock_; }
+@@ -173,8 +168,6 @@
+ 	std::wstring session_directory_;
+ 	std::wstring force_path_;
+ 	std::wstring motion_path_;
+-	std::wstring video_path_;
+-	std::wstring video_frames_path_;
+ 	std::wstring metadata_path_;
+ 	std::uint64_t force_sample_index_ = 0;
+ 	std::uint64_t motion_sample_index_ = 0;
+@@ -208,6 +201,5 @@
+ 
+ 	AsyncCsvWriter<ForceCsvRow> force_writer_;
+ 	AsyncCsvWriter<MotionCsvRow> motion_writer_;
+-	Action4CameraRecorder camera_;
+ 	std::thread stop_thread_;
+ };
+--- before/B_从端电脑/工程/ADS项目/main.cpp
++++ after/B_从端电脑/工程/ADS项目/main.cpp
+@@ -12,7 +12,6 @@
+ #include "remote_gateway.h"
+ #include "hik_camera_relay.h"
+ #include "startup_sequence.h"
+-#include "tcp_force_daq.h"
+ #include "vis_server.h"
+ 
+ #include <cmath>
+@@ -122,7 +121,6 @@
+ 	Handle handle_axis1(serial_axis1_handle);
+ 	Handle handle_axis6(serial_axis6_handle);
+ 	CADSComm ads;
+-	TcpForceDaqClient tcp_force_daq;
+ 	DeliveryTrackingController tracking_controller;
+ 	HandleNetDistance axis1_net_distance, axis6_net_distance;
+ 	ExperimentRecorder experiment_recorder;
+@@ -265,8 +263,6 @@
+ 	ctx.axis6_handle_filter = &axis6_handle_filter;
+ 	ctx.cfg = &cfg;
+ 	ctx.cyl = &cyl;
+-	ctx.force_sample_source = cfg.force_sample_source;
+-	ctx.tcp_force_daq = &tcp_force_daq;
+ 	ctx.pos = pos;
+ 	ctx.plc_act_pos = plc_act_pos;
+ 	ctx.plc_init_pos = plc_init_pos;
+@@ -605,7 +601,6 @@
+ 	double axis6_soft_limit_blocked_target_from_left_mm = 0.0;
+ 	ForceSampleFrame force_sample;
+ 	int loop_count = 0;
+-	DWORD force_sample_last_sample_ms = 0;
+ 	bool clean_force_monitor_enabled = false;
+ 	std::string force_feedback_diag_reason;
+ 	std::string force_sample_diag_reason;
+@@ -821,36 +816,9 @@
+ 
+ 	std::cout << "力反馈：关闭（按 F 键切换）。" << std::endl;
+ 
+-	bool force_tcp_zero_wait_logged = false;
+-	// TCP 采集卡是力输入源，不再与任何磁盘记录开关绑定。
+-	if (ctx.force_sample_source == ForceSampleSource::TCP_DAQ)
+-	{
+-		if (tcp_force_daq.start(cfg.tcp_force_daq_ip, cfg.tcp_force_daq_port, cfg.tcp_force_daq_local_ip))
+-		{
+-			std::cout << "力采样源：TCP_DAQ（" << cfg.tcp_force_daq_ip << ":" << cfg.tcp_force_daq_port
+-				<< "，本机绑定 " << cfg.tcp_force_daq_local_ip << "）。" << std::endl;
+-		}
+-		else
+-		{
+-			std::cout << "力采样源：TCP_DAQ 后台线程启动失败。" << std::endl;
+-		}
+-	}
+-
+ 	auto zero_force_sensor_impl = [&](const char* source) -> bool
+ 	{
+-		if (ctx.force_sample_source == ForceSampleSource::TCP_DAQ)
+-		{
+-			if (!force_tcp_zero_wait_logged)
+-			{
+-				std::cout << source
+-					<< "零点采集失败：本次F_direct仅由ADS/PLC计数标定，TCP_DAQ同源性尚未确认；"
+-					<< "不会对未验证的TCP数据启用力反馈。" << std::endl;
+-				force_tcp_zero_wait_logged = true;
+-			}
+-			return false;
+-		}
+-
+-		// ADS 为默认源时必须同步读取一帧，不能依赖旧采样节拍或力反馈开关。
++		// 零点采集必须同步读取一帧 ADS 数据，不能依赖旧采样节拍或力反馈开关。
+ 		ForceSampleFrame sampled_frame;
+ 		if (read_force_sample(sampled_frame))
+ 		{
+@@ -4288,79 +4256,35 @@
+ 		// 记录器直接消费 100 Hz ADS 快照序号；无效快照仍保留时间槽并由写入器归一化为 NaN。
+ 		experiment_recorder.update_ads_communication_stats(ads_stats);
+ 		experiment_recorder.poll_health();
+-		const std::int64_t recorder_now_qpc = experiment_recorder.clock().now_qpc();
+ 		const DWORD force_sample_now_ms = GetTickCount();
+ 		const bool force_data_consumer_active = experiment_recorder.is_recording() || ff.enabled ||
+ 			tracking_controller.compensation_enabled() || clean_force_monitor_enabled;
+-		if (ctx.force_sample_source == ForceSampleSource::ADS)
+-		{
+-			if (has_new_ads_snapshot)
+-			{
+-				ForceSampleFrame sampled_frame{};
+-				sampled_frame.ft_1_value = ads_snapshot.ft_1_value;
+-				sampled_frame.fn_1_value = ads_snapshot.fn_1_value;
+-				sampled_frame.fn_2_value = ads_snapshot.fn_2_value;
+-				sampled_frame.ft_2_value = ads_snapshot.ft_2_value;
+-				sampled_frame.ft_1_value_v = static_cast<double>(ads_snapshot.ft_1_value) / 1000.0;
+-				sampled_frame.fn_1_value_v = static_cast<double>(ads_snapshot.fn_1_value) / 1000.0;
+-				sampled_frame.fn_2_value_v = static_cast<double>(ads_snapshot.fn_2_value) / 1000.0;
+-				sampled_frame.ft_2_value_v = static_cast<double>(ads_snapshot.ft_2_value) / 1000.0;
+-				sampled_frame.axis1_pos_rel = ads_snapshot.act_pos_rel[0];
+-				sampled_frame.axis2_pos_rel = ads_snapshot.act_pos_rel[1];
+-				sampled_frame.tick_ms = force_sample_now_ms;
+-				sampled_frame.qpc_ticks = ads_snapshot.qpc_ticks;
+-				sampled_frame.valid = ads_snapshot.force_valid;
+-				force_sample = sampled_frame;
+-			}
+-			else if (ads_soft_hold_active)
+-			{
+-				force_sample.valid = false;
+-			}
+-		}
+-		else
+-		{
+-			DWORD force_sampling_period_ms = 20;
+-			if (tracking_controller.compensation_enabled() && !ff.enabled &&
+-				!clean_force_monitor_enabled && !experiment_recorder.is_recording())
+-			{
+-				force_sampling_period_ms = 50;
+-			}
+-			const bool should_sample_force = force_data_consumer_active &&
+-				(has_new_ads_snapshot || force_sample_last_sample_ms == 0 ||
+-				 (force_sample_now_ms - force_sample_last_sample_ms) >= force_sampling_period_ms);
+-			if (should_sample_force)
+-			{
+-				force_sample_last_sample_ms = force_sample_now_ms;
+-				ForceSampleFrame sampled_frame{};
+-				double tcp_raw_v[6] = {};
+-				std::uint64_t tcp_tick_ms = 0;
+-				std::int64_t tcp_qpc_ticks = 0;
+-				bool sample_ok = false;
+-				if (tcp_force_daq.get_latest_raw(tcp_raw_v, tcp_tick_ms, &tcp_qpc_ticks))
+-				{
+-					const std::int64_t max_age_ticks = experiment_recorder.clock().frequency() / 2;
+-					if (tcp_qpc_ticks > 0 && recorder_now_qpc - tcp_qpc_ticks <= max_age_ticks)
+-					{
+-						sampled_frame.fn_1_value_v = tcp_raw_v[0];
+-						sampled_frame.ft_1_value_v = tcp_raw_v[1];
+-						sampled_frame.axis1_pos_rel = plc_act_pos[0];
+-						sampled_frame.axis2_pos_rel = plc_act_pos[1];
+-						sampled_frame.tick_ms = static_cast<DWORD>(tcp_tick_ms);
+-						sampled_frame.qpc_ticks = tcp_qpc_ticks;
+-						sampled_frame.valid = true;
+-						sample_ok = true;
+-					}
+-				}
+-				force_sample = sampled_frame;
+-				force_sample.valid = sample_ok;
+-			}
++		if (has_new_ads_snapshot)
++		{
++			ForceSampleFrame sampled_frame{};
++			sampled_frame.ft_1_value = ads_snapshot.ft_1_value;
++			sampled_frame.fn_1_value = ads_snapshot.fn_1_value;
++			sampled_frame.fn_2_value = ads_snapshot.fn_2_value;
++			sampled_frame.ft_2_value = ads_snapshot.ft_2_value;
++			sampled_frame.ft_1_value_v = static_cast<double>(ads_snapshot.ft_1_value) / 1000.0;
++			sampled_frame.fn_1_value_v = static_cast<double>(ads_snapshot.fn_1_value) / 1000.0;
++			sampled_frame.fn_2_value_v = static_cast<double>(ads_snapshot.fn_2_value) / 1000.0;
++			sampled_frame.ft_2_value_v = static_cast<double>(ads_snapshot.ft_2_value) / 1000.0;
++			sampled_frame.axis1_pos_rel = ads_snapshot.act_pos_rel[0];
++			sampled_frame.axis2_pos_rel = ads_snapshot.act_pos_rel[1];
++			sampled_frame.tick_ms = force_sample_now_ms;
++			sampled_frame.qpc_ticks = ads_snapshot.qpc_ticks;
++			sampled_frame.valid = ads_snapshot.force_valid;
++			force_sample = sampled_frame;
++		}
++		else if (ads_soft_hold_active)
++		{
++			force_sample.valid = false;
+ 		}
+ 
+ 		if (force_data_consumer_active && !force_sample.valid)
+ 		{
+-			const std::string reason = ctx.force_sample_source == ForceSampleSource::TCP_DAQ
+-				? "力传感器告警：TCP_DAQ 尚无新鲜有效帧。"
+-				: "力数据无效：仅暂停力反馈并标记记录，位置控制继续。";
++			const std::string reason = "力数据无效：仅暂停力反馈并标记记录，位置控制继续。";
+ 			if (force_sample_diag_reason != reason) std::cout << reason << std::endl;
+ 			force_sample_diag_reason = reason;
+ 		}
+@@ -4384,25 +4308,11 @@
+ 				ForceCsvRow force_row{};
+ 				force_row.ads_snapshot_sequence = record_snapshot.attempt_sequence;
+ 				force_row.source_qpc_ticks = record_snapshot.qpc_ticks;
+-				if (ctx.force_sample_source == ForceSampleSource::ADS)
+-				{
+-					force_row.sample_valid = record_snapshot.force_valid;
+-					force_row.fn_1_raw_v = static_cast<double>(record_snapshot.fn_1_value) / 1000.0;
+-					force_row.ft_1_raw_v = static_cast<double>(record_snapshot.ft_1_value) / 1000.0;
+-					force_row.fn_2_raw_v = static_cast<double>(record_snapshot.fn_2_value) / 1000.0;
+-					force_row.ft_2_raw_v = static_cast<double>(record_snapshot.ft_2_value) / 1000.0;
+-				}
+-				else
+-				{
+-					const std::int64_t delta = force_sample.qpc_ticks >= record_snapshot.qpc_ticks
+-						? force_sample.qpc_ticks - record_snapshot.qpc_ticks
+-						: record_snapshot.qpc_ticks - force_sample.qpc_ticks;
+-					force_row.sample_valid = force_sample.valid && delta <= max_handle_delta_ticks;
+-					force_row.fn_1_raw_v = force_sample.fn_1_value_v;
+-					force_row.ft_1_raw_v = force_sample.ft_1_value_v;
+-					force_row.fn_2_raw_v = force_sample.fn_2_value_v;
+-					force_row.ft_2_raw_v = force_sample.ft_2_value_v;
+-				}
++				force_row.sample_valid = record_snapshot.force_valid;
++				force_row.fn_1_raw_v = static_cast<double>(record_snapshot.fn_1_value) / 1000.0;
++				force_row.ft_1_raw_v = static_cast<double>(record_snapshot.ft_1_value) / 1000.0;
++				force_row.fn_2_raw_v = static_cast<double>(record_snapshot.fn_2_value) / 1000.0;
++				force_row.ft_2_raw_v = static_cast<double>(record_snapshot.ft_2_value) / 1000.0;
+ 				force_row.calibrated_valid = force_row.sample_valid && cal_state.zeroed;
+ 				const CleanForce row_clean_force = force_row.calibrated_valid
+ 					? calculate_clean_force(
+@@ -4464,7 +4374,7 @@
+ 			}
+ 		}
+ 
+-		// PI 与磁盘记录无关；仅在 PI 自身运行时保留 20 Hz 力健康门控。
++		// PI 与磁盘记录无关；力采样失效时关闭位移补偿。
+ 		if (tracking_controller.compensation_enabled() && !force_sample.valid)
+ 		{
+ 			tracking_controller.disable_compensation();
+@@ -4715,18 +4625,6 @@
+ 			vs.clean_force_valid = clean_force_valid;
+ 			vs.clean_force_n = clean_force_valid ? clean_force.force_n : csv_nan;
+ 			vs.clean_handle_torque_nm = clean_force_valid ? clean_force.handle_torque_nm : csv_nan;
+-			vs.camera_state = static_cast<int>(recorder_snapshot.camera.state);
+-			vs.camera_input_format = static_cast<int>(recorder_snapshot.camera.input_format);
+-			vs.camera_width = recorder_snapshot.camera.width;
+-			vs.camera_height = recorder_snapshot.camera.height;
+-			vs.camera_fps_numerator = recorder_snapshot.camera.fps_numerator;
+-			vs.camera_fps_denominator = recorder_snapshot.camera.fps_denominator;
+-			vs.camera_preview_enabled = recorder_snapshot.camera.preview_enabled;
+-			vs.camera_recording = recorder_snapshot.camera.recording;
+-			vs.camera_recording_elapsed_us = recorder_snapshot.camera.recording_elapsed_us;
+-			vs.camera_frame_count = recorder_snapshot.camera.frame_count;
+-			vs.camera_dropped_frames = recorder_snapshot.camera.dropped_frames;
+-			vs.camera_error_code = recorder_snapshot.camera.error_code;
+ 			vs.physical_button_event_counter = 0;
+ 			vs.physical_button_event_code = 0;
+ 			vs.ads_state = static_cast<int>(ads_stats.state);
+@@ -4914,59 +4812,6 @@
+ 					}
+ 					break;
+ 				}
+-				case VisCommandType::RefreshHandles:
+-				{
+-					// 刷新只重建成功读取到的手柄基准；不改 PLC 目标，也不清除另一只手柄的缓存。
+-					const int refresh_mask = vcmd.param1 & 0x03;
+-					if (!handle_axis1.is_open()) (void)handle_axis1.init();
+-					if (!handle_axis6.is_open()) (void)handle_axis6.init();
+-					const bool refreshed_axis1 = (refresh_mask & 0x01) != 0 &&
+-						handle_axis1.is_open() && handle_axis1.poll();
+-					const bool refreshed_axis6 = (refresh_mask & 0x02) != 0 &&
+-						handle_axis6.is_open() && handle_axis6.poll();
+-					auto reset_axis1_baseline = [&]()
+-					{
+-						axis1_handle_filter.reset(handle_axis1.fJoints2[0], handle_axis1.fJoints2[1]);
+-						axis1_crawl.handle_ref = axis1_handle_filter.axis0_filtered;
+-						axis1_crawl.rot_ref = axis1_handle_filter.axis1_filtered;
+-						axis1_prev_linear_filtered = axis1_handle_filter.axis0_filtered;
+-						axis1_prev_rot_filtered = axis1_handle_filter.axis1_filtered;
+-					};
+-					auto reset_axis6_baseline = [&]()
+-					{
+-						axis6_handle_filter.reset(handle_axis6.fJoints2[0], handle_axis6.fJoints2[1]);
+-						axis6_crawl.handle_ref = axis6_handle_filter.axis0_filtered;
+-						axis6_crawl.rot_ref = axis6_handle_filter.axis1_filtered;
+-						axis6_prev_linear_filtered = axis6_handle_filter.axis0_filtered;
+-						axis6_prev_rot_filtered = axis6_handle_filter.axis1_filtered;
+-					};
+-					if (single_handle_mode)
+-					{
+-						if (refreshed_axis1 || refreshed_axis6)
+-						{
+-							Handle* active = refreshed_axis1 ? &handle_axis1 : &handle_axis6;
+-							axis1_handle_filter.reset(active->fJoints2[0], active->fJoints2[1]);
+-							axis6_handle_filter.reset(active->fJoints2[0], active->fJoints2[1]);
+-							axis1_crawl.handle_ref = axis1_handle_filter.axis0_filtered;
+-							axis1_crawl.rot_ref = axis1_handle_filter.axis1_filtered;
+-							axis6_crawl.handle_ref = axis6_handle_filter.axis0_filtered;
+-							axis6_crawl.rot_ref = axis6_handle_filter.axis1_filtered;
+-							axis1_prev_linear_filtered = axis1_handle_filter.axis0_filtered;
+-							axis6_prev_linear_filtered = axis6_handle_filter.axis0_filtered;
+-							axis1_prev_rot_filtered = axis1_handle_filter.axis1_filtered;
+-							axis6_prev_rot_filtered = axis6_handle_filter.axis1_filtered;
+-						}
+-					}
+-					else
+-					{
+-						if (refreshed_axis1) reset_axis1_baseline();
+-						if (refreshed_axis6) reset_axis6_baseline();
+-					}
+-					std::cout << "手柄刷新：582=" << (refreshed_axis1 ? "成功" : "保留原状态")
+-						<< "，587=" << (refreshed_axis6 ? "成功" : "保留原状态")
+-						<< "；不会直接产生运动。" << std::endl;
+-					break;
+-				}
+ 				case VisCommandType::RequestModeSwitch:
+ 					if (single_handle_mode && !ads_soft_hold_active && !planned_return.active())
+ 						single_handle_requested_mode = static_cast<GuidewireMode>(vcmd.param1);
+@@ -5049,30 +4894,7 @@
+ 						if (!force_sample_fresh)
+ 						{
+ 							ForceSampleFrame gate_sample{};
+-							bool gate_sample_ok = false;
+-							if (ctx.force_sample_source == ForceSampleSource::TCP_DAQ)
+-							{
+-								double tcp_raw_v[6] = {};
+-								std::uint64_t tcp_tick_ms = 0;
+-								std::int64_t tcp_qpc_ticks = 0;
+-								if (tcp_force_daq.get_latest_raw(tcp_raw_v, tcp_tick_ms, &tcp_qpc_ticks) &&
+-									tcp_qpc_ticks > 0 && gate_now_qpc >= tcp_qpc_ticks &&
+-									gate_now_qpc - tcp_qpc_ticks <= gate_max_age)
+-								{
+-									gate_sample.fn_1_value_v = tcp_raw_v[0];
+-									gate_sample.ft_1_value_v = tcp_raw_v[1];
+-									gate_sample.axis1_pos_rel = plc_act_pos[0];
+-									gate_sample.axis2_pos_rel = plc_act_pos[1];
+-									gate_sample.tick_ms = static_cast<DWORD>(tcp_tick_ms);
+-									gate_sample.qpc_ticks = tcp_qpc_ticks;
+-									gate_sample.valid = true;
+-									gate_sample_ok = true;
+-								}
+-							}
+-							else
+-							{
+-								gate_sample_ok = read_force_sample(gate_sample);
+-							}
++							const bool gate_sample_ok = read_force_sample(gate_sample);
+ 							force_sample = gate_sample;
+ 							force_sample.valid = gate_sample_ok;
+ 						}
+@@ -5130,9 +4952,6 @@
+ 				}
+ 				case VisCommandType::StopExperimentRecording:
+ 					experiment_recorder.stop_async("user_stop");
+-					break;
+-				case VisCommandType::SetCameraPreview:
+-					experiment_recorder.set_camera_preview(vcmd.param1 != 0);
+ 					break;
+ 				case VisCommandType::SetCleanForceMonitor:
+ 					clean_force_monitor_enabled = vcmd.param1 != 0;
+@@ -5437,7 +5256,6 @@
+ 	(void)ads_communication.wait_for_snapshot(ads_snapshot_sequence, 50, shutdown_snapshot);
+ 	clear_force_output();
+ 	experiment_recorder.stop_and_wait("program_exit");
+-	tcp_force_daq.stop();
+ 	arm_manual_ads.stop();
+ 	ads_communication.stop();
+ 	remote_gateway.stop();
+--- before/B_从端电脑/工程/ADS项目/plc_io.cpp
++++ after/B_从端电脑/工程/ADS项目/plc_io.cpp
+@@ -268,7 +268,7 @@
+ 		LARGE_INTEGER qpc_before{};
+ 		LARGE_INTEGER qpc_after{};
+ 		QueryPerformanceCounter(&qpc_before);
+-		// ADS 侧力采样用于 PLC 原始变量读取；TCP_DAQ 模式会在主循环中覆盖 ft_1/fn_1。
++		// 力采样统一读取 ADS 中的 PLC 原始变量。
+ 		double act_pos_snapshot[7] = { 0.0 };
+ 		const char* symbols[] = {
+ 			AdsSymbol::ft_1_value,
+--- before/B_从端电脑/工程/ADS项目/remote_gateway.cpp
++++ after/B_从端电脑/工程/ADS项目/remote_gateway.cpp
+@@ -1121,20 +1121,6 @@
+ 	{
+ 		push_cmd(VisCommandType::KeepArmCartesianAlive);
+ 		send_ack(sock, id, "done");
+-		return;
+-	}
+-
+-	if (name == "refresh_handles")
+-	{
+-		double mask_num = 0;
+-		if (!get_num(f, "success_mask", mask_num) || mask_num < 0 || mask_num > 3)
+-		{
+-			send_ack(sock, id, "rejected", "手柄刷新参数无效");
+-			return;
+-		}
+-		// 主循环会再次 poll 两只手柄；success_mask 只用于保留主端已确认的部分状态。
+-		push_cmd(VisCommandType::RefreshHandles, static_cast<int>(mask_num));
+-		send_ack(sock, id, "done", "手柄刷新请求已排队");
+ 		return;
+ 	}
+ 
+--- before/B_从端电脑/工程/ADS项目/tools/check_master_layout.py
++++ after/B_从端电脑/工程/ADS项目/tools/check_master_layout.py
+@@ -31,9 +31,6 @@
+  static int CountMessages(DependencyObject o){int n=0;var g=o as GroupBox;
+  if(g!=null && Convert.ToString(g.Header)=="消息")n++;
+  for(int i=0;i<VisualTreeHelper.GetChildrenCount(o);i++)n+=CountMessages(VisualTreeHelper.GetChild(o,i));return n;}
+- static TextBlock RefreshText(DependencyObject o){var t=o as TextBlock;
+- if(t!=null){var b=BindingOperations.GetBinding(t,TextBlock.TextProperty);if(b!=null && b.Path.Path=="HandleRefreshText")return t;}
+- for(int i=0;i<VisualTreeHelper.GetChildrenCount(o);i++){var found=RefreshText(VisualTreeHelper.GetChild(o,i));if(found!=null)return found;}return null;}
+  [STAThread] static int Main(){MainWindow w=null;try{
+  var app=new Application();
+  app.Resources.MergedDictionaries.Add(new ResourceDictionary{Source=new Uri("/MasterConsole;component/Themes/LightClinical.xaml",UriKind.Relative)});
+@@ -51,12 +48,6 @@
+   Check(Math.Abs(model.ActualWidth-parent.ActualWidth)<1,"model uses full display width at "+width+" ("+model.ActualWidth+" DIP)");
+   Check(model.ActualHeight>100,"model height remains usable");
+  }
+- var vm=w.DataContext;
+- vm.GetType().GetField("_handleRefreshText",flags).SetValue(vm,"正在刷新…");
+- w.DataContext=null;w.DataContext=vm;w.UpdateLayout();Pump(50);
+- var feedback=RefreshText(w);var feedbackParent=(FrameworkElement)VisualTreeHelper.GetParent(feedback);
+- Check(feedback.ActualWidth>100 && feedback.ActualWidth<feedbackParent.ActualWidth && feedback.TextWrapping==TextWrapping.Wrap,
+-       "refresh feedback has bounded wrapping width next to button");
+  typeof(MainWindow).GetMethod("SetDisplayLayout",flags).Invoke(w,new object[]{"model"});w.UpdateLayout();Pump(50);
+  Check(Math.Abs(model.ActualWidth-((FrameworkElement)VisualTreeHelper.GetParent(model)).ActualWidth)<1,"model emphasis layout also has no empty log column");
+  Check(model.PublishDsaArmState(new DsaArmDisplayState(new double[7],new double[2],0,0)),"model state input still accepted");
+--- before/B_从端电脑/工程/ADS项目/tools/remote_recovery_test.cpp
++++ after/B_从端电脑/工程/ADS项目/tools/remote_recovery_test.cpp
+@@ -67,6 +67,13 @@
+     command("prepare_position");
+     check(gateway.cmd_q_.empty() && sent.find("开始控制") != std::string::npos,
+           "already-prepared PLC points operator to start control");
++    // 已移除的旧刷新命令不能重新建基准或排入执行队列。
++    fields["success_mask"].type = RemoteJsonValue::Number;
++    fields["success_mask"].n = 3;
++    command("refresh_handles");
++    check(gateway.cmd_q_.empty() && pending.empty() &&
++          sent.find("rejected") != std::string::npos && sent.find("未知命令") != std::string::npos,
++          "removed handle refresh is rejected without queued commands");
+     state.self_check_done = false;
+     state.selfcheck_status = 1;
+     command("start_control");
+--- before/B_从端电脑/工程/ADS项目/tools/run_dual_control_test.py
++++ after/B_从端电脑/工程/ADS项目/tools/run_dual_control_test.py
+@@ -5,11 +5,12 @@
+ import os
+ import re
+ import subprocess
++import sys
+ import tempfile
+ 
+ project = Path(__file__).resolve().parents[1]
+ package = project.parents[2]
+-report = package / '验证记录/双手柄修正_20261011'
++report = Path(sys.argv[1]) if len(sys.argv) > 1 else package / '验证记录/双手柄修正_20261011'
+ report.mkdir(parents=True, exist_ok=True)
+ source = (project / 'main.cpp').read_text(encoding='utf-8-sig')
+ header = (project / 'control_types.h').read_text(encoding='utf-8-sig')
+@@ -29,7 +30,7 @@
+     'save': between(source, '\t\tif (spacing_recovery_button_press_edge)', '\t\t// 该映射只属于'),
+     'exit': between(source, '\t\t\t\tconst ModeSelection restore_selection =', '\t\t\t\tstd::cout << "屈曲恢复退出后'),
+     'switch': between(source, '\t\tif (!single_handle_mode && axis1_reverse_pressed != axis1_reverse_pressed_prev)', '\t\t// 单手柄调试保留'),
+-    'filter': between(header, 'struct HandleFilterState', 'enum class ForceSampleSource'),
++    'filter': between(header, 'struct HandleFilterState', 'struct ControlConfig'),
+ }
+ fields = set(re.findall(r'cfg(?:\.|->)(\w+)', parts['motion'] + parts['windows']))
+ fields |= {'linear_increment_noise_deadband_mm', 'axis3_delivery_stop_from_left_mm',
+--- before/B_从端电脑/工程/ADS项目/vis_server.h
++++ after/B_从端电脑/工程/ADS项目/vis_server.h
+@@ -53,7 +53,7 @@
+ 	// axis6 当前软限位阻断状态。仅来自上位机，不增加 PLC ADS 契约。
+ 	bool axis6_soft_limit_hold;
+ 
+-	// 统一实验记录、纯净力与 Action 4 状态。
++	// 统一实验记录与纯净力状态。
+ 	int recording_state;
+ 	int recording_error;
+ 	std::uint64_t recording_elapsed_us;
+@@ -65,6 +65,7 @@
+ 	bool clean_force_valid;
+ 	double clean_force_n;
+ 	double clean_handle_torque_nm;
++	// 预留旧版相机状态字段，保持管道布局兼容；当前均为零。
+ 	int camera_state;
+ 	int camera_input_format;
+ 	int camera_width;
+@@ -163,7 +164,7 @@
+ 	SetAxis1PostReturnLead = 24, // param1=轴1前10 mm比例映射量，单位 mm×1000，范围 [0, 5]
+ 	StartExperimentRecording = 25, // UTF-8 负载为实验名称
+ 	StopExperimentRecording = 26,
+-	SetCameraPreview = 27, // param1: 0=关闭，1=打开
++	// 命令号 27 已停用，保留编号。
+ 	SetCleanForceMonitor = 28, // param1: 0=关闭，1=打开
+ 	SetArmManualEnable = 29, // param1: 0=关闭，1=开启
+ 	SetArmAxisEnable = 30, // param1: 轴号1..5，param2: 0=断电，1=上电
+@@ -184,7 +185,7 @@
+ 	KeepArmCartesianAlive = 45,
+ 	SetSelfCheckAxisPos = 46, // param1=轴号，param2=距左限位毫米×100
+ 	StartSelfCheck = 47,
+-	RefreshHandles = 48, // param1: 本次主端成功读取位掩码，bit0=582，bit1=587
++	// 命令号 48 已停用，保留编号。
+ };
+ 
+ #pragma pack(push, 1)
+--- before/B_从端电脑/工程/docs/guides/实验记录与相机说明.md
++++ after/B_从端电脑/工程/docs/guides/实验记录与相机说明.md
+@@ -1,300 +1,304 @@
+-# 实验记录与 Action 4 相机说明
+-
+-更新时间：2026-08-03
+-适用模块：`ads_communication.*`、`experiment_recorder.*`、`async_csv_writer.h`、`action4_camera.*`、`main.cpp`、`AdsControlUI`
+-
+-## 1. 功能边界
+-
+-统一实验记录由 WPF 的“开始实验记录”和“停止实验记录”唯一控制。一次会话可同时包含：
+-
+-```text
+-force.csv
+-motion.csv
+-video.mp4                 # 相机成功时
+-video_frames.csv          # 相机成功时
+-force_transition_001.csv  # 会话中启动力过渡实验时
+-session.json
+-```
+-
+-开始记录不要求控制激活、力反馈开启、PI 开启、已经调零或相机在线。硬性条件只有：
+-
+-1. WPF 已连接 C++ 命名管道；
+-2. C++ 能创建会话目录；
+-3. `force.csv` 和 `motion.csv` 能打开并写入表头。
+-
+-记录开始/停止不改变机器人控制、力反馈开关、主从位移 PI、运动模式或力过渡状态机。停止统一记录时，正在运行的力过渡实验继续，只关闭其专用 CSV。
+-
+-## 2. 操作步骤
+-
+-1. 启动 `ADS.exe`，再启动 `AdsControlUI.exe`，确认界面已连接。
+-2. 在主界面“实验记录”区输入实验名称；可留空。
+-3. 需要检查视野时先打开“相机预览”，预览不要求先开始记录。
+-4. 点击“开始实验记录”。界面进入“记录中”即表示两个主 CSV 已创建；相机状态单独显示。
+-5. 实验结束点击“停止实验记录”。等待“正在停止并封装”回到“空闲”后，再关闭程序或移动文件。
+-
+-`Starting/Recording/Stopping` 期间重复开始/停止请求会被 UI 禁用或被 C++ 忽略。
+-
+-## 3. 会话目录与名称
+-
+-目录固定创建在 C++ 当前工作目录下：
+-
+-```text
+-records\YYYYMMDD\HHMMSS_实验名称[_001]\
+-```
+-
+-名称规则：
+-
+-- WPF 以 UTF-8 发送，C++ 转为 UTF-16 并使用宽字符 Windows API；
+-- 保留中文；控制字符和 `< > : " / \ | ? *` 替换为 `_`；
+-- 去掉首尾空白、末尾空白和末尾点号；
+-- 空名称使用 `session`；
+-- `CON/PRN/AUX/NUL/COM1..9/LPT1..9` 及带扩展名形式前置 `_`；
+-- 最多保留 64 个 UTF-16 code unit，不在高代理项中间截断；
+-- 同一秒同名目录已存在时依次使用 `_001`、`_002`，不覆盖旧数据。
+-
+-WPF 输入框使用外置标签和原生 `TextBox`，`MaxLength=64`。记录期间锁定编辑；中文 IME、退格、Delete、选择替换和撤销由 WPF 原生文本编辑处理。
+-
+-## 4. 统一时间轴
+-
+-`SessionClock` 在会话开始时记录：
+-
+-- `QueryPerformanceCounter` anchor；
+-- QPC frequency；
+-- 对应的 UTC FILETIME 起点。
+-
+-每行只写 `elapsed_us`，UTC 起止时间和 QPC 参数写入 `session.json`。这样避免每个控制拍做 UTC 转换。
+-
+-100 Hz ADS 通信线程在整次快速 Sum Read 调用前后各取一次 QPC，使用中点作为该统一快照的采样时刻。TCP DAQ 使用采集 worker 收到完整帧时的 QPC。视频使用 Source Reader 回调时 QPC，并保留设备源时间戳。
+-
+-力和位置记录由同一组主机侧 ADS 快照序号驱动：
+-
+-- ADS 快速快照：100 Hz，QPC 绝对截止时间约每 10 ms 一次；
+-- `force.csv`：每个 ADS 尝试序号最多写一行，目标 100 Hz；
+-- `motion.csv`：取偶数 `attempt_sequence`，目标 50 Hz、约 20 ms；
+-- 主循环一次排空自上拍以来的主机侧快照队列，不伪造历史数据；队列溢出、序号空洞、会话开始前帧和重复帧均单独计数。
+-
+-快照序号是 C++ `AdsFastSnapshot::attempt_sequence`，不是 PLC `write_sequence`。PLC 不为记录器维护环形缓冲；主机侧仅用 2048 帧队列跨越控制主循环与 CSV 入队节奏。30 fps 视频帧间隔约 33.3 ms，因此只能保证帧时间戳映射，不能把真实曝光事件描述为小于 10 ms 的曝光时间分辨率。
+-
+-## 5. force.csv
+-
+-固定表头：
+-
+-```text
+-sample_index,elapsed_us,sample_valid,calibrated_valid,
+-fn_1_raw_v,ft_1_raw_v,fn_1_zero_v,ft_1_zero_v,
+-clean_force_n,clean_handle_torque_nm,
+-fn_2_raw_v,ft_2_raw_v,fn_2_zero_v,ft_2_zero_v,
+-clean_force_2_n,clean_handle_torque_2_nm
+-```
+-
+-纯净值严格定义为：
+-
+-```text
+-clean_force_n = 0.701461986 * (fn_raw_v - fn_zero_v)
+-clean_handle_torque_nm = 0.620117055 * (ft_raw_v - ft_zero_v) * 3.0 * 0.001
+-clean_force_2_n = 1.139996290 * (fn_2_raw_v - fn_2_zero_v)
+-clean_handle_torque_2_nm = 0.130548347 * (ft_2_raw_v - ft_2_zero_v) * 3.0 * 0.001
+-```
+-
+-四式分别使用 FN1、FT1、FN2、FT2 的 `F_direct` 斜率。CSV 保留两组传感器的原始 V 和装机零点 V；固定截距已在 `F(raw)-F(raw_zero)` 中抵消。
+-
+-纯净值不经过重力补偿、串扰矩阵、`k_feedback`、死区、限幅、轴向符号、模式门控、快退锁存、PI 或力过渡处理。
+-
+-有效性语义：
+-
+-| 情况 | `sample_valid` | `calibrated_valid` | 原始电压 | 零点/纯净值 |
+-|---|---:|---:|---|---|
+-| 采样成功且已调零 | 1 | 1 | 数值 | 数值 |
+-| 采样成功但未调零 | 1 | 0 | 数值 | `NaN` |
+-| ADS/TCP 采样失败或过旧 | 0 | 0 | `NaN` | `NaN` |
+-
+-ADS 为力源时，`force.csv` 直接消费每个 100 Hz 快速快照，不再从更高频/更低频的“最新值”二次截取。失败快照仍保留该时刻，写成 `sample_valid=0` 和 `NaN`；恢复后的新快照不会回填故障空洞。TCP_DAQ 为显式力源时，行时刻仍由 ADS 快照槽确定，仅当最近 TCP 帧与该时刻足够接近才标记有效。仅使用 TCP 回退源、只有 PI 开启且没有统一会话时，力健康消费节流为约 20 Hz 且不产生文件；ADS 快速 Sum Read 本身仍维持 100 Hz。
+-
+-## 6. motion.csv
+-
+-固定表头：
+-
+-```text
+-sample_index,elapsed_us,position_valid,
+-axis1_from_left_mm..axis7_from_left_mm,
+-axis1_handle_valid,
+-axis1_handle_linear_raw,axis1_handle_linear_filtered,
+-axis1_handle_rotation_raw,axis1_handle_rotation_filtered,
+-axis6_handle_valid,
+-axis6_handle_linear_raw,axis6_handle_linear_filtered,
+-axis6_handle_rotation_raw,axis6_handle_rotation_filtered
+-```
+-
+-7 轴位置来自同一份 PLC 快照：
+-
+-```text
+-axisN_from_left_mm = Act_pos[N] + init_pos[N] - leftlimit[N]
+-```
+-
+-7 轴位置直接来自偶数序号的 100 Hz 统一快照，不额外补做 ADS 读取。读取失败时 `position_valid=0` 且 7 轴为 `NaN`。两只逻辑手柄按 QPC 选取距离该位置快照最近、相差不超过 10 ms 的输入；没有足够接近的手柄样本时对应 `handle_valid=0`，其四个值为 `NaN`。
+-
+-单手柄模式下两个逻辑角色可映射到同一个已就绪物理输入；实际序列号和 `single_handle_mode` 写在 `session.json`。
+-
+-## 7. 力过渡专用表
+-
+-力过渡状态机与磁盘解耦：
+-
+-- 没有统一会话时可正常运行，不创建文件；
+-- 只有在“开始力过渡实验”的瞬间统一会话已经处于 Recording，才创建 `force_transition_001.csv`；
+-- 会话在力过渡中途才开始时不补建残缺表；
+-- 统一会话在力过渡中途停止时专用表关闭，状态机继续；
+-- 同一会话后续实验使用 `_002`、`_003`。
+-
+-表头：
+-
+-```text
+-elapsed_us,valid,trial_id,velocity_level,repeat_in_level,
+-phase_code,phase_elapsed_ms,v_ratio,axis1_from_left_mm,
+-clean_force_n,clean_handle_torque_nm
+-```
+-
+-`valid=0` 时位置或纯净力不可用，相应测量值写 `NaN`。相位编号见 [力过渡实验使用说明.md](力过渡实验使用说明.md)。
+-
+-## 8. 异步写盘与故障
+-
+-`AsyncCsvWriter<Row>` 是单生产者/单消费者环形队列。控制线程只复制一行并移动原子 head；后台线程负责文件写入、每 64 行 flush、停止排空和错误检测。
+-
+-行为约定：
+-
+-- 队列满时丢当前行并累计 dropped；
+-- `force.csv`、`motion.csv`、力过渡专用表或 `video_frames.csv` 发生致命写盘错误时，统一会话自动进入 Stopping；
+-- 自动停止会尽力封装已有 MP4，并写最终 `session.json`；
+-- 自动停止不关闭 PI、力反馈或机器人运动控制；
+-- 程序正常退出复用 `stop_and_wait("program_exit")`，等待 CSV 排空和 MP4 Finalize。
+-
+-两个主 CSV 在开始阶段任一失败时，本次启动回滚，不留下空会话目录。相机打开、编码或设备错误不影响两个主 CSV，会话继续。
+-
+-ADS 单拍失败、软保持和自动重连不会自动停止统一会话。记录器继续按快照尝试序号写入无效行，并在 `session.json` 记录失败、重连和序号空洞。PLC 重启/应用重载会让运动控制进入更严格的人工恢复锁定，但记录会话仍保持开启，便于保留故障前后证据；现场可根据实验规程手动停止会话。
+-
+-## 9. Action 4 探测与录像
+-
+-### 9.1 设备定位
+-
+-Media Foundation 枚举视频采集设备，优先匹配 symbolic link 中的：
+-
+-```text
+-VID_2CA3&PID_0023
+-```
+-
+-找不到 VID/PID 时按 friendly name `OsmoAction4` 备用匹配。找不到设备时状态为 `Missing`，UI 显示：
+-
+-```text
+-无法找到摄像设备：OsmoAction4
+-```
+-
+-会话仍记录两个主 CSV，不创建空 MP4。
+-
+-### 9.2 格式选择
+-
+-候选顺序：
+-
+-1. 1920x1080@30 H.264；
+-2. 1920x1080@30 MJPEG；
+-3. 1280x720@30 H.264/MJPEG/可解码格式。
+-
+-H.264 候选必须带 `MF_MT_MPEG_SEQUENCE_HEADER`，并在最多 60 个输入样本内出现首个 clean point；失败后尝试下一候选。MJPEG/720p 候选也会预读首个有效样本，预读样本保留为正式首帧。
+-
+-当前输出固定为：
+-
+-```text
+-MP4 / H.264 / 无音频 / 20 Mbps / 实际输入分辨率与 30 fps
+-```
+-
+-相机本体的防抖、视场和其他成像设置由相机端负责。程序通过 UVC/Media Foundation 录制，不调用 DJI 移动端控制 API，也不能把相机本体的“2.7K 4:3”菜单设置强制写入 UVC 流。
+-
+-### 9.3 当前 H.264 管线限制
+-
+-代码会优先选择并验证相机原生 H.264 候选，但当前 Source Reader 随后统一解码为 RGB32，再由 Sink Writer 编码成 H.264。也就是说，**目前不是压缩码流直接复用**。
+-
+-这保证了同一采集流可同时用于 1280x720 BGRA 预览和 MP4，但会增加相机 worker 的 CPU/GPU 编解码负担。`video_frames.csv` 的 `keyframe` 是输入样本 clean-point 标志，在转码路径下不等同于最终 MP4 编码器的精确关键帧位置。若后续必须实现原生 H.264 直通，需要增加独立 H.264 解码支路供预览，并在 Action 4 实机上验证 SPS/PPS、时间戳和 MP4 sink input type。
+-
+-## 10. video_frames.csv
+-
+-表头：
+-
+-```text
+-frame_index,source_timestamp_100ns,callback_elapsed_us,keyframe,discontinuity
+-```
+-
+-- `source_timestamp_100ns`：Media Foundation 源时间戳；
+-- `callback_elapsed_us`：读取该帧时映射到统一会话 QPC 的时间；
+-- `keyframe`：输入样本 clean-point 标志；
+-- `discontinuity`：输入 discontinuity 或 stream tick；
+-- 相邻源时间戳超过 1.5 帧时累计 `dropped_frames`；
+-- 旁车队列丢行和 writer 错误另写入 `session.json`。
+-
+-写 MP4 前将源时间戳减去首帧时间，保证文件从 0 开始。每个输入样本设置 30 fps 帧时长。
+-
+-## 11. 相机状态与拔线行为
+-
+-状态枚举：
+-
+-```text
+-Closed / Opening / Previewing / Recording / Missing / Disconnected / Error
+-```
+-
+-录像中拔线：
+-
+-1. 停止接收新帧；
+-2. 尽力 Finalize 已写 MP4 和关闭旁车；
+-3. 状态保持 `Disconnected`，两个主 CSV 继续；
+-4. 当前会话不自动重连，不创建第二视频段；
+-5. 下一会话或重新打开预览才重新探测。
+-
+-正常停止会等待编码器启动中的竞态完成，再等待 MP4 Finalize，避免 UI 已回到 Idle 但后台仍在写上一个会话文件。
+-
+-## 12. 预览
+-
+-预览可独立打开。C++ 将采集帧缩放为 1280x720 BGRA32，写入版本化双缓冲共享内存并触发命名事件；WPF 复核写前/写后 sequence，避免撕裂。
+-
+-预览支持窗口最大化、1x 到 8x 鼠标滚轮缩放、左键拖拽和平移、一键适应居中。变换不修改录制原图。
+-
+-关闭预览窗口：
+-
+-- 未录像：释放相机采集；
+-- 正在录像：停止发布预览帧，录像继续。
+-
+-共享内存布局和名称见 [可视化界面架构说明.md](可视化界面架构说明.md)。
+-
+-## 13. session.json
+-
+-最终元数据包含：
+-
+-- 原始/清洗后实验名称；
+-- UTC 起止时间、QPC anchor/frequency；
+-- 力/位置目标采样率（100/50 Hz）；
+-- axis1/axis6 逻辑手柄序列号和单手柄模式；
+-- 两个主 writer、力过渡 writer 的 dropped 和调度 missed；
+-- ADS 连接终态、实际频率、快照数据龄、RTT、失败/连续失败、重连、PLC 重启和主机快照队列丢帧；
+-- force/motion/力过渡各自的首末主机快照序号、接受数、无效数、会话前拒绝、重复拒绝和序号空洞；
+-- 停止原因；
+-- 相机终态、原生输入格式、输出 H.264/无音频、实际宽高帧率；
+-- 视频帧数、源时间戳丢帧数、旁车丢行、旁车错误和 HRESULT。
+-
+-记录启动时先写一份 `utc_end=null` 的元数据；停止封装完成后覆盖为最终版本。
+-
+-## 14. 已完成验证与实机待验
+-
+-2026-07-29 已完成（统一会话/相机基础版）：
+-
+-- C++ 与 WPF x64 Debug/Release 构建；
+-- 协议 C++ `static_assert` 和 C# wire size 校验；
+-- 无相机合成会话：中文/非法字符、空名称、保留名、`_001`；
+-- `force.csv` 16 列、`motion.csv` 20 列和 `NaN` 语义；
+-- 旧版节拍冒烟曾验证 CSV 时间戳单调；其行数和间隔不作为当前 100/50 Hz 快照版的验收依据；
+-- 相机缺失时 `session.json` 保持 `Missing`，不生成空视频。
+-
+-当前版本仍需完成：
+-
+-1. 在真实 PLC 上核对 `force.csv` 约 100 Hz、`motion.csv` 约 50 Hz，QPC 单调且没有会话前帧或重复序号混入；
+-2. 人工制造单拍失败、超过 100 ms 断线重连和 PLC 重启，核对 CSV 空洞及 `session.json.ads` 计数；
+-3. 1080p/30 预览和实际输入格式回退；
+-4. MP4 可解码、无音频、分辨率/帧率/时长；
+-5. 预览缩放、平移、关闭预览后录像继续；
+-6. 录像中拔线后的 MP4 Finalize 和 `Disconnected`；
+-7. 15 分钟 CPU、内存、CSV 队列和视频帧压力测试。
++# 实验记录与 Action 4 相机说明
++> 当前版本（2026-10-13）：DJI Action 4 录像/预览及 TCP 传感器采集已从活动构建中移除；力数据统一来自 ADS/PLC，主端已移除“刷新手柄”按钮及功能。旧相机源码与协议预留字段仅作兼容归档。
++>
++> 当前统一会话只生成 `force.csv`、`motion.csv`、`session.json`，不生成 `video.mp4` 或 `video_frames.csv`；海康监控转发仍保留。以下相机/TCP章节是历史资料。
++
++
++更新时间：2026-08-03
++适用模块：`ads_communication.*`、`experiment_recorder.*`、`async_csv_writer.h`、`action4_camera.*`、`main.cpp`、`AdsControlUI`
++
++## 1. 功能边界
++
++统一实验记录由 WPF 的“开始实验记录”和“停止实验记录”唯一控制。一次会话可同时包含：
++
++```text
++force.csv
++motion.csv
++video.mp4                 # 相机成功时
++video_frames.csv          # 相机成功时
++force_transition_001.csv  # 会话中启动力过渡实验时
++session.json
++```
++
++开始记录不要求控制激活、力反馈开启、PI 开启、已经调零或相机在线。硬性条件只有：
++
++1. WPF 已连接 C++ 命名管道；
++2. C++ 能创建会话目录；
++3. `force.csv` 和 `motion.csv` 能打开并写入表头。
++
++记录开始/停止不改变机器人控制、力反馈开关、主从位移 PI、运动模式或力过渡状态机。停止统一记录时，正在运行的力过渡实验继续，只关闭其专用 CSV。
++
++## 2. 操作步骤
++
++1. 启动 `ADS.exe`，再启动 `AdsControlUI.exe`，确认界面已连接。
++2. 在主界面“实验记录”区输入实验名称；可留空。
++3. 需要检查视野时先打开“相机预览”，预览不要求先开始记录。
++4. 点击“开始实验记录”。界面进入“记录中”即表示两个主 CSV 已创建；相机状态单独显示。
++5. 实验结束点击“停止实验记录”。等待“正在停止并封装”回到“空闲”后，再关闭程序或移动文件。
++
++`Starting/Recording/Stopping` 期间重复开始/停止请求会被 UI 禁用或被 C++ 忽略。
++
++## 3. 会话目录与名称
++
++目录固定创建在 C++ 当前工作目录下：
++
++```text
++records\YYYYMMDD\HHMMSS_实验名称[_001]\
++```
++
++名称规则：
++
++- WPF 以 UTF-8 发送，C++ 转为 UTF-16 并使用宽字符 Windows API；
++- 保留中文；控制字符和 `< > : " / \ | ? *` 替换为 `_`；
++- 去掉首尾空白、末尾空白和末尾点号；
++- 空名称使用 `session`；
++- `CON/PRN/AUX/NUL/COM1..9/LPT1..9` 及带扩展名形式前置 `_`；
++- 最多保留 64 个 UTF-16 code unit，不在高代理项中间截断；
++- 同一秒同名目录已存在时依次使用 `_001`、`_002`，不覆盖旧数据。
++
++WPF 输入框使用外置标签和原生 `TextBox`，`MaxLength=64`。记录期间锁定编辑；中文 IME、退格、Delete、选择替换和撤销由 WPF 原生文本编辑处理。
++
++## 4. 统一时间轴
++
++`SessionClock` 在会话开始时记录：
++
++- `QueryPerformanceCounter` anchor；
++- QPC frequency；
++- 对应的 UTC FILETIME 起点。
++
++每行只写 `elapsed_us`，UTC 起止时间和 QPC 参数写入 `session.json`。这样避免每个控制拍做 UTC 转换。
++
++100 Hz ADS 通信线程在整次快速 Sum Read 调用前后各取一次 QPC，使用中点作为该统一快照的采样时刻。TCP DAQ 使用采集 worker 收到完整帧时的 QPC。视频使用 Source Reader 回调时 QPC，并保留设备源时间戳。
++
++力和位置记录由同一组主机侧 ADS 快照序号驱动：
++
++- ADS 快速快照：100 Hz，QPC 绝对截止时间约每 10 ms 一次；
++- `force.csv`：每个 ADS 尝试序号最多写一行，目标 100 Hz；
++- `motion.csv`：取偶数 `attempt_sequence`，目标 50 Hz、约 20 ms；
++- 主循环一次排空自上拍以来的主机侧快照队列，不伪造历史数据；队列溢出、序号空洞、会话开始前帧和重复帧均单独计数。
++
++快照序号是 C++ `AdsFastSnapshot::attempt_sequence`，不是 PLC `write_sequence`。PLC 不为记录器维护环形缓冲；主机侧仅用 2048 帧队列跨越控制主循环与 CSV 入队节奏。30 fps 视频帧间隔约 33.3 ms，因此只能保证帧时间戳映射，不能把真实曝光事件描述为小于 10 ms 的曝光时间分辨率。
++
++## 5. force.csv
++
++固定表头：
++
++```text
++sample_index,elapsed_us,sample_valid,calibrated_valid,
++fn_1_raw_v,ft_1_raw_v,fn_1_zero_v,ft_1_zero_v,
++clean_force_n,clean_handle_torque_nm,
++fn_2_raw_v,ft_2_raw_v,fn_2_zero_v,ft_2_zero_v,
++clean_force_2_n,clean_handle_torque_2_nm
++```
++
++纯净值严格定义为：
++
++```text
++clean_force_n = 0.701461986 * (fn_raw_v - fn_zero_v)
++clean_handle_torque_nm = 0.620117055 * (ft_raw_v - ft_zero_v) * 3.0 * 0.001
++clean_force_2_n = 1.139996290 * (fn_2_raw_v - fn_2_zero_v)
++clean_handle_torque_2_nm = 0.130548347 * (ft_2_raw_v - ft_2_zero_v) * 3.0 * 0.001
++```
++
++四式分别使用 FN1、FT1、FN2、FT2 的 `F_direct` 斜率。CSV 保留两组传感器的原始 V 和装机零点 V；固定截距已在 `F(raw)-F(raw_zero)` 中抵消。
++
++纯净值不经过重力补偿、串扰矩阵、`k_feedback`、死区、限幅、轴向符号、模式门控、快退锁存、PI 或力过渡处理。
++
++有效性语义：
++
++| 情况 | `sample_valid` | `calibrated_valid` | 原始电压 | 零点/纯净值 |
++|---|---:|---:|---|---|
++| 采样成功且已调零 | 1 | 1 | 数值 | 数值 |
++| 采样成功但未调零 | 1 | 0 | 数值 | `NaN` |
++| ADS/TCP 采样失败或过旧 | 0 | 0 | `NaN` | `NaN` |
++
++ADS 为力源时，`force.csv` 直接消费每个 100 Hz 快速快照，不再从更高频/更低频的“最新值”二次截取。失败快照仍保留该时刻，写成 `sample_valid=0` 和 `NaN`；恢复后的新快照不会回填故障空洞。TCP_DAQ 为显式力源时，行时刻仍由 ADS 快照槽确定，仅当最近 TCP 帧与该时刻足够接近才标记有效。仅使用 TCP 回退源、只有 PI 开启且没有统一会话时，力健康消费节流为约 20 Hz 且不产生文件；ADS 快速 Sum Read 本身仍维持 100 Hz。
++
++## 6. motion.csv
++
++固定表头：
++
++```text
++sample_index,elapsed_us,position_valid,
++axis1_from_left_mm..axis7_from_left_mm,
++axis1_handle_valid,
++axis1_handle_linear_raw,axis1_handle_linear_filtered,
++axis1_handle_rotation_raw,axis1_handle_rotation_filtered,
++axis6_handle_valid,
++axis6_handle_linear_raw,axis6_handle_linear_filtered,
++axis6_handle_rotation_raw,axis6_handle_rotation_filtered
++```
++
++7 轴位置来自同一份 PLC 快照：
++
++```text
++axisN_from_left_mm = Act_pos[N] + init_pos[N] - leftlimit[N]
++```
++
++7 轴位置直接来自偶数序号的 100 Hz 统一快照，不额外补做 ADS 读取。读取失败时 `position_valid=0` 且 7 轴为 `NaN`。两只逻辑手柄按 QPC 选取距离该位置快照最近、相差不超过 10 ms 的输入；没有足够接近的手柄样本时对应 `handle_valid=0`，其四个值为 `NaN`。
++
++单手柄模式下两个逻辑角色可映射到同一个已就绪物理输入；实际序列号和 `single_handle_mode` 写在 `session.json`。
++
++## 7. 力过渡专用表
++
++力过渡状态机与磁盘解耦：
++
++- 没有统一会话时可正常运行，不创建文件；
++- 只有在“开始力过渡实验”的瞬间统一会话已经处于 Recording，才创建 `force_transition_001.csv`；
++- 会话在力过渡中途才开始时不补建残缺表；
++- 统一会话在力过渡中途停止时专用表关闭，状态机继续；
++- 同一会话后续实验使用 `_002`、`_003`。
++
++表头：
++
++```text
++elapsed_us,valid,trial_id,velocity_level,repeat_in_level,
++phase_code,phase_elapsed_ms,v_ratio,axis1_from_left_mm,
++clean_force_n,clean_handle_torque_nm
++```
++
++`valid=0` 时位置或纯净力不可用，相应测量值写 `NaN`。相位编号见 [力过渡实验使用说明.md](力过渡实验使用说明.md)。
++
++## 8. 异步写盘与故障
++
++`AsyncCsvWriter<Row>` 是单生产者/单消费者环形队列。控制线程只复制一行并移动原子 head；后台线程负责文件写入、每 64 行 flush、停止排空和错误检测。
++
++行为约定：
++
++- 队列满时丢当前行并累计 dropped；
++- `force.csv`、`motion.csv`、力过渡专用表或 `video_frames.csv` 发生致命写盘错误时，统一会话自动进入 Stopping；
++- 自动停止会尽力封装已有 MP4，并写最终 `session.json`；
++- 自动停止不关闭 PI、力反馈或机器人运动控制；
++- 程序正常退出复用 `stop_and_wait("program_exit")`，等待 CSV 排空和 MP4 Finalize。
++
++两个主 CSV 在开始阶段任一失败时，本次启动回滚，不留下空会话目录。相机打开、编码或设备错误不影响两个主 CSV，会话继续。
++
++ADS 单拍失败、软保持和自动重连不会自动停止统一会话。记录器继续按快照尝试序号写入无效行，并在 `session.json` 记录失败、重连和序号空洞。PLC 重启/应用重载会让运动控制进入更严格的人工恢复锁定，但记录会话仍保持开启，便于保留故障前后证据；现场可根据实验规程手动停止会话。
++
++## 9. Action 4 探测与录像
++
++### 9.1 设备定位
++
++Media Foundation 枚举视频采集设备，优先匹配 symbolic link 中的：
++
++```text
++VID_2CA3&PID_0023
++```
++
++找不到 VID/PID 时按 friendly name `OsmoAction4` 备用匹配。找不到设备时状态为 `Missing`，UI 显示：
++
++```text
++无法找到摄像设备：OsmoAction4
++```
++
++会话仍记录两个主 CSV，不创建空 MP4。
++
++### 9.2 格式选择
++
++候选顺序：
++
++1. 1920x1080@30 H.264；
++2. 1920x1080@30 MJPEG；
++3. 1280x720@30 H.264/MJPEG/可解码格式。
++
++H.264 候选必须带 `MF_MT_MPEG_SEQUENCE_HEADER`，并在最多 60 个输入样本内出现首个 clean point；失败后尝试下一候选。MJPEG/720p 候选也会预读首个有效样本，预读样本保留为正式首帧。
++
++当前输出固定为：
++
++```text
++MP4 / H.264 / 无音频 / 20 Mbps / 实际输入分辨率与 30 fps
++```
++
++相机本体的防抖、视场和其他成像设置由相机端负责。程序通过 UVC/Media Foundation 录制，不调用 DJI 移动端控制 API，也不能把相机本体的“2.7K 4:3”菜单设置强制写入 UVC 流。
++
++### 9.3 当前 H.264 管线限制
++
++代码会优先选择并验证相机原生 H.264 候选，但当前 Source Reader 随后统一解码为 RGB32，再由 Sink Writer 编码成 H.264。也就是说，**目前不是压缩码流直接复用**。
++
++这保证了同一采集流可同时用于 1280x720 BGRA 预览和 MP4，但会增加相机 worker 的 CPU/GPU 编解码负担。`video_frames.csv` 的 `keyframe` 是输入样本 clean-point 标志，在转码路径下不等同于最终 MP4 编码器的精确关键帧位置。若后续必须实现原生 H.264 直通，需要增加独立 H.264 解码支路供预览，并在 Action 4 实机上验证 SPS/PPS、时间戳和 MP4 sink input type。
++
++## 10. video_frames.csv
++
++表头：
++
++```text
++frame_index,source_timestamp_100ns,callback_elapsed_us,keyframe,discontinuity
++```
++
++- `source_timestamp_100ns`：Media Foundation 源时间戳；
++- `callback_elapsed_us`：读取该帧时映射到统一会话 QPC 的时间；
++- `keyframe`：输入样本 clean-point 标志；
++- `discontinuity`：输入 discontinuity 或 stream tick；
++- 相邻源时间戳超过 1.5 帧时累计 `dropped_frames`；
++- 旁车队列丢行和 writer 错误另写入 `session.json`。
++
++写 MP4 前将源时间戳减去首帧时间，保证文件从 0 开始。每个输入样本设置 30 fps 帧时长。
++
++## 11. 相机状态与拔线行为
++
++状态枚举：
++
++```text
++Closed / Opening / Previewing / Recording / Missing / Disconnected / Error
++```
++
++录像中拔线：
++
++1. 停止接收新帧；
++2. 尽力 Finalize 已写 MP4 和关闭旁车；
++3. 状态保持 `Disconnected`，两个主 CSV 继续；
++4. 当前会话不自动重连，不创建第二视频段；
++5. 下一会话或重新打开预览才重新探测。
++
++正常停止会等待编码器启动中的竞态完成，再等待 MP4 Finalize，避免 UI 已回到 Idle 但后台仍在写上一个会话文件。
++
++## 12. 预览
++
++预览可独立打开。C++ 将采集帧缩放为 1280x720 BGRA32，写入版本化双缓冲共享内存并触发命名事件；WPF 复核写前/写后 sequence，避免撕裂。
++
++预览支持窗口最大化、1x 到 8x 鼠标滚轮缩放、左键拖拽和平移、一键适应居中。变换不修改录制原图。
++
++关闭预览窗口：
++
++- 未录像：释放相机采集；
++- 正在录像：停止发布预览帧，录像继续。
++
++共享内存布局和名称见 [可视化界面架构说明.md](可视化界面架构说明.md)。
++
++## 13. session.json
++
++最终元数据包含：
++
++- 原始/清洗后实验名称；
++- UTC 起止时间、QPC anchor/frequency；
++- 力/位置目标采样率（100/50 Hz）；
++- axis1/axis6 逻辑手柄序列号和单手柄模式；
++- 两个主 writer、力过渡 writer 的 dropped 和调度 missed；
++- ADS 连接终态、实际频率、快照数据龄、RTT、失败/连续失败、重连、PLC 重启和主机快照队列丢帧；
++- force/motion/力过渡各自的首末主机快照序号、接受数、无效数、会话前拒绝、重复拒绝和序号空洞；
++- 停止原因；
++- 相机终态、原生输入格式、输出 H.264/无音频、实际宽高帧率；
++- 视频帧数、源时间戳丢帧数、旁车丢行、旁车错误和 HRESULT。
++
++记录启动时先写一份 `utc_end=null` 的元数据；停止封装完成后覆盖为最终版本。
++
++## 14. 已完成验证与实机待验
++
++2026-07-29 已完成（统一会话/相机基础版）：
++
++- C++ 与 WPF x64 Debug/Release 构建；
++- 协议 C++ `static_assert` 和 C# wire size 校验；
++- 无相机合成会话：中文/非法字符、空名称、保留名、`_001`；
++- `force.csv` 16 列、`motion.csv` 20 列和 `NaN` 语义；
++- 旧版节拍冒烟曾验证 CSV 时间戳单调；其行数和间隔不作为当前 100/50 Hz 快照版的验收依据；
++- 相机缺失时 `session.json` 保持 `Missing`，不生成空视频。
++
++当前版本仍需完成：
++
++1. 在真实 PLC 上核对 `force.csv` 约 100 Hz、`motion.csv` 约 50 Hz，QPC 单调且没有会话前帧或重复序号混入；
++2. 人工制造单拍失败、超过 100 ms 断线重连和 PLC 重启，核对 CSV 空洞及 `session.json.ads` 计数；
++3. 1080p/30 预览和实际输入格式回退；
++4. MP4 可解码、无音频、分辨率/帧率/时长；
++5. 预览缩放、平移、关闭预览后录像继续；
++6. 录像中拔线后的 MP4 Finalize 和 `Disconnected`；
++7. 15 分钟 CPU、内存、CSV 队列和视频帧压力测试。

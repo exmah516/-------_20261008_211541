@@ -67,6 +67,13 @@ int main() {
     command("prepare_position");
     check(gateway.cmd_q_.empty() && sent.find("开始控制") != std::string::npos,
           "already-prepared PLC points operator to start control");
+    // 已移除的旧刷新命令不能重新建基准或排入执行队列。
+    fields["success_mask"].type = RemoteJsonValue::Number;
+    fields["success_mask"].n = 3;
+    command("refresh_handles");
+    check(gateway.cmd_q_.empty() && pending.empty() &&
+          sent.find("rejected") != std::string::npos && sent.find("未知命令") != std::string::npos,
+          "removed handle refresh is rejected without queued commands");
     state.self_check_done = false;
     state.selfcheck_status = 1;
     command("start_control");

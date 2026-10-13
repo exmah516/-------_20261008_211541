@@ -169,7 +169,6 @@ class MasterUiCheck
         public Task<CommandResult> ReleaseControlAsync() { HasControl = false; return Done(); }
         public Task<CommandResult> PreparePositionAsync(double a, double b) { return Done(); }
         public Task<CommandResult> StartControlAsync() { return Done(); }
-        public Task<CommandResult> RefreshHandlesAsync() { return Done(); }
         public Task<CommandResult> SetArmManualEnableAsync(bool on) { return Done(); }
         public Task<CommandResult> SetArmAxisEnableAsync(int axis, bool on) { return Done(); }
         public Task<CommandResult> ResetArmAxisAsync(int axis) { return Done(); }

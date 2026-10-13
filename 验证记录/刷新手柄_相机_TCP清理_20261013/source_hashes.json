@@ -1,0 +1,110 @@
+{
+  "A_主端电脑_地址修正版/工程/docs/guides/实验记录与相机说明.md": {
+    "before": "c6c9ffcb88e5a03af1cfbf4333f6357c2bcc71a42ebdd1e4eb1ac7aba9c49b90",
+    "after": "4cf3f6f279b9552b22eb88d5d6fb288197d0c6e7f581d0338dbebb12e01f1a68"
+  },
+  "A_主端电脑_地址修正版/工程/master/MasterConsole/Services/HandleService.cs": {
+    "before": "da1e3b46c7e989b9bc206d183dca8000a7c6604ea831e13811031227463936bb",
+    "after": "358fb6179df1e464c7a2d93cf14610b489a01835d8e267930178e60c1dd2b3f8"
+  },
+  "A_主端电脑_地址修正版/工程/master/MasterConsole/Services/IRobotLink.cs": {
+    "before": "c4389d51914b7e274d934a046600116e033b85be48848b5c9014211cfaf015e5",
+    "after": "0723e07267835fa5878cabd9cb1fa6fc56dad13fa099fe85009e72ab6093d4c5"
+  },
+  "A_主端电脑_地址修正版/工程/master/MasterConsole/Services/RemoteRobotLink.cs": {
+    "before": "bb426020653703353558d0b850baa71a89fc0ea1d5781f576df1727fc59f7bdc",
+    "after": "ae38ca51c5803d5ef79d56fd73b645606c21c2458fbd2310426b4708189a903f"
+  },
+  "A_主端电脑_地址修正版/工程/master/MasterConsole/Services/SimulatedRobotLink.cs": {
+    "before": "e37f7806bab4f384474150c323f065045ed9cf80a8e3f18658d9f540d33bed5f",
+    "after": "081dc18cac55b23609c9dfa1c2efc204ccd09e7bce4c82fc80f7191c721d5889"
+  },
+  "A_主端电脑_地址修正版/工程/master/MasterConsole/ViewModels/MainViewModel.cs": {
+    "before": "1bfc9c435f2d0f4e90427ae8d2d9233dd09270ed0af87109b69a88aecefabc9c",
+    "after": "2b3a1da27490d4fd46f6503145d2639d6ed652fc3ce8d5576f01bbdada47d42d"
+  },
+  "A_主端电脑_地址修正版/工程/master/MasterConsole/Views/MainWindow.xaml": {
+    "before": "b0c8a915a962c73a309bef68e61194340f8cbe96ec0781961504cc2337fcb927",
+    "after": "3c1771bfb372579da5aadd85d93a46c4d5149a2d202bffa9f5e52ea86ae7c15f"
+  },
+  "A_主端电脑_地址修正版/工程/master/MasterConsole.Protocol/FrameAuth.cs": {
+    "before": "d12895807100bdb834661c4ce93e2007982933d1893f1b1216d382913911d6f5",
+    "after": "60cc766519db00907fee7898cffaa188f76607bfc665ba5d5031ce6d276f63b6"
+  },
+  "A_主端电脑_地址修正版/工程/tools/MasterUiCheck.cs": {
+    "before": "8992fa4cc42c11cd6f7be9d304f59226657ebfb1df06b41e5666ed2e89d62398",
+    "after": "9a6abb9c3fda1d04fe16ace23e62bbdacb580a5c61454d9772fa763c3918a761"
+  },
+  "B_从端电脑/工程/ADS项目/ADS.vcxproj": {
+    "before": "f4ef68b5b77b4566ebe393d7a9fa420727471b42c3242a7ac553acc7cb148b06",
+    "after": "7dabb092131e9bda06de82c2b52d0ebeed802ad4e45fcbf3a0be585b87c11b84"
+  },
+  "B_从端电脑/工程/ADS项目/ADS.vcxproj.filters": {
+    "before": "bd571eca91d571759c7cb332e902d915438d23cd015505abcca0b02bfe27d462",
+    "after": "b1c8d1b33f7646e61592e673e2f71337ed099c9478c6dba54e5434ffdfe3c07a"
+  },
+  "B_从端电脑/工程/ADS项目/AdsControlUI/AdsControlUI.csproj": {
+    "before": "c49c3bd16423b6c24853ec0ec0659b1984d6c82b1c09ab24c8a13ee84bad5f65",
+    "after": "90d66881e6a106c8ed85547a19db91b9b42c51d5591df2fa520a1592922dfccf"
+  },
+  "B_从端电脑/工程/ADS项目/AdsControlUI/AdsControlViewModel.cs": {
+    "before": "0daed931cbcc69e4c4fdefc831f0d44a72711059763b61ea89148a97b43b86e1",
+    "after": "c83ac983e22df74fd1132e1e05fbb48db3024901d88f4d151af6a8977af6c03d"
+  },
+  "B_从端电脑/工程/ADS项目/AdsControlUI/MainWindow.xaml": {
+    "before": "aec7d585fea630769e42281984c1267cb3642d4966e33e6f5dbe05445556955a",
+    "after": "e2400db714d0feeae83f0ceaf0ca9d2fcabf7efb426850767fb869eb4700093e"
+  },
+  "B_从端电脑/工程/ADS项目/AdsControlUI/MainWindow.xaml.cs": {
+    "before": "943c31627b42c4d2443ce57a199a2cdc69c9e2e550498f44d529a78787149b55",
+    "after": "86a4167ec5f34b496d412de988c457f748aecbaa57f7fc30d6c3d302c1bac315"
+  },
+  "B_从端电脑/工程/ADS项目/AdsControlUI/VisProtocol.cs": {
+    "before": "31a1fd158c3e9fe8b733cd0e9b96c7b2e5d896878290f27e8e9f03ce60c3d1bb",
+    "after": "f4ff5c6a987c5fdb7fcb9aecd2ffdcbd6dc3c84a0e35b7487ac051985e615919"
+  },
+  "B_从端电脑/工程/ADS项目/control_types.h": {
+    "before": "5ce1092a324b596582555c02e309c2ea2b009fa0af5b11910f9178b0deb4b7fa",
+    "after": "87c0644ccb68f90b37211b56c81caf69c46ec79a627d91af8795bb81bcadf772"
+  },
+  "B_从端电脑/工程/ADS项目/experiment_recorder.cpp": {
+    "before": "1f546677e2c745c1df3d04df1ebf767342de3f28d1a60a949686d004cc5545be",
+    "after": "136041a48b3dcddb45011e566192d9e5461ec525a9d146f5097c59392325189d"
+  },
+  "B_从端电脑/工程/ADS项目/experiment_recorder.h": {
+    "before": "cdfd082756d4964d70660270bf034dd0775cb2fc602c0c562d6e4361de613b6c",
+    "after": "a53432282c81daeca77fdf398acd45b180cfd1c2f99817ba07652ba8c54127b6"
+  },
+  "B_从端电脑/工程/ADS项目/main.cpp": {
+    "before": "4f4e2b777f4079c290555b57ebf0e281358588ec4825f46ea875f927f4429844",
+    "after": "8ba2b5797b0f9c8dcdc96bf9e947739fd9f8a42961e2b41fbfb460d8d3e0eca5"
+  },
+  "B_从端电脑/工程/ADS项目/plc_io.cpp": {
+    "before": "3f0ce172c3a05c7849557bcaa2c948ab70a8a6371687bc85529b44f497c7f1c3",
+    "after": "8c1ea6cf903641d55e2d0676ed6a238cd4c498c2eb86d9ff51494f54a448f15b"
+  },
+  "B_从端电脑/工程/ADS项目/remote_gateway.cpp": {
+    "before": "d9b9e961a9eed976c06fab172759bfe1f761b3d5a78a643d2ab083050184cdc2",
+    "after": "21d05449af5944e1dcbac2af0d11ac22ac7b6252b85f059e8575e8f63ed2ff3d"
+  },
+  "B_从端电脑/工程/ADS项目/tools/check_master_layout.py": {
+    "before": "965aa24cd76d48ede605b339a1838139d824ab756e8bc45ea05276d71688245d",
+    "after": "015ae095c1568a83835967808be25bedf3c2e0d6c78cce816cd9b78a353e6427"
+  },
+  "B_从端电脑/工程/ADS项目/tools/remote_recovery_test.cpp": {
+    "before": "301d78df056724273583d586e6ad461750158a022da42adb50ca66c7a9d5276a",
+    "after": "b7bd6bea07b490d8301d6ecb9e9e1b9322ebda00e383763e4ec25dcbdb55a078"
+  },
+  "B_从端电脑/工程/ADS项目/tools/run_dual_control_test.py": {
+    "before": "97187ea66e2d2c85bf0852091ccc37071de4cd1c3f53a9a5cd36e2afb554ade3",
+    "after": "5135d4768c40855fc8c40e025568716559a60e4bbba7293e8cac29fe327ace79"
+  },
+  "B_从端电脑/工程/ADS项目/vis_server.h": {
+    "before": "e883705203b30f71f5cf5c4b0a97f60534cfa0b05c55cc70d3367395fc09671a",
+    "after": "ee477ddfccb95ae0f6e69375a7714639d9b5fc23fe07095bbc486592b249f8b4"
+  },
+  "B_从端电脑/工程/docs/guides/实验记录与相机说明.md": {
+    "before": "c6c9ffcb88e5a03af1cfbf4333f6357c2bcc71a42ebdd1e4eb1ac7aba9c49b90",
+    "after": "4cf3f6f279b9552b22eb88d5d6fb288197d0c6e7f581d0338dbebb12e01f1a68"
+  }
+}

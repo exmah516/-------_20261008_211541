@@ -53,7 +53,7 @@ struct VisState
 	// axis6 当前软限位阻断状态。仅来自上位机，不增加 PLC ADS 契约。
 	bool axis6_soft_limit_hold;
 
-	// 统一实验记录、纯净力与 Action 4 状态。
+	// 统一实验记录与纯净力状态。
 	int recording_state;
 	int recording_error;
 	std::uint64_t recording_elapsed_us;
@@ -65,6 +65,7 @@ struct VisState
 	bool clean_force_valid;
 	double clean_force_n;
 	double clean_handle_torque_nm;
+	// 预留旧版相机状态字段，保持管道布局兼容；当前均为零。
 	int camera_state;
 	int camera_input_format;
 	int camera_width;
@@ -163,7 +164,7 @@ enum class VisCommandType : int
 	SetAxis1PostReturnLead = 24, // param1=轴1前10 mm比例映射量，单位 mm×1000，范围 [0, 5]
 	StartExperimentRecording = 25, // UTF-8 负载为实验名称
 	StopExperimentRecording = 26,
-	SetCameraPreview = 27, // param1: 0=关闭，1=打开
+	// 命令号 27 已停用，保留编号。
 	SetCleanForceMonitor = 28, // param1: 0=关闭，1=打开
 	SetArmManualEnable = 29, // param1: 0=关闭，1=开启
 	SetArmAxisEnable = 30, // param1: 轴号1..5，param2: 0=断电，1=上电
@@ -184,7 +185,7 @@ enum class VisCommandType : int
 	KeepArmCartesianAlive = 45,
 	SetSelfCheckAxisPos = 46, // param1=轴号，param2=距左限位毫米×100
 	StartSelfCheck = 47,
-	RefreshHandles = 48, // param1: 本次主端成功读取位掩码，bit0=582，bit1=587
+	// 命令号 48 已停用，保留编号。
 };
 
 #pragma pack(push, 1)

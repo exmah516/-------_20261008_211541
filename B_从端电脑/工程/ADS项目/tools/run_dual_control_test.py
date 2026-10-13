@@ -5,11 +5,12 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 
 project = Path(__file__).resolve().parents[1]
 package = project.parents[2]
-report = package / '验证记录/双手柄修正_20261011'
+report = Path(sys.argv[1]) if len(sys.argv) > 1 else package / '验证记录/双手柄修正_20261011'
 report.mkdir(parents=True, exist_ok=True)
 source = (project / 'main.cpp').read_text(encoding='utf-8-sig')
 header = (project / 'control_types.h').read_text(encoding='utf-8-sig')
@@ -29,7 +30,7 @@ parts = {
     'save': between(source, '\t\tif (spacing_recovery_button_press_edge)', '\t\t// 该映射只属于'),
     'exit': between(source, '\t\t\t\tconst ModeSelection restore_selection =', '\t\t\t\tstd::cout << "屈曲恢复退出后'),
     'switch': between(source, '\t\tif (!single_handle_mode && axis1_reverse_pressed != axis1_reverse_pressed_prev)', '\t\t// 单手柄调试保留'),
-    'filter': between(header, 'struct HandleFilterState', 'enum class ForceSampleSource'),
+    'filter': between(header, 'struct HandleFilterState', 'struct ControlConfig'),
 }
 fields = set(re.findall(r'cfg(?:\.|->)(\w+)', parts['motion'] + parts['windows']))
 fields |= {'linear_increment_noise_deadband_mm', 'axis3_delivery_stop_from_left_mm',

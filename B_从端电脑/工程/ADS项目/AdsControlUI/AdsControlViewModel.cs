@@ -211,7 +211,6 @@ namespace AdsControlUI
 
             NotifyIfChanged(ref _prevConnected, connected, nameof(IsConnected));
 			OnPropertyChanged(nameof(CanStartExperimentRecording));
-			OnPropertyChanged(nameof(CanOpenCameraPreview));
             _prevState = state;
             StateUpdated?.Invoke(state);
         }
@@ -291,11 +290,6 @@ namespace AdsControlUI
 			OnPropertyChanged(nameof(CanStartExperimentRecording));
 			OnPropertyChanged(nameof(CanStopExperimentRecording));
 			OnPropertyChanged(nameof(ExperimentNameEditable));
-			OnPropertyChanged(nameof(CameraStatusText));
-			OnPropertyChanged(nameof(CameraParameterText));
-			OnPropertyChanged(nameof(CameraRecordingElapsedText));
-			OnPropertyChanged(nameof(CameraRecording));
-			OnPropertyChanged(nameof(CanOpenCameraPreview));
 			OnPropertyChanged(nameof(ForceSampleValid));
 			OnPropertyChanged(nameof(CleanForceValid));
 			OnPropertyChanged(nameof(RawFnVoltage));
@@ -684,8 +678,6 @@ namespace AdsControlUI
 		public bool CanStopExperimentRecording =>
 			IsConnected && RecordingState == 2 && !_stopExperimentCommandPending;
 		public bool ExperimentNameEditable => RecordingState == 0 || RecordingState == 4;
-		public bool CameraRecording => _state.camera_recording;
-		public bool CanOpenCameraPreview => IsConnected;
 		public bool ForceSampleValid => _state.force_sample_valid;
 		public bool CleanForceValid => _state.clean_force_valid;
 		public double RawFnVoltage => _state.fn_1_v;
@@ -701,7 +693,7 @@ namespace AdsControlUI
 				{
 					case 1: return "正在启动";
 					case 2: return _stopExperimentCommandPending ? "停止命令已发送，等待后端确认" : "记录中";
-					case 3: return "正在停止并封装";
+					case 3: return "正在停止并保存";
 					case 4: return "启动失败";
 					default: return "空闲";
 				}
@@ -723,14 +715,12 @@ namespace AdsControlUI
 					case 5: return "force.csv 写入失败，记录已自动停止";
 					case 6: return "motion.csv 写入失败，记录已自动停止";
 					case 7: return "无法启动停止后台线程";
-					case 9: return "video_frames.csv 写入失败，统一记录已自动停止";
 					default: return "";
 				}
 			}
 		}
 
 		public string RecordingElapsedText => FormatElapsed(_state.recording_elapsed_us);
-		public string CameraRecordingElapsedText => FormatElapsed(_state.camera_recording_elapsed_us);
 
 		public string RecordingLossText
 		{
@@ -743,39 +733,6 @@ namespace AdsControlUI
 				return dropped == 0 && missed == 0
 					? "CSV 队列与采样调度正常"
 					: $"队列丢样 {dropped} · 调度错过：力 {forceMissed} / 位置 {motionMissed}";
-			}
-		}
-
-		public string CameraStatusText
-		{
-			get
-			{
-				switch (_state.camera_state)
-				{
-					case 1: return "正在打开摄像设备：OsmoAction4";
-					case 2: return "摄像设备预览中：OsmoAction4";
-					case 3: return "摄像设备录像中：OsmoAction4";
-					case 4: return "无法找到摄像设备：OsmoAction4";
-					case 5: return "摄像设备已断开：OsmoAction4";
-					case 6: return $"摄像设备错误：OsmoAction4（0x{unchecked((uint)_state.camera_error_code):X8}）";
-					default: return "摄像设备未打开：OsmoAction4";
-				}
-			}
-		}
-
-		public string CameraParameterText
-		{
-			get
-			{
-				if (_state.camera_width <= 0 || _state.camera_height <= 0)
-					return "等待实际视频参数";
-				double fps = _state.camera_fps_denominator > 0
-					? (double)_state.camera_fps_numerator / _state.camera_fps_denominator
-					: 0.0;
-				string input = _state.camera_input_format == 1 ? "H.264" :
-					(_state.camera_input_format == 2 ? "MJPEG" :
-					(_state.camera_input_format == 3 ? "RGB32" : "未知"));
-				return $"{_state.camera_width}×{_state.camera_height} · {fps:F1} fps · 输入 {input} · 输出 H.264 / 无音频";
 			}
 		}
 
@@ -972,9 +929,6 @@ namespace AdsControlUI
 			NotifyExperimentProperties();
 			return true;
 		}
-
-		public void SetCameraPreview(bool enabled) =>
-			_client.SendCommand(VisCommandType.SetCameraPreview, enabled ? 1 : 0);
 
 		public void SetCleanForceMonitor(bool enabled) =>
 			_client.SendCommand(VisCommandType.SetCleanForceMonitor, enabled ? 1 : 0);

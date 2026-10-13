@@ -1,6 +1,5 @@
 #pragma once
 
-#include "action4_camera.h"
 #include "ads_communication.h"
 #include "async_csv_writer.h"
 
@@ -28,8 +27,7 @@ enum class ExperimentRecordingError : int
 	OpenMotionCsvFailed = 4,
 	ForceWriterFailed = 5,
 	MotionWriterFailed = 6,
-	StopThreadFailed = 7,
-	VideoFrameWriterFailed = 9
+	StopThreadFailed = 7
 };
 
 struct ExperimentStartInfo
@@ -112,7 +110,6 @@ struct ExperimentRecorderSnapshot
 	std::uint64_t motion_missed = 0;
 	std::uint64_t ads_pre_session_rejected = 0;
 	std::uint64_t ads_duplicate_rejected = 0;
-	Action4CameraSnapshot camera;
 };
 
 class ExperimentRecorder
@@ -131,8 +128,6 @@ public:
 
 	void update_ads_communication_stats(const AdsCommunicationStats& stats);
 
-	void set_camera_preview(bool enabled);
-	Action4CameraSnapshot camera_snapshot() const;
 	ExperimentRecorderSnapshot snapshot() const;
 	bool is_recording() const { return state_.load(std::memory_order_acquire) == ExperimentRecordingState::Recording; }
 	const SessionClock& clock() const { return clock_; }
@@ -173,8 +168,6 @@ private:
 	std::wstring session_directory_;
 	std::wstring force_path_;
 	std::wstring motion_path_;
-	std::wstring video_path_;
-	std::wstring video_frames_path_;
 	std::wstring metadata_path_;
 	std::uint64_t force_sample_index_ = 0;
 	std::uint64_t motion_sample_index_ = 0;
@@ -208,6 +201,5 @@ private:
 
 	AsyncCsvWriter<ForceCsvRow> force_writer_;
 	AsyncCsvWriter<MotionCsvRow> motion_writer_;
-	Action4CameraRecorder camera_;
 	std::thread stop_thread_;
 };

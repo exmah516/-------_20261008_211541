@@ -60,8 +60,6 @@ namespace MasterConsole.ViewModels
         private string _prepareError = "";
         private string _linkStatsText = "";
         private LinkStats _stats = new LinkStats();
-        private bool _refreshingHandles;
-        private string _handleRefreshText = "未刷新";
         private string _armFeedbackText = "定位臂命令待发送";
 
         public MainViewModel(IRobotLink link)
@@ -80,7 +78,6 @@ namespace MasterConsole.ViewModels
             CylinderCommand = new RelayCommand(p => ToggleCylinder(p));
             YValveCommand = new RelayCommand(ToggleYValve);
             StartControlCommand = new RelayCommand(StartControl);
-            RefreshHandlesCommand = new RelayCommand(RefreshHandles);
 
             _link.ConnectionChanged += (s, e) => _ui.BeginInvoke(new Action(RaiseConnectionProps));
             _link.StatusReceived += (s, f) => _ui.BeginInvoke(new Action(() => OnStatus(f)));
@@ -104,7 +101,6 @@ namespace MasterConsole.ViewModels
         public ICommand CylinderCommand { get; }
         public ICommand YValveCommand { get; }
         public ICommand StartControlCommand { get; }
-        public ICommand RefreshHandlesCommand { get; }
 
         // ============================================================ 连接与控制权
 
@@ -150,7 +146,6 @@ namespace MasterConsole.ViewModels
             OnPropertyChanged(nameof(HasControl));
             OnPropertyChanged(nameof(CanOperate));
             OnPropertyChanged(nameof(CanStartControl));
-            OnPropertyChanged(nameof(CanRefreshHandles));
             OnPropertyChanged(nameof(ConnectButtonText));
             OnPropertyChanged(nameof(StatusFresh));
             OnPropertyChanged(nameof(OperateHintText));
@@ -187,7 +182,6 @@ namespace MasterConsole.ViewModels
 
         /// <summary>已到达准备位置、尚未进入手柄控制时可点“开始控制”。</summary>
         public bool CanStartControl => CanOperate && !ControlActive;
-        public bool CanRefreshHandles => CanOperate && !_refreshingHandles;
 
         public string Force582F => FormatForce(_s.Force582F, "N");
         public string Force582N => FormatForce(_s.Force582N, "N·m");
@@ -280,32 +274,6 @@ namespace MasterConsole.ViewModels
             await Report("开始控制", r);
         }
 
-        private async void RefreshHandles()
-        {
-            if (!CanRefreshHandles) return;
-            _refreshingHandles = true;
-            _handleRefreshText = "正在刷新…";
-            OnPropertyChanged(nameof(CanRefreshHandles));
-            OnPropertyChanged(nameof(HandleRefreshText));
-            try
-            {
-                var result = await _link.RefreshHandlesAsync();
-                _handleRefreshText = result.Ok ? result.Reason : "刷新失败：" + result.Reason;
-                AddLog(result.Ok ? "info" : "warn", _handleRefreshText);
-            }
-            catch (Exception ex)
-            {
-                _handleRefreshText = "刷新失败：" + ex.Message;
-                AddLog("error", _handleRefreshText);
-            }
-            finally
-            {
-                _refreshingHandles = false;
-                OnPropertyChanged(nameof(CanRefreshHandles));
-                OnPropertyChanged(nameof(HandleRefreshText));
-            }
-        }
-
         private async void ToggleForceFeedback()
         {
             if (FfZeroing) return; // 零点采集期间不响应
@@ -374,7 +342,6 @@ namespace MasterConsole.ViewModels
         public string HandleText => _stats.HandleSdkMissing
             ? "手柄 SDK 未加载（缺 FLCatheter.dll）"
             : "582 " + (_stats.Handle582Online ? "在线" : "离线") + " / 587 " + (_stats.Handle587Online ? "在线" : "离线");
-        public string HandleRefreshText => _handleRefreshText;
         public string ArmFeedbackText => _armFeedbackText;
 
         public async Task SetArmManualEnableAsync(bool enabled) =>
@@ -432,7 +399,6 @@ namespace MasterConsole.ViewModels
             OnPropertyChanged(nameof(StatusFresh));
             OnPropertyChanged(nameof(CanOperate));
             OnPropertyChanged(nameof(CanStartControl));
-            OnPropertyChanged(nameof(CanRefreshHandles));
             OnPropertyChanged(nameof(OperateHintText));
         }
 
@@ -460,7 +426,6 @@ namespace MasterConsole.ViewModels
             foreach (var name in StatusPropertyNames) OnPropertyChanged(name);
             OnPropertyChanged(nameof(CanOperate));
             OnPropertyChanged(nameof(CanStartControl));
-            OnPropertyChanged(nameof(CanRefreshHandles));
             OnPropertyChanged(nameof(OperateHintText));
         }
 

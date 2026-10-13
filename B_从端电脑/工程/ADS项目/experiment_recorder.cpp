@@ -132,32 +132,6 @@ namespace
 		return std::fprintf(fp, "%.10g", value) >= 0;
 	}
 
-	const char* camera_state_text(Action4CameraState state)
-	{
-		switch (state)
-		{
-		case Action4CameraState::Closed: return "Closed";
-		case Action4CameraState::Opening: return "Opening";
-		case Action4CameraState::Previewing: return "Previewing";
-		case Action4CameraState::Recording: return "Recording";
-		case Action4CameraState::Missing: return "Missing";
-		case Action4CameraState::Disconnected: return "Disconnected";
-		case Action4CameraState::Error: return "Error";
-		default: return "Unknown";
-		}
-	}
-
-	const char* camera_format_text(Action4InputFormat format)
-	{
-		switch (format)
-		{
-		case Action4InputFormat::H264: return "H264";
-		case Action4InputFormat::Mjpeg: return "MJPEG";
-		case Action4InputFormat::Rgb32: return "RGB32";
-		default: return "Unknown";
-		}
-	}
-
 	const char* ads_connection_state_text(AdsConnectionState state)
 	{
 		switch (state)
@@ -226,7 +200,6 @@ ExperimentRecorder::ExperimentRecorder() = default;
 ExperimentRecorder::~ExperimentRecorder()
 {
 	stop_and_wait("program_exit");
-	camera_.shutdown();
 }
 
 void ExperimentRecorder::normalize_force_row(ForceCsvRow& row)
@@ -501,8 +474,6 @@ bool ExperimentRecorder::create_session_paths(const std::wstring& cleaned_name)
 			session_directory_ = candidate;
 			force_path_ = join_path(candidate, L"force.csv");
 			motion_path_ = join_path(candidate, L"motion.csv");
-			video_path_ = join_path(candidate, L"video.mp4");
-			video_frames_path_ = join_path(candidate, L"video_frames.csv");
 			metadata_path_ = join_path(candidate, L"session.json");
 			return true;
 		}
@@ -597,7 +568,6 @@ bool ExperimentRecorder::start(const std::string& experiment_name_utf8, const Ex
 
 	write_session_json(false, std::string());
 	state_.store(ExperimentRecordingState::Recording, std::memory_order_release);
-	camera_.start_recording(video_path_, video_frames_path_, clock_.anchor_qpc(), clock_.frequency());
 	return true;
 }
 
@@ -653,14 +623,6 @@ void ExperimentRecorder::stop_and_wait(const char* reason)
 void ExperimentRecorder::stop_worker(std::string reason)
 {
 	bool cleanup_failed = false;
-	try
-	{
-		(void)camera_.stop_recording_and_wait();
-	}
-	catch (...)
-	{
-		cleanup_failed = true;
-	}
 	try { force_writer_.stop(); }
 	catch (...) { cleanup_failed = true; }
 	try { motion_writer_.stop(); }
@@ -690,11 +652,6 @@ void ExperimentRecorder::poll_health()
 	{
 		error_.store(ExperimentRecordingError::MotionWriterFailed, std::memory_order_release);
 		stop_async("motion_writer_error");
-	}
-	else if (camera_.timing_writer_failed())
-	{
-		error_.store(ExperimentRecordingError::VideoFrameWriterFailed, std::memory_order_release);
-		stop_async("video_frame_writer_error");
 	}
 }
 
@@ -858,16 +815,6 @@ std::uint64_t ExperimentRecorder::counter_delta(std::uint64_t current, std::uint
 	return current >= baseline ? current - baseline : current;
 }
 
-void ExperimentRecorder::set_camera_preview(bool enabled)
-{
-	camera_.set_preview_enabled(enabled);
-}
-
-Action4CameraSnapshot ExperimentRecorder::camera_snapshot() const
-{
-	return camera_.snapshot();
-}
-
 ExperimentRecorderSnapshot ExperimentRecorder::snapshot() const
 {
 	ExperimentRecorderSnapshot result;
@@ -908,7 +855,6 @@ ExperimentRecorderSnapshot ExperimentRecorder::snapshot() const
 	result.ads_duplicate_rejected =
 		force_ads_duplicate_rejected_.load(std::memory_order_acquire) +
 		motion_ads_duplicate_rejected_.load(std::memory_order_acquire);
-	result.camera = camera_.snapshot();
 	return result;
 }
 
@@ -918,7 +864,6 @@ void ExperimentRecorder::write_session_json(bool final, const std::string& stop_
 	{
 		return;
 	}
-	const Action4CameraSnapshot camera = camera_.snapshot();
 	AdsCommunicationStats ads_baseline{};
 	AdsCommunicationStats ads_latest{};
 	bool ads_metrics_available = false;
@@ -946,7 +891,7 @@ void ExperimentRecorder::write_session_json(bool final, const std::string& stop_
 		: 0;
 	std::ostringstream json;
 	json << "{\n";
-	json << "  \"schema_version\": 3,\n";
+	json << "  \"schema_version\": 4,\n";
 	json << "  \"experiment_name_raw\": \"" << json_escape(raw_name_utf8_) << "\",\n";
 	json << "  \"experiment_name_cleaned\": \"" << json_escape(wide_to_utf8(cleaned_name_)) << "\",\n";
 	json << "  \"utc_start\": \"" << format_utc_filetime(clock_.utc_start_filetime_100ns()) << "\",\n";
@@ -1063,23 +1008,7 @@ void ExperimentRecorder::write_session_json(bool final, const std::string& stop_
 	json << "  \"stop_reason\": ";
 	if (final) json << "\"" << json_escape(stop_reason) << "\"";
 	else json << "null";
-	json << ",\n";
-	json << "  \"camera\": {\n";
-	json << "    \"device_name\": \"OsmoAction4\",\n";
-	json << "    \"state\": \"" << camera_state_text(camera.state) << "\",\n";
-	json << "    \"input_format\": \"" << camera_format_text(camera.input_format) << "\",\n";
-	json << "    \"output_codec\": \"H264\",\n";
-	json << "    \"audio\": false,\n";
-	json << "    \"width\": " << camera.width << ",\n";
-	json << "    \"height\": " << camera.height << ",\n";
-	json << "    \"fps_numerator\": " << camera.fps_numerator << ",\n";
-	json << "    \"fps_denominator\": " << camera.fps_denominator << ",\n";
-	json << "    \"frame_count\": " << camera.frame_count << ",\n";
-	json << "    \"dropped_frames\": " << camera.dropped_frames << ",\n";
-	json << "    \"timing_rows_dropped\": " << camera.timing_rows_dropped << ",\n";
-	json << "    \"timing_writer_error\": " << (camera.timing_writer_error ? "true" : "false") << ",\n";
-	json << "    \"error_code\": " << camera.error_code << "\n";
-	json << "  }\n";
+	json << "\n";
 	json << "}\n";
 
 	std::FILE* fp = nullptr;

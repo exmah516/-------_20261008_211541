@@ -11,7 +11,6 @@ namespace AdsControlUI
         private readonly AdsControlViewModel _vm;
         private ForceRealtimeWindow _forceWindow;
         private CleanForceWindow _cleanForceWindow;
-        private CameraPreviewWindow _cameraPreviewWindow;
 		private readonly DispatcherTimer _manualJogKeepaliveTimer;
 		private int _activeArmJogAxis;
 		private int _activeArmJogDirection;
@@ -41,7 +40,6 @@ namespace AdsControlUI
             _vm.StateUpdated -= Vm_StateUpdated;
             _forceWindow?.Close();
             _cleanForceWindow?.Close();
-            _cameraPreviewWindow?.Close();
             _vm.Dispose();
             base.OnClosed(e);
         }
@@ -473,7 +471,6 @@ namespace AdsControlUI
 				_programReturnActive = false;
             _forceWindow?.AddState(state);
 			_cleanForceWindow?.AddState(state);
-			_cameraPreviewWindow?.OnState(state);
         }
 
 		private void StartExperimentRecording_Click(object sender, RoutedEventArgs e)
@@ -486,26 +483,6 @@ namespace AdsControlUI
 		{
 			if (_vm.CanStopExperimentRecording)
 				_vm.StopExperimentRecording();
-		}
-
-		private void ShowCameraPreview_Click(object sender, RoutedEventArgs e)
-		{
-			if (_cameraPreviewWindow == null)
-			{
-				_cameraPreviewWindow = new CameraPreviewWindow { Owner = this };
-				_cameraPreviewWindow.Closed += (s, args) =>
-				{
-					_vm.SetCameraPreview(false);
-					_cameraPreviewWindow = null;
-				};
-				_vm.SetCameraPreview(true);
-				_cameraPreviewWindow.Show();
-			}
-			else
-			{
-				_cameraPreviewWindow.Activate();
-			}
-			_cameraPreviewWindow?.OnState(_vm.LatestState);
 		}
 
 		private void ShowCleanForce_Click(object sender, RoutedEventArgs e)

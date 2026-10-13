@@ -66,9 +66,6 @@ namespace MasterConsole.Services
         /// <summary>开始控制：已到达器械准备位置后，在当前位置直接进入手柄控制。</summary>
         Task<CommandResult> StartControlAsync();
 
-        /// <summary>重读主端手柄并请求从端按成功读取的手柄重建中立基准。</summary>
-        Task<CommandResult> RefreshHandlesAsync();
-
         Task<CommandResult> SetArmManualEnableAsync(bool enabled);
         Task<CommandResult> SetArmAxisEnableAsync(int axis, bool enabled);
         Task<CommandResult> ResetArmAxisAsync(int axis);

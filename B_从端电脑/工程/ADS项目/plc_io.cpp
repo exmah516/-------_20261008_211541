@@ -268,7 +268,7 @@ namespace plc_io
 		LARGE_INTEGER qpc_before{};
 		LARGE_INTEGER qpc_after{};
 		QueryPerformanceCounter(&qpc_before);
-		// ADS 侧力采样用于 PLC 原始变量读取；TCP_DAQ 模式会在主循环中覆盖 ft_1/fn_1。
+		// 力采样统一读取 ADS 中的 PLC 原始变量。
 		double act_pos_snapshot[7] = { 0.0 };
 		const char* symbols[] = {
 			AdsSymbol::ft_1_value,

@@ -162,9 +162,6 @@ namespace MasterConsole.Services
             return CommandResult.Done();
         }
 
-        public Task<CommandResult> RefreshHandlesAsync()
-            => Task.FromResult(CommandResult.DoneWithReason("模拟链路：已刷新手柄基准。"));
-
         public Task<CommandResult> SetArmManualEnableAsync(bool enabled)
             => Task.FromResult(CommandResult.DoneWithReason($"模拟链路：定位臂总使能{(enabled ? "已开启" : "已关闭")}。"));
         public Task<CommandResult> SetArmAxisEnableAsync(int axis, bool enabled)

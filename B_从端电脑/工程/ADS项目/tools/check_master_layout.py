@@ -31,9 +31,6 @@ class LayoutCheck {
  static int CountMessages(DependencyObject o){int n=0;var g=o as GroupBox;
  if(g!=null && Convert.ToString(g.Header)=="消息")n++;
  for(int i=0;i<VisualTreeHelper.GetChildrenCount(o);i++)n+=CountMessages(VisualTreeHelper.GetChild(o,i));return n;}
- static TextBlock RefreshText(DependencyObject o){var t=o as TextBlock;
- if(t!=null){var b=BindingOperations.GetBinding(t,TextBlock.TextProperty);if(b!=null && b.Path.Path=="HandleRefreshText")return t;}
- for(int i=0;i<VisualTreeHelper.GetChildrenCount(o);i++){var found=RefreshText(VisualTreeHelper.GetChild(o,i));if(found!=null)return found;}return null;}
  [STAThread] static int Main(){MainWindow w=null;try{
  var app=new Application();
  app.Resources.MergedDictionaries.Add(new ResourceDictionary{Source=new Uri("/MasterConsole;component/Themes/LightClinical.xaml",UriKind.Relative)});
@@ -51,12 +48,6 @@ class LayoutCheck {
   Check(Math.Abs(model.ActualWidth-parent.ActualWidth)<1,"model uses full display width at "+width+" ("+model.ActualWidth+" DIP)");
   Check(model.ActualHeight>100,"model height remains usable");
  }
- var vm=w.DataContext;
- vm.GetType().GetField("_handleRefreshText",flags).SetValue(vm,"正在刷新…");
- w.DataContext=null;w.DataContext=vm;w.UpdateLayout();Pump(50);
- var feedback=RefreshText(w);var feedbackParent=(FrameworkElement)VisualTreeHelper.GetParent(feedback);
- Check(feedback.ActualWidth>100 && feedback.ActualWidth<feedbackParent.ActualWidth && feedback.TextWrapping==TextWrapping.Wrap,
-       "refresh feedback has bounded wrapping width next to button");
  typeof(MainWindow).GetMethod("SetDisplayLayout",flags).Invoke(w,new object[]{"model"});w.UpdateLayout();Pump(50);
  Check(Math.Abs(model.ActualWidth-((FrameworkElement)VisualTreeHelper.GetParent(model)).ActualWidth)<1,"model emphasis layout also has no empty log column");
  Check(model.PublishDsaArmState(new DsaArmDisplayState(new double[7],new double[2],0,0)),"model state input still accepted");

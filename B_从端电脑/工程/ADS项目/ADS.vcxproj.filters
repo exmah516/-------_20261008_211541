@@ -18,9 +18,6 @@
     <ClCompile Include="control_types.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="tcp_force_daq.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="plc_io.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
@@ -54,10 +51,10 @@
     <ClCompile Include="手柄\手柄.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="vis_server.cpp">
+    <ClCompile Include="hik_camera_relay.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="action4_camera.cpp">
+    <ClCompile Include="vis_server.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="experiment_recorder.cpp">
@@ -72,9 +69,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="control_types.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="tcp_force_daq.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="plc_io.h">
@@ -113,10 +107,10 @@
     <ClInclude Include="force_calibration.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="vis_server.h">
+    <ClInclude Include="hik_camera_relay.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="action4_camera.h">
+    <ClInclude Include="vis_server.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="async_csv_writer.h">

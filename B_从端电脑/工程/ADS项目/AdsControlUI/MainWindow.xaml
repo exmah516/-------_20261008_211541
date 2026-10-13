@@ -466,10 +466,6 @@
                                         Click="StopExperimentRecording_Click"
                                         IsEnabled="{Binding CanStopExperimentRecording}"
                                         Padding="14,8" Margin="0,0,8,4"/>
-                                <Button Content="相机预览"
-                                        Click="ShowCameraPreview_Click"
-                                        IsEnabled="{Binding CanOpenCameraPreview}"
-                                        Padding="14,8" Margin="0,0,8,4"/>
                             </WrapPanel>
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -485,10 +481,6 @@
                                 <TextBlock Grid.Column="2" Text="{Binding RecordingElapsedText}"
                                            Style="{StaticResource DataValueText}" FontWeight="SemiBold"/>
                             </Grid>
-                            <TextBlock Text="{Binding CameraStatusText}"
-                                       Style="{StaticResource CaptionText}" Margin="0,6,0,0" TextWrapping="Wrap"/>
-                            <TextBlock Text="{Binding CameraParameterText}"
-                                       Style="{StaticResource CaptionText}" Margin="0,2,0,0" TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding RecordingErrorText}"
                                        Style="{StaticResource ErrorText}" Margin="0,4,0,0" TextWrapping="Wrap"/>
                         </StackPanel>

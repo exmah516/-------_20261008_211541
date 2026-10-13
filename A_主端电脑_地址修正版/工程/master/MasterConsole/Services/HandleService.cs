@@ -49,12 +49,8 @@ namespace MasterConsole.Services
         private readonly object _lock = new object();
         private readonly Stopwatch _clock = Stopwatch.StartNew();
         private readonly Thread _thread;
-        private readonly ManualResetEventSlim _refreshDone = new ManualResetEventSlim(false);
         private volatile bool _stop;
         private volatile bool _sdkMissing;
-        private int _refreshRequested;
-        private int _refreshResultMask;
-        private int _refreshInProgress;
 
         public HandleService()
         {
@@ -66,23 +62,6 @@ namespace MasterConsole.Services
         public bool SdkMissing => _sdkMissing;
 
         public bool IsOnline(int slot) => slot >= 0 && slot < 2 && _dev[slot].Online;
-
-        /// <summary>在手柄线程中立即重读两只设备，返回本次成功采样的位掩码（bit0=582，bit1=587）。</summary>
-        public int RefreshNow(int timeoutMs = 500)
-        {
-            if (Interlocked.Exchange(ref _refreshInProgress, 1) != 0) return -1;
-            try
-            {
-                _refreshDone.Reset();
-                Interlocked.Exchange(ref _refreshRequested, 1);
-                if (!_refreshDone.Wait(timeoutMs)) return 0;
-                return Volatile.Read(ref _refreshResultMask);
-            }
-            finally
-            {
-                Volatile.Write(ref _refreshInProgress, 0);
-            }
-        }
 
         /// <summary>取最新采样；打开失败、读取失败或采样过期时 Valid=false。</summary>
         public HandleSample GetSample(int slot)
@@ -134,18 +113,6 @@ namespace MasterConsole.Services
                 while (!_stop)
                 {
                     long now = _clock.ElapsedMilliseconds;
-                    if (Interlocked.Exchange(ref _refreshRequested, 0) != 0)
-                    {
-                        int mask = 0;
-                        foreach (var d in _dev)
-                        {
-                            if (d.Id < 0) TryOpen(d);
-                            if (d.Id >= 0 && PollOne(d, now)) mask |= d.Serial == SerialA ? 1 : 2;
-                            else if (d.Id >= 0) CloseDevice(d);
-                        }
-                        Volatile.Write(ref _refreshResultMask, mask);
-                        _refreshDone.Set();
-                    }
                     foreach (var d in _dev)
                     {
                         if (d.Id < 0)
@@ -168,7 +135,6 @@ namespace MasterConsole.Services
             catch (EntryPointNotFoundException) { _sdkMissing = true; }
             finally
             {
-                _refreshDone.Set();
                 foreach (var d in _dev)
                 {
                     try { if (d.Id >= 0) { ZeroForce(d); CloseDevice(d); } } catch { }

@@ -1,8 +1,8 @@
 ; 复制为同目录的 hik_cameras.ini 后填写私有凭据；密码不会写入日志。
 [camera1]
 name=海康 1
-ip=192.168.1.32
-port=8000
+ip=192.168.50.2
+port=18000
 username=admin
 password=
 channel=1

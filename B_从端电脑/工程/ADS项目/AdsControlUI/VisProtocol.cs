@@ -50,7 +50,7 @@ namespace AdsControlUI
         // axis6 当前软限位阻断状态。必须与 C++ VisState 末尾字段一致。
         [MarshalAs(UnmanagedType.I1)] public bool axis6_soft_limit_hold;
 
-        // 统一实验记录、纯净力与 Action 4 状态。必须与 C++ VisState 顺序完全一致。
+        // 统一实验记录与纯净力状态。必须与 C++ VisState 顺序完全一致。
         public int recording_state;
         public int recording_error;
         public ulong recording_elapsed_us;
@@ -62,6 +62,7 @@ namespace AdsControlUI
         [MarshalAs(UnmanagedType.I1)] public bool clean_force_valid;
         public double clean_force_n;
         public double clean_handle_torque_nm;
+        // 预留旧版相机状态字段，保持管道布局兼容；当前均为零。
         public int camera_state;
         public int camera_input_format;
         public int camera_width;
@@ -158,7 +159,7 @@ namespace AdsControlUI
         SetAxis1PostReturnLead = 24,
         StartExperimentRecording = 25,
         StopExperimentRecording = 26,
-        SetCameraPreview = 27,
+        // 命令号 27 已停用，保留编号。
         SetCleanForceMonitor = 28,
 		SetArmManualEnable = 29,
 		SetArmAxisEnable = 30,
@@ -179,6 +180,6 @@ namespace AdsControlUI
 		KeepArmCartesianAlive = 45,
 		SetSelfCheckAxisPos = 46,
         StartSelfCheck = 47,
-        RefreshHandles = 48,
+        // 命令号 48 已停用，保留编号。
 	}
 }

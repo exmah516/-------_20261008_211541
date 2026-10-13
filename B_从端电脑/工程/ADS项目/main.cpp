@@ -10,8 +10,8 @@
 #include "motion_sync.h"
 #include "plc_io.h"
 #include "remote_gateway.h"
+#include "hik_camera_relay.h"
 #include "startup_sequence.h"
-#include "tcp_force_daq.h"
 #include "vis_server.h"
 
 #include <cmath>
@@ -121,12 +121,13 @@ int main(int argc, char* argv[])
 	Handle handle_axis1(serial_axis1_handle);
 	Handle handle_axis6(serial_axis6_handle);
 	CADSComm ads;
-	TcpForceDaqClient tcp_force_daq;
 	DeliveryTrackingController tracking_controller;
 	HandleNetDistance axis1_net_distance, axis6_net_distance;
 	ExperimentRecorder experiment_recorder;
 	VisServer vis_server;
 	RemoteGateway remote_gateway;
+	HikCameraRelay camera_relay;
+	(void)camera_relay.start();
 	HandleFilterState axis1_handle_filter;
 	HandleFilterState axis6_handle_filter;
 	// 首位启动 ADS 100 Hz 后台通信服务与辅助服务，彻底消除主线程直连并发竞争。
@@ -262,8 +263,6 @@ int main(int argc, char* argv[])
 	ctx.axis6_handle_filter = &axis6_handle_filter;
 	ctx.cfg = &cfg;
 	ctx.cyl = &cyl;
-	ctx.force_sample_source = cfg.force_sample_source;
-	ctx.tcp_force_daq = &tcp_force_daq;
 	ctx.pos = pos;
 	ctx.plc_act_pos = plc_act_pos;
 	ctx.plc_init_pos = plc_init_pos;
@@ -602,7 +601,6 @@ int main(int argc, char* argv[])
 	double axis6_soft_limit_blocked_target_from_left_mm = 0.0;
 	ForceSampleFrame force_sample;
 	int loop_count = 0;
-	DWORD force_sample_last_sample_ms = 0;
 	bool clean_force_monitor_enabled = false;
 	std::string force_feedback_diag_reason;
 	std::string force_sample_diag_reason;
@@ -818,36 +816,9 @@ int main(int argc, char* argv[])
 
 	std::cout << "力反馈：关闭（按 F 键切换）。" << std::endl;
 
-	bool force_tcp_zero_wait_logged = false;
-	// TCP 采集卡是力输入源，不再与任何磁盘记录开关绑定。
-	if (ctx.force_sample_source == ForceSampleSource::TCP_DAQ)
-	{
-		if (tcp_force_daq.start(cfg.tcp_force_daq_ip, cfg.tcp_force_daq_port, cfg.tcp_force_daq_local_ip))
-		{
-			std::cout << "力采样源：TCP_DAQ（" << cfg.tcp_force_daq_ip << ":" << cfg.tcp_force_daq_port
-				<< "，本机绑定 " << cfg.tcp_force_daq_local_ip << "）。" << std::endl;
-		}
-		else
-		{
-			std::cout << "力采样源：TCP_DAQ 后台线程启动失败。" << std::endl;
-		}
-	}
-
 	auto zero_force_sensor_impl = [&](const char* source) -> bool
 	{
-		if (ctx.force_sample_source == ForceSampleSource::TCP_DAQ)
-		{
-			if (!force_tcp_zero_wait_logged)
-			{
-				std::cout << source
-					<< "零点采集失败：本次F_direct仅由ADS/PLC计数标定，TCP_DAQ同源性尚未确认；"
-					<< "不会对未验证的TCP数据启用力反馈。" << std::endl;
-				force_tcp_zero_wait_logged = true;
-			}
-			return false;
-		}
-
-		// ADS 为默认源时必须同步读取一帧，不能依赖旧采样节拍或力反馈开关。
+		// 零点采集必须同步读取一帧 ADS 数据，不能依赖旧采样节拍或力反馈开关。
 		ForceSampleFrame sampled_frame;
 		if (read_force_sample(sampled_frame))
 		{
@@ -4285,79 +4256,35 @@ int main(int argc, char* argv[])
 		// 记录器直接消费 100 Hz ADS 快照序号；无效快照仍保留时间槽并由写入器归一化为 NaN。
 		experiment_recorder.update_ads_communication_stats(ads_stats);
 		experiment_recorder.poll_health();
-		const std::int64_t recorder_now_qpc = experiment_recorder.clock().now_qpc();
 		const DWORD force_sample_now_ms = GetTickCount();
 		const bool force_data_consumer_active = experiment_recorder.is_recording() || ff.enabled ||
 			tracking_controller.compensation_enabled() || clean_force_monitor_enabled;
-		if (ctx.force_sample_source == ForceSampleSource::ADS)
+		if (has_new_ads_snapshot)
 		{
-			if (has_new_ads_snapshot)
-			{
-				ForceSampleFrame sampled_frame{};
-				sampled_frame.ft_1_value = ads_snapshot.ft_1_value;
-				sampled_frame.fn_1_value = ads_snapshot.fn_1_value;
-				sampled_frame.fn_2_value = ads_snapshot.fn_2_value;
-				sampled_frame.ft_2_value = ads_snapshot.ft_2_value;
-				sampled_frame.ft_1_value_v = static_cast<double>(ads_snapshot.ft_1_value) / 1000.0;
-				sampled_frame.fn_1_value_v = static_cast<double>(ads_snapshot.fn_1_value) / 1000.0;
-				sampled_frame.fn_2_value_v = static_cast<double>(ads_snapshot.fn_2_value) / 1000.0;
-				sampled_frame.ft_2_value_v = static_cast<double>(ads_snapshot.ft_2_value) / 1000.0;
-				sampled_frame.axis1_pos_rel = ads_snapshot.act_pos_rel[0];
-				sampled_frame.axis2_pos_rel = ads_snapshot.act_pos_rel[1];
-				sampled_frame.tick_ms = force_sample_now_ms;
-				sampled_frame.qpc_ticks = ads_snapshot.qpc_ticks;
-				sampled_frame.valid = ads_snapshot.force_valid;
-				force_sample = sampled_frame;
-			}
-			else if (ads_soft_hold_active)
-			{
-				force_sample.valid = false;
-			}
+			ForceSampleFrame sampled_frame{};
+			sampled_frame.ft_1_value = ads_snapshot.ft_1_value;
+			sampled_frame.fn_1_value = ads_snapshot.fn_1_value;
+			sampled_frame.fn_2_value = ads_snapshot.fn_2_value;
+			sampled_frame.ft_2_value = ads_snapshot.ft_2_value;
+			sampled_frame.ft_1_value_v = static_cast<double>(ads_snapshot.ft_1_value) / 1000.0;
+			sampled_frame.fn_1_value_v = static_cast<double>(ads_snapshot.fn_1_value) / 1000.0;
+			sampled_frame.fn_2_value_v = static_cast<double>(ads_snapshot.fn_2_value) / 1000.0;
+			sampled_frame.ft_2_value_v = static_cast<double>(ads_snapshot.ft_2_value) / 1000.0;
+			sampled_frame.axis1_pos_rel = ads_snapshot.act_pos_rel[0];
+			sampled_frame.axis2_pos_rel = ads_snapshot.act_pos_rel[1];
+			sampled_frame.tick_ms = force_sample_now_ms;
+			sampled_frame.qpc_ticks = ads_snapshot.qpc_ticks;
+			sampled_frame.valid = ads_snapshot.force_valid;
+			force_sample = sampled_frame;
 		}
-		else
+		else if (ads_soft_hold_active)
 		{
-			DWORD force_sampling_period_ms = 20;
-			if (tracking_controller.compensation_enabled() && !ff.enabled &&
-				!clean_force_monitor_enabled && !experiment_recorder.is_recording())
-			{
-				force_sampling_period_ms = 50;
-			}
-			const bool should_sample_force = force_data_consumer_active &&
-				(has_new_ads_snapshot || force_sample_last_sample_ms == 0 ||
-				 (force_sample_now_ms - force_sample_last_sample_ms) >= force_sampling_period_ms);
-			if (should_sample_force)
-			{
-				force_sample_last_sample_ms = force_sample_now_ms;
-				ForceSampleFrame sampled_frame{};
-				double tcp_raw_v[6] = {};
-				std::uint64_t tcp_tick_ms = 0;
-				std::int64_t tcp_qpc_ticks = 0;
-				bool sample_ok = false;
-				if (tcp_force_daq.get_latest_raw(tcp_raw_v, tcp_tick_ms, &tcp_qpc_ticks))
-				{
-					const std::int64_t max_age_ticks = experiment_recorder.clock().frequency() / 2;
-					if (tcp_qpc_ticks > 0 && recorder_now_qpc - tcp_qpc_ticks <= max_age_ticks)
-					{
-						sampled_frame.fn_1_value_v = tcp_raw_v[0];
-						sampled_frame.ft_1_value_v = tcp_raw_v[1];
-						sampled_frame.axis1_pos_rel = plc_act_pos[0];
-						sampled_frame.axis2_pos_rel = plc_act_pos[1];
-						sampled_frame.tick_ms = static_cast<DWORD>(tcp_tick_ms);
-						sampled_frame.qpc_ticks = tcp_qpc_ticks;
-						sampled_frame.valid = true;
-						sample_ok = true;
-					}
-				}
-				force_sample = sampled_frame;
-				force_sample.valid = sample_ok;
-			}
+			force_sample.valid = false;
 		}
 
 		if (force_data_consumer_active && !force_sample.valid)
 		{
-			const std::string reason = ctx.force_sample_source == ForceSampleSource::TCP_DAQ
-				? "力传感器告警：TCP_DAQ 尚无新鲜有效帧。"
-				: "力数据无效：仅暂停力反馈并标记记录，位置控制继续。";
+			const std::string reason = "力数据无效：仅暂停力反馈并标记记录，位置控制继续。";
 			if (force_sample_diag_reason != reason) std::cout << reason << std::endl;
 			force_sample_diag_reason = reason;
 		}
@@ -4381,25 +4308,11 @@ int main(int argc, char* argv[])
 				ForceCsvRow force_row{};
 				force_row.ads_snapshot_sequence = record_snapshot.attempt_sequence;
 				force_row.source_qpc_ticks = record_snapshot.qpc_ticks;
-				if (ctx.force_sample_source == ForceSampleSource::ADS)
-				{
-					force_row.sample_valid = record_snapshot.force_valid;
-					force_row.fn_1_raw_v = static_cast<double>(record_snapshot.fn_1_value) / 1000.0;
-					force_row.ft_1_raw_v = static_cast<double>(record_snapshot.ft_1_value) / 1000.0;
-					force_row.fn_2_raw_v = static_cast<double>(record_snapshot.fn_2_value) / 1000.0;
-					force_row.ft_2_raw_v = static_cast<double>(record_snapshot.ft_2_value) / 1000.0;
-				}
-				else
-				{
-					const std::int64_t delta = force_sample.qpc_ticks >= record_snapshot.qpc_ticks
-						? force_sample.qpc_ticks - record_snapshot.qpc_ticks
-						: record_snapshot.qpc_ticks - force_sample.qpc_ticks;
-					force_row.sample_valid = force_sample.valid && delta <= max_handle_delta_ticks;
-					force_row.fn_1_raw_v = force_sample.fn_1_value_v;
-					force_row.ft_1_raw_v = force_sample.ft_1_value_v;
-					force_row.fn_2_raw_v = force_sample.fn_2_value_v;
-					force_row.ft_2_raw_v = force_sample.ft_2_value_v;
-				}
+				force_row.sample_valid = record_snapshot.force_valid;
+				force_row.fn_1_raw_v = static_cast<double>(record_snapshot.fn_1_value) / 1000.0;
+				force_row.ft_1_raw_v = static_cast<double>(record_snapshot.ft_1_value) / 1000.0;
+				force_row.fn_2_raw_v = static_cast<double>(record_snapshot.fn_2_value) / 1000.0;
+				force_row.ft_2_raw_v = static_cast<double>(record_snapshot.ft_2_value) / 1000.0;
 				force_row.calibrated_valid = force_row.sample_valid && cal_state.zeroed;
 				const CleanForce row_clean_force = force_row.calibrated_valid
 					? calculate_clean_force(
@@ -4461,7 +4374,7 @@ int main(int argc, char* argv[])
 			}
 		}
 
-		// PI 与磁盘记录无关；仅在 PI 自身运行时保留 20 Hz 力健康门控。
+		// PI 与磁盘记录无关；力采样失效时关闭位移补偿。
 		if (tracking_controller.compensation_enabled() && !force_sample.valid)
 		{
 			tracking_controller.disable_compensation();
@@ -4712,18 +4625,6 @@ int main(int argc, char* argv[])
 			vs.clean_force_valid = clean_force_valid;
 			vs.clean_force_n = clean_force_valid ? clean_force.force_n : csv_nan;
 			vs.clean_handle_torque_nm = clean_force_valid ? clean_force.handle_torque_nm : csv_nan;
-			vs.camera_state = static_cast<int>(recorder_snapshot.camera.state);
-			vs.camera_input_format = static_cast<int>(recorder_snapshot.camera.input_format);
-			vs.camera_width = recorder_snapshot.camera.width;
-			vs.camera_height = recorder_snapshot.camera.height;
-			vs.camera_fps_numerator = recorder_snapshot.camera.fps_numerator;
-			vs.camera_fps_denominator = recorder_snapshot.camera.fps_denominator;
-			vs.camera_preview_enabled = recorder_snapshot.camera.preview_enabled;
-			vs.camera_recording = recorder_snapshot.camera.recording;
-			vs.camera_recording_elapsed_us = recorder_snapshot.camera.recording_elapsed_us;
-			vs.camera_frame_count = recorder_snapshot.camera.frame_count;
-			vs.camera_dropped_frames = recorder_snapshot.camera.dropped_frames;
-			vs.camera_error_code = recorder_snapshot.camera.error_code;
 			vs.physical_button_event_counter = 0;
 			vs.physical_button_event_code = 0;
 			vs.ads_state = static_cast<int>(ads_stats.state);
@@ -4911,59 +4812,6 @@ int main(int argc, char* argv[])
 					}
 					break;
 				}
-				case VisCommandType::RefreshHandles:
-				{
-					// 刷新只重建成功读取到的手柄基准；不改 PLC 目标，也不清除另一只手柄的缓存。
-					const int refresh_mask = vcmd.param1 & 0x03;
-					if (!handle_axis1.is_open()) (void)handle_axis1.init();
-					if (!handle_axis6.is_open()) (void)handle_axis6.init();
-					const bool refreshed_axis1 = (refresh_mask & 0x01) != 0 &&
-						handle_axis1.is_open() && handle_axis1.poll();
-					const bool refreshed_axis6 = (refresh_mask & 0x02) != 0 &&
-						handle_axis6.is_open() && handle_axis6.poll();
-					auto reset_axis1_baseline = [&]()
-					{
-						axis1_handle_filter.reset(handle_axis1.fJoints2[0], handle_axis1.fJoints2[1]);
-						axis1_crawl.handle_ref = axis1_handle_filter.axis0_filtered;
-						axis1_crawl.rot_ref = axis1_handle_filter.axis1_filtered;
-						axis1_prev_linear_filtered = axis1_handle_filter.axis0_filtered;
-						axis1_prev_rot_filtered = axis1_handle_filter.axis1_filtered;
-					};
-					auto reset_axis6_baseline = [&]()
-					{
-						axis6_handle_filter.reset(handle_axis6.fJoints2[0], handle_axis6.fJoints2[1]);
-						axis6_crawl.handle_ref = axis6_handle_filter.axis0_filtered;
-						axis6_crawl.rot_ref = axis6_handle_filter.axis1_filtered;
-						axis6_prev_linear_filtered = axis6_handle_filter.axis0_filtered;
-						axis6_prev_rot_filtered = axis6_handle_filter.axis1_filtered;
-					};
-					if (single_handle_mode)
-					{
-						if (refreshed_axis1 || refreshed_axis6)
-						{
-							Handle* active = refreshed_axis1 ? &handle_axis1 : &handle_axis6;
-							axis1_handle_filter.reset(active->fJoints2[0], active->fJoints2[1]);
-							axis6_handle_filter.reset(active->fJoints2[0], active->fJoints2[1]);
-							axis1_crawl.handle_ref = axis1_handle_filter.axis0_filtered;
-							axis1_crawl.rot_ref = axis1_handle_filter.axis1_filtered;
-							axis6_crawl.handle_ref = axis6_handle_filter.axis0_filtered;
-							axis6_crawl.rot_ref = axis6_handle_filter.axis1_filtered;
-							axis1_prev_linear_filtered = axis1_handle_filter.axis0_filtered;
-							axis6_prev_linear_filtered = axis6_handle_filter.axis0_filtered;
-							axis1_prev_rot_filtered = axis1_handle_filter.axis1_filtered;
-							axis6_prev_rot_filtered = axis6_handle_filter.axis1_filtered;
-						}
-					}
-					else
-					{
-						if (refreshed_axis1) reset_axis1_baseline();
-						if (refreshed_axis6) reset_axis6_baseline();
-					}
-					std::cout << "手柄刷新：582=" << (refreshed_axis1 ? "成功" : "保留原状态")
-						<< "，587=" << (refreshed_axis6 ? "成功" : "保留原状态")
-						<< "；不会直接产生运动。" << std::endl;
-					break;
-				}
 				case VisCommandType::RequestModeSwitch:
 					if (single_handle_mode && !ads_soft_hold_active && !planned_return.active())
 						single_handle_requested_mode = static_cast<GuidewireMode>(vcmd.param1);
@@ -5046,30 +4894,7 @@ int main(int argc, char* argv[])
 						if (!force_sample_fresh)
 						{
 							ForceSampleFrame gate_sample{};
-							bool gate_sample_ok = false;
-							if (ctx.force_sample_source == ForceSampleSource::TCP_DAQ)
-							{
-								double tcp_raw_v[6] = {};
-								std::uint64_t tcp_tick_ms = 0;
-								std::int64_t tcp_qpc_ticks = 0;
-								if (tcp_force_daq.get_latest_raw(tcp_raw_v, tcp_tick_ms, &tcp_qpc_ticks) &&
-									tcp_qpc_ticks > 0 && gate_now_qpc >= tcp_qpc_ticks &&
-									gate_now_qpc - tcp_qpc_ticks <= gate_max_age)
-								{
-									gate_sample.fn_1_value_v = tcp_raw_v[0];
-									gate_sample.ft_1_value_v = tcp_raw_v[1];
-									gate_sample.axis1_pos_rel = plc_act_pos[0];
-									gate_sample.axis2_pos_rel = plc_act_pos[1];
-									gate_sample.tick_ms = static_cast<DWORD>(tcp_tick_ms);
-									gate_sample.qpc_ticks = tcp_qpc_ticks;
-									gate_sample.valid = true;
-									gate_sample_ok = true;
-								}
-							}
-							else
-							{
-								gate_sample_ok = read_force_sample(gate_sample);
-							}
+							const bool gate_sample_ok = read_force_sample(gate_sample);
 							force_sample = gate_sample;
 							force_sample.valid = gate_sample_ok;
 						}
@@ -5127,9 +4952,6 @@ int main(int argc, char* argv[])
 				}
 				case VisCommandType::StopExperimentRecording:
 					experiment_recorder.stop_async("user_stop");
-					break;
-				case VisCommandType::SetCameraPreview:
-					experiment_recorder.set_camera_preview(vcmd.param1 != 0);
 					break;
 				case VisCommandType::SetCleanForceMonitor:
 					clean_force_monitor_enabled = vcmd.param1 != 0;
@@ -5434,10 +5256,10 @@ int main(int argc, char* argv[])
 	(void)ads_communication.wait_for_snapshot(ads_snapshot_sequence, 50, shutdown_snapshot);
 	clear_force_output();
 	experiment_recorder.stop_and_wait("program_exit");
-	tcp_force_daq.stop();
 	arm_manual_ads.stop();
 	ads_communication.stop();
 	remote_gateway.stop();
+	camera_relay.stop();
 	vis_server.stop();
 	handle_axis1.close();
 	handle_axis6.close();
