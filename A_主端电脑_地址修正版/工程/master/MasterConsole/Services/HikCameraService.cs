@@ -175,15 +175,17 @@ namespace MasterConsole.Services
             if (user < 0) { SetStatus("失败", "登录失败，SDK错误码 " + HikNetSdk.NET_DVR_GetLastError()); ReleaseRuntime(); return; }
             lock (_sync) { if (_disposed) { HikNetSdk.NET_DVR_Logout(user); ReleaseRuntime(); return; } _userId = user; }
             var preview = new HikNetSdk.PreviewInfo {
-                Channel = Settings.Channel, StreamType = Settings.StreamType, LinkMode = 1, PlayWnd = playWindow,
-                Blocked = false, PassbackRecord = false, StreamId = new byte[32], DisplayBufNum = 1, Reserved = new byte[215]
+                Channel = Settings.Channel, StreamType = Settings.StreamType, LinkMode = 0, PlayWnd = playWindow,
+                Blocked = true, PassbackRecord = false, StreamId = new byte[32], DisplayBufNum = 1, Reserved = new byte[215]
             };
-            int real = HikNetSdk.NET_DVR_RealPlay_V40(user, ref preview, _dataCallback, IntPtr.Zero);
+            // 由 HCNetSDK/PlayCtrl 直接渲染到 PlayWnd；仅接收回调而不送入 PlayCtrl 会导致黑屏。
+            int real = HikNetSdk.NET_DVR_RealPlay_V40(user, ref preview, null, IntPtr.Zero);
             if (real < 0) { SetStatus("失败", "预览启动失败，SDK错误码 " + HikNetSdk.NET_DVR_GetLastError()); HikNetSdk.NET_DVR_Logout(user); ReleaseRuntime(); lock (_sync) _userId = -1; return; }
             lock (_sync) { if (_disposed) { HikNetSdk.NET_DVR_StopRealPlay(real); HikNetSdk.NET_DVR_Logout(user); ReleaseRuntime(); return; } _realHandle = real; }
             HikCameraRuntime.Add(this);
             Interlocked.Exchange(ref _previewStartedTicks, DateTime.UtcNow.Ticks);
-            SetStatus("连接中", "已启动UDP预览，等待媒体帧");
+            HikNetSdk.NET_DVR_MakeKeyFrame(user, Settings.Channel);
+            SetStatus("在线", "预览已启动，SDK正在直接渲染");
         }
 
         private static byte[] Bytes(string value, int size)

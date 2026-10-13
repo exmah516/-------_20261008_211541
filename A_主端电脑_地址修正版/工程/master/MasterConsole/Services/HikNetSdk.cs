@@ -77,6 +77,7 @@ namespace MasterConsole.Services
         [DllImport("HCNetSDK.dll", CallingConvention = CallingConvention.StdCall)] internal static extern int NET_DVR_Login_V40(ref UserLoginInfo login, ref DeviceInfoV40 device);
         [DllImport("HCNetSDK.dll", CallingConvention = CallingConvention.StdCall)] internal static extern bool NET_DVR_Logout(int userId);
         [DllImport("HCNetSDK.dll", CallingConvention = CallingConvention.StdCall)] internal static extern int NET_DVR_RealPlay_V40(int userId, ref PreviewInfo preview, RealDataCallback callback, IntPtr user);
+        [DllImport("HCNetSDK.dll", CallingConvention = CallingConvention.StdCall)] internal static extern bool NET_DVR_MakeKeyFrame(int userId, int channel);
         [DllImport("HCNetSDK.dll", CallingConvention = CallingConvention.StdCall)] internal static extern bool NET_DVR_StopRealPlay(int realHandle);
         [DllImport("HCNetSDK.dll", CallingConvention = CallingConvention.StdCall)] internal static extern bool NET_DVR_SetExceptionCallBack_V30(uint message, IntPtr window, ExceptionCallback callback, IntPtr user);
     }

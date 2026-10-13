@@ -158,14 +158,14 @@ struct ControlConfig
 	// 正反切换一次性触发保护距离（离开该距离后重新允许触发）。
 	double reverse_switch_trigger_guard_mm = 2.0;
 
-	// PLC 规划快速回退参数：速度、加减速度和 jerk 均为原值的 2 倍。
+	// PLC 规划快速回退参数。
 	double axis1_return_velocity_mm_s = 110.0; // 原值 200 mm/s
 	double axis1_return_acc_mm_s2 = 4800.0; // 原值 2400 mm/s^2
 	double axis1_return_dec_mm_s2 = 4800.0; // 原值 2400 mm/s^2
 	double axis1_return_jerk_mm_s3 = 70000.0; // 原值 35000 mm/s^3
 	// 自动换手在回退前切缸、回退后恢复夹爪时，均从输出成功写入 PLC 后稳定 100 ms。
 	DWORD axis1_pre_move_cylinder_wait_ms = 100;
-	double axis6_return_velocity_mm_s = 400.0; // 原值 200 mm/s
+	double axis6_return_velocity_mm_s = 110.0; // 与轴1统一回退速度，便于现场对照
 	double axis6_return_acc_mm_s2 = 4800.0; // 原值 2400 mm/s^2
 	double axis6_return_dec_mm_s2 = 4800.0; // 原值 2400 mm/s^2
 	double axis6_return_jerk_mm_s3 = 70000.0; // 原值 35000 mm/s^3

@@ -1,0 +1,33 @@
+{
+  "package_head": "cd64bf33ac082e6809c576975144064bb5b2ec33",
+  "plc_repo_head": "203d757ebcd9fa7c38646cfc3eecc293606ff65f",
+  "built": "Release x64",
+  "source_has_uncommitted_changes": true,
+  "executed": false,
+  "files": [
+    {
+      "path": "B_从端电脑/工程/ADS项目/main.cpp",
+      "sha256": "3bac22482a0dee7a19be1e7863a0ff83da33732420d3d8d01e5b20e6f918f6ee"
+    },
+    {
+      "path": "B_从端电脑/工程/ADS项目/control_types.h",
+      "sha256": "a38171e4feb9dac16876c75d3f8698ab5c6ef36fa1f35bd94ecade1bf8c63198"
+    },
+    {
+      "path": "B_从端电脑/工程/ADS项目/ads_communication.cpp",
+      "sha256": "e156449935d9a05ebcf9e71c9e89a6e13ce65b22e1b1f633bc7d1577489ba8c5"
+    },
+    {
+      "path": "验证记录/20261012_轴6主动换手复查/bin/ADS.exe",
+      "sha256": "b53336536c0dd8f3c817b3ffc1e0d051d7f4fdb807b25e9f091128d2f51eb263"
+    },
+    {
+      "path": "D:/Work_files/Vessel intervention Robot/260316/下位机工程程序/250902/Untitled2/POUs/MAIN.TcPOU",
+      "sha256": "25f0740f395f586e6694ae4c38ea073208e806237b993810da22cb7b95daefed"
+    },
+    {
+      "path": "D:/Work_files/Vessel intervention Robot/260316/下位机工程程序/250902/Untitled2/POUs/handle.TcPOU",
+      "sha256": "00a80a43c66f6fed2e98c939d808bdf4ff661ff00e69fbcb1fa9a523f46b14d6"
+    }
+  ]
+}

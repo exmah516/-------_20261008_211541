@@ -1,6 +1,8 @@
 ﻿Cosmo.dll
 FLCatheter.dll
 HCNetSDK.dll
+HCCore.dll
+AudioRender.dll
 HCNetSDKCom/AnalyzeData.dll
 HCNetSDKCom/AudioIntercom.dll
 HCNetSDKCom/AudioRender.dll
@@ -38,6 +40,11 @@ MasterConsole.Protocol.dll
 Math4wpf.dll
 Microsoft.VC90.CRT.manifest
 PlayCtrl.dll
+SuperRender.dll
+YUVProcess.dll
+zlib1.dll
+libcrypto-1_1-x64.dll
+libssl-1_1-x64.dll
 URDF/urdf.urdf
 URDF/urdf/meshes/base_link.STL
 URDF/urdf/meshes/sl0.STL

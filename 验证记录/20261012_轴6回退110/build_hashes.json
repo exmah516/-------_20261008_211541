@@ -1,0 +1,14 @@
+{
+  "package_head": "cd64bf33ac082e6809c576975144064bb5b2ec33",
+  "plc_repo_head": "203d757ebcd9fa7c38646cfc3eecc293606ff65f",
+  "configuration": "Release x64",
+  "axis6_return_velocity_mm_s": 110,
+  "built_runtime_path": "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\B_从端电脑\\工程\\ADS项目\\x64\\Release\\ADS.exe",
+  "runtime_sha256": "B260F6C82C216A32B2BFEC069B7C118A124457C8928618CD3CF21C4A34F9B19E",
+  "runtime_last_write_time": "2026-10-12T19:51:37.3599686+08:00",
+  "parameter_source_sha256": "5CE1092A324B596582555C02E309C2EA2B009FA0AF5B11910F9178B0DEB4B7FA",
+  "previous_runtime_sha256": "CC27978C993B22326CDF3355279945DA1D96950359F308E7212899544F16BFAE",
+  "source_has_uncommitted_changes": true,
+  "program_executed": false,
+  "plc_downloaded": false
+}

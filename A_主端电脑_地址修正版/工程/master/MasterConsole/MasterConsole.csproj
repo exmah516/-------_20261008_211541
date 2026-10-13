@@ -29,6 +29,13 @@
     <!-- 匹配旧主端的海康 x64 SDK；HCNetSDKCom 必须与主 DLL 同目录输出。 -->
     <None Include="Runtime\HikNetSDK\HCNetSDK.dll" Link="HCNetSDK.dll" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Runtime\HikNetSDK\PlayCtrl.dll" Link="PlayCtrl.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Runtime\HikNetSDK\SuperRender.dll" Link="SuperRender.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Runtime\HikNetSDK\YUVProcess.dll" Link="YUVProcess.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Runtime\HikNetSDK\zlib1.dll" Link="zlib1.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Runtime\HikNetSDK\libcrypto-1_1-x64.dll" Link="libcrypto-1_1-x64.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Runtime\HikNetSDK\libssl-1_1-x64.dll" Link="libssl-1_1-x64.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Runtime\HikNetSDK\HCCore.dll" Link="HCCore.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Runtime\HikNetSDK\AudioRender.dll" Link="AudioRender.dll" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Runtime\HikNetSDK\HCNetSDKCom\**\*" Link="HCNetSDKCom\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Reference Include="Math4wpf">
       <HintPath>Runtime\Math4wpf.dll</HintPath>

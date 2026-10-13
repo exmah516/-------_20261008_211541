@@ -1079,6 +1079,33 @@ int main(int argc, char* argv[])
 			selfcheck_command_error = false;
 		handle_reinit_req = ads_events.handle_reinit_req;
 		estop_hold_req = ads_events.estop_hold_req;
+		std::ostringstream plc_estop_diagnostic;
+		if (estop_hold_req && !estop_hold_active)
+		{
+			// 先保存取消操作会清除的回退现场；这些是主机缓存，不是同一扫描的PLC锁存值。
+			plc_estop_diagnostic.precision(12);
+			plc_estop_diagnostic << "[PLC-ESTOP] tick_ms=" << GetTickCount64()
+				<< " build=" << diagnostic_build << " " << __DATE__ << " " << __TIME__
+				<< " return_phase=" << static_cast<int>(planned_return.phase)
+				<< " return_mode=" << static_cast<int>(planned_return.mode)
+				<< " legs=" << planned_return.leg_count << " reverse_prev1/6=" << axis1_reverse_pressed_prev << "/" << axis6_effective_reverse_prev
+				<< " clamp_stage=" << static_cast<int>(planned_return.clamp_stage) << " restore_stage=" << static_cast<int>(planned_return.restore_stage)
+				<< " snapshot_seq=" << ads_snapshot_sequence << " new_snapshot=" << has_new_ads_snapshot
+				<< " position_valid=" << ads_snapshot.position_valid << " age_us=" << ads_stats.latest_snapshot_age_us
+				<< " host_timeout=" << ads_snapshot.host_comm_timeout << "/" << ads_events.host_comm_timeout
+				<< " axis6_busy/done/error/id=" << ads_events.axis6_return_busy << "/"
+				<< ads_events.axis6_return_done << "/" << ads_events.axis6_return_error << "/" << ads_events.axis6_return_error_id;
+			for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
+			{
+				const auto& leg = planned_return.legs[leg_index];
+				plc_estop_diagnostic << " axis=" << leg.axis_index + 1 << " target_abs=" << leg.target_abs
+					<< " started=" << leg.started << " done=" << leg.done
+					<< " actual_abs=" << ads_snapshot.act_pos_rel[leg.axis_index] + ads_snapshot.init_pos[leg.axis_index]
+					<< " refer_abs=" << pos[leg.axis_index] + plc_init_pos[leg.axis_index];
+			}
+			plc_estop_diagnostic << " last_ads_failure_seq=" << ads_stats.diagnostic_sequence
+				<< " failure_tick_ms=" << ads_stats.diagnostic_tick_ms << "\n";
+		}
 		if (ads_stats.reconnect_count != handled_reconnect_count)
 		{
 			handled_reconnect_count = ads_stats.reconnect_count;
@@ -1295,7 +1322,7 @@ int main(int argc, char* argv[])
 				else std::cerr << "[ADS-DIAG] 无法写入故障文件，请保留控制台输出。" << std::endl;
 				reported_ads_diagnostic_sequence = ads_stats.diagnostic_sequence;
 				last_ads_diagnostic_log_ms = loop_now_ms;
-				std::cout << "ADS 快照中断：保持最后参考并丢弃故障期间手柄增量。" << std::endl;
+				std::cout << "ADS/PLC 运动条件未就绪：保持最后参考并丢弃故障期间手柄增量，原因见前面的诊断字段。" << std::endl;
 			}
 			else if (ads_stats.diagnostic_sequence != reported_ads_diagnostic_sequence &&
 				loop_now_ms - last_ads_diagnostic_log_ms >= 1000)
@@ -1690,11 +1717,15 @@ int main(int argc, char* argv[])
 		{
 			if (estop_hold_req)
 			{
-				std::cout << "PLC 急停状态：开启。" << std::endl;
 				estop_hold_active = true;
 				control_active = false;
 				(void)cancel_active_return_motion(true);
 				clear_force_output();
+				// 完成原有停止处理后再写文件，不增加ADS请求。
+				std::cout << "PLC 急停状态：开启。" << std::endl << plc_estop_diagnostic.str();
+				std::ofstream diagnostic_log(diagnostic_path, std::ios::app | std::ios::binary);
+				if (diagnostic_log) diagnostic_log << plc_estop_diagnostic.str();
+				else std::cerr << "[PLC-ESTOP] 无法写入故障文件，请保留控制台输出。" << std::endl;
 			}
 			else
 			{
