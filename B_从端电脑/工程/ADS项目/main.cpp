@@ -2501,18 +2501,38 @@ int main(int argc, char* argv[])
 				return true;
 			};
 
-			auto planned_return_clamp_settle_ms = [&]() -> DWORD
+			auto planned_return_settle_wait_ms = [&](bool restoring, unsigned char stage) -> DWORD
 			{
-				DWORD clamp_wait_ms = 0;
-				if (planned_return.contains_axis(0))
+				DWORD wait_ms = 0;
+				if (!restoring && stage == 0)
 				{
-					clamp_wait_ms = cfg.axis1_pre_move_cylinder_wait_ms;
+					if (planned_return.contains_axis(0))
+						wait_ms = (std::max)(wait_ms, cfg.cyl1_clamp_wait_ms);
+					if (planned_return.contains_axis(5))
+						wait_ms = (std::max)(wait_ms, cfg.cyl3_clamp_wait_ms);
 				}
-				if (planned_return.contains_axis(5))
+				else if (!restoring)
 				{
-					clamp_wait_ms = (std::max)(clamp_wait_ms, cfg.axis6_pre_move_cylinder_wait_ms);
+					if (planned_return.contains_axis(0))
+						wait_ms = (std::max)(wait_ms, cfg.cyl2_release_wait_ms);
+					if (planned_return.contains_axis(5))
+						wait_ms = (std::max)(wait_ms, cfg.cyl4_release_wait_ms);
 				}
-				return clamp_wait_ms;
+				else if (stage == 0)
+				{
+					if (planned_return.contains_axis(0))
+						wait_ms = (std::max)(wait_ms, cfg.cyl2_clamp_wait_ms);
+					if (planned_return.contains_axis(5))
+						wait_ms = (std::max)(wait_ms, cfg.cyl4_clamp_wait_ms);
+				}
+				else
+				{
+					if (planned_return.contains_axis(0))
+						wait_ms = (std::max)(wait_ms, cfg.cyl1_release_wait_ms);
+					if (planned_return.contains_axis(5))
+						wait_ms = (std::max)(wait_ms, cfg.cyl3_release_wait_ms);
+				}
+				return wait_ms;
 			};
 
 			auto apply_planned_return_outputs = [&]()
@@ -2625,8 +2645,8 @@ int main(int argc, char* argv[])
 
 				if (planned_return.phase == PlannedReturnPhase::ClampSettle)
 				{
-					const DWORD clamp_wait_ms = planned_return.clamp_stage == 0
-						? cfg.axis_clamp_wait_ms : cfg.axis_release_wait_ms;
+					const DWORD clamp_wait_ms = planned_return_settle_wait_ms(
+						false, planned_return.clamp_stage);
 					if (planned_return.clamp_output_generation != 0 &&
 						!planned_return.clamp_output_applied &&
 						ads_communication.applied_output_generation() >=
@@ -2974,7 +2994,8 @@ int main(int argc, char* argv[])
 					if (planned_return.restore_stage == 0)
 					{
 						// 移动者已夹紧并稳定后，再松开持有者。
-						if ((now_ms - planned_return.phase_t0_ms) >= cfg.axis_clamp_wait_ms)
+						if ((now_ms - planned_return.phase_t0_ms) >=
+							planned_return_settle_wait_ms(true, planned_return.restore_stage))
 						{
 							planned_return.restore_stage = 1;
 							planned_return.release_output_generation = 0;
@@ -2992,7 +3013,8 @@ int main(int argc, char* argv[])
 							planned_return.phase_t0_ms = now_ms;
 						}
 					}
-					else if ((now_ms - planned_return.phase_t0_ms) >= cfg.axis_release_wait_ms &&
+					else if ((now_ms - planned_return.phase_t0_ms) >=
+						planned_return_settle_wait_ms(true, planned_return.restore_stage) &&
 						ads_motion_cycle_valid)
 					{
 						if (!rebase_planned_return())

@@ -14,9 +14,4 @@
     <PackageReference Include="ScottPlot.WPF" Version="4.1.74" />
     <None Include="..\..\Runtime\VC142\*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
-  <ItemGroup>
-    <!-- 大疆相机源码保留在磁盘中，当前不参与构建。 -->
-    <Page Remove="CameraPreviewWindow.xaml" />
-    <Compile Remove="CameraPreviewWindow.xaml.cs" />
-  </ItemGroup>
 </Project>

@@ -84,16 +84,12 @@ struct ControlConfig
 
 	// 力反馈输出配置：轴向力映射到 SDK 三轴力向量中的一个轴。
 	int axial_force_axis = 1;
-	double axial_force_sign = -1.0;
 	// 两只物理手柄的结构补偿恒力：正值向外推，撤出模式取反，开启力反馈后停用。
 	double handle_587_outward_force_n = 0.05;
 	double handle_582_outward_force_n = 0.05;
 
 	// 按键映射来自 buttons2 位掩码。
-	unsigned char btn_b0 = 0x01;
-	unsigned char btn_b5 = 0x20;
 	unsigned char btn_b6 = 0x40;
-	unsigned char btn_b7 = 0x80;
 
 	// 递送、撤出共用实际窗口边界，不再额外外扩。
 	double axis1_window_left_from_left_mm = 5.0;
@@ -112,9 +108,15 @@ struct ControlConfig
 	double axis6_passive_distance_limit_mm = 27.0;
 	// 只允许轴1触发时合并距被动换手端不足此距离的轴6。
 	double transaction_merge_eps_mm = 5.0;
-	// 换手夹爪时序：持有者先夹 -> 等 T_clamp -> 移动者松 -> 等 T_release；回程对称。
-	DWORD axis_clamp_wait_ms = 100;
-	DWORD axis_release_wait_ms = 200;
+	// 正常换手的四步夹爪时序分别使用对应电缸的稳定等待时间。
+	DWORD cyl1_release_wait_ms = 100;
+	DWORD cyl1_clamp_wait_ms = 150;
+	DWORD cyl2_release_wait_ms = 200;
+	DWORD cyl2_clamp_wait_ms = 150;
+	DWORD cyl3_release_wait_ms = 100;
+	DWORD cyl3_clamp_wait_ms = 150;
+	DWORD cyl4_release_wait_ms = 200;
+	DWORD cyl4_clamp_wait_ms = 150;
 	// 启动最终姿态下的 axis6-axis5 间距，独立于运行时换手目标。
 	double startup_g_mm = 13.0;
 	// 标准启动中间夹持阶段的轴5/6间距，与运行时窗口相互独立。
@@ -123,7 +125,7 @@ struct ControlConfig
 	double axis3_delivery_release_hysteresis_mm = 2.0;
 	double guidewire_entry_axis6_from_left_max_mm = 667.0;
 	// 普通导管正向递送中，axis1 每次计划回退后前 10 mm 手柄输入的附加映射量。
-	// 0 表示关闭；默认 4 mm，UI 与内部均限制在 [0, 5] mm。
+	// 0 表示关闭；UI 与内部均限制在 [0, 5] mm。
 	double axis1_post_return_lead_mm = 0.0;
 	double axis1_post_return_lead_limit_mm = 5.0;
 	double axis1_post_return_mapping_span_mm = 10.0;
@@ -143,28 +145,22 @@ struct ControlConfig
 	// 物理587屈曲恢复键同时置位低三位；0x07、叠加反向键的0x47均表示按住。
 	unsigned char spacing_recovery_button_mask = 0x07;
 
-	// 爬行触发/到位阈值。
-	double crawl_trigger_deadband_mm = 0.3; // |delta| 小于此值视为无效输入（不触发 push/pull）
-	double crawl_rearm_threshold_mm = 0.3; // 快退后允许再次触发前需要越过的同向阈值
+	// 计划运动到位容差。
 	double crawl_arrive_tol_mm = 0.2;
-	double hold_recover_rearm_mm = 0.6;
 	// 线性增量抗噪死区：仅用于抑制差分噪声，不承担方向门控。
 	double linear_increment_noise_deadband_mm = 0.02;
 	// 正反切换一次性触发保护距离（离开该距离后重新允许触发）。
 	double reverse_switch_trigger_guard_mm = 2.0;
 
 	// PLC 规划快速回退参数。
-	double axis1_return_velocity_mm_s = 110.0; // 原值 200 mm/s
-	double axis1_return_acc_mm_s2 = 4800.0; // 原值 2400 mm/s^2
-	double axis1_return_dec_mm_s2 = 4800.0; // 原值 2400 mm/s^2
-	double axis1_return_jerk_mm_s3 = 70000.0; // 原值 35000 mm/s^3
-	// 自动换手在回退前切缸、回退后恢复夹爪时，均从输出成功写入 PLC 后稳定 100 ms。
-	DWORD axis1_pre_move_cylinder_wait_ms = 100;
+	double axis1_return_velocity_mm_s = 110.0;
+	double axis1_return_acc_mm_s2 = 4800.0;
+	double axis1_return_dec_mm_s2 = 4800.0;
+	double axis1_return_jerk_mm_s3 = 70000.0;
 	double axis6_return_velocity_mm_s = 110.0; // 与轴1统一回退速度，便于现场对照
-	double axis6_return_acc_mm_s2 = 4800.0; // 原值 2400 mm/s^2
-	double axis6_return_dec_mm_s2 = 4800.0; // 原值 2400 mm/s^2
-	double axis6_return_jerk_mm_s3 = 70000.0; // 原值 35000 mm/s^3
-	DWORD axis6_pre_move_cylinder_wait_ms = 100;
+	double axis6_return_acc_mm_s2 = 4800.0;
+	double axis6_return_dec_mm_s2 = 4800.0;
+	double axis6_return_jerk_mm_s3 = 70000.0;
 	// 统一计划回退握手：只允许在PLC尚未启动动作时自动重试一次。
 	DWORD planned_return_ack_timeout_ms = 250;
 	DWORD planned_return_retry_clear_timeout_ms = 500;
@@ -189,15 +185,13 @@ struct ControlConfig
 	double startup_loading_pose_tolerance_mm = 2.0;
 	// 标准装卸启动的中间移动目标。
 	double startup_axis1_ready_from_left_mm = 28.0;
-	double startup_axis5_ready_from_left_mm = startup_loading_axis3_from_left_mm + 10.0; ;
+	double startup_axis5_ready_from_left_mm = startup_loading_axis3_from_left_mm + 10.0;
 	// 未经 UI 覆盖时采用的最终启动目标。
 	double startup_final_axis1_default_from_left_mm = 28.0;
 	double startup_final_axis3_default_from_left_mm = 610.0; 
 	double startup_final_axis5_default_from_left_mm = 615.0;
 	double startup_final_axis6_default_from_left_mm = 628.0; // = axis5(615) + startup_g_mm(13)
 	double startup_rot_arrive_tol_deg = 0.2;
-	// 在 axis3 完全到达目标前提前触发 cylinder2 夹紧；现场调参使其领先约 0.5 s。
-	double startup_axis3_cyl2_clamp_advance_mm = 10.0;
 };
 
 struct CylinderPreset
@@ -207,18 +201,12 @@ struct CylinderPreset
 	// cyl3/cyl4 属于导丝侧夹爪对。
 	unsigned short cyl1_open = 450;
 	unsigned short cyl1_clamp = 5;
-	unsigned short cyl1_preclamp = 320;
 	unsigned short cyl2_open = 5;
 	unsigned short cyl2_clamp = 1000;
-	unsigned short cyl2_preopen = 150;
-	unsigned short cyl2_preclamp = 400;
 	unsigned short cyl3_open = 450;
 	unsigned short cyl3_clamp = 50;
-	unsigned short cyl3_preclamp = 200;
 	unsigned short cyl4_open = 5;
 	unsigned short cyl4_clamp = 1000;
-	unsigned short cyl4_preopen = 300;
-	unsigned short cyl4_preclamp = 300;
 	unsigned short cyl3_follow_release = 400;
 	unsigned short cyl4_follow_release = 100;
 };
@@ -229,7 +217,7 @@ enum class GuidewireMode
 	Independent
 };
 
-// 六种业务模式共用的计划回退生命周期。Follow 仍由各轴现有逻辑计算，
+// 双手柄与单手柄调试共用的计划回退生命周期。Follow 仍由各轴现有逻辑计算，
 // 这里只管理触发后的夹爪稳定、PLC握手和非阻塞交接。
 enum class PlannedReturnPhase : unsigned char
 {
@@ -252,7 +240,7 @@ enum class PlannedReturnMode : unsigned char
 	CatheterRetraction,
 	GuidewireDelivery,
 	GuidewireRetraction,
-	Dual // 双手柄同时控制：不区分递送/撤出，腿集合由触发端决定
+	Dual // 双手柄共用递送/撤出方向，执行轴集合由本次触发决定
 };
 
 enum class PlannedReturnRebaseScope : unsigned char

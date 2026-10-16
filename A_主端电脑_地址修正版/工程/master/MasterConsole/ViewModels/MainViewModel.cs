@@ -58,7 +58,6 @@ namespace MasterConsole.ViewModels
         private string _catheterText = "28";
         private string _wireText = "610";
         private string _prepareError = "";
-        private string _linkStatsText = "";
         private LinkStats _stats = new LinkStats();
         private string _armFeedbackText = "定位臂命令待发送";
 

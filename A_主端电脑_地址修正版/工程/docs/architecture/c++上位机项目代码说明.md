@@ -1,5 +1,7 @@
 # C++ 上位机项目代码说明
 
+> 2026-10-16 清理说明：当前力采集走 ADS，视频走海康链路。未接入的 `tcp_force_daq.*`、`ForceSignalProcessor.h`、`INTEGRATION_GUIDE.cpp`、`action4_camera.*` 和 `CameraPreviewWindow` 已删除；下文涉及这些模块的内容仅保留为历史设计，不能按旧路径调参。
+
 更新时间：2026-08-03
 适用工程：`ADS.vcxproj` + `AdsControlUI/AdsControlUI.csproj`
 
