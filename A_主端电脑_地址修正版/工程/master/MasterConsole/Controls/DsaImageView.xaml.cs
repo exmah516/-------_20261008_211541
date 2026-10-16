@@ -18,6 +18,8 @@ namespace MasterConsole.Controls
         private bool _decodeRunning;
         private DateTime _lastDisplayedUtc;
         private bool _disposed;
+        public string Caption { get => TitleText.Text; set => TitleText.Text = value; }
+        public double StaleAfterSeconds { get; set; } = 10;
 
         private sealed class PendingFrame
         {
@@ -48,6 +50,7 @@ namespace MasterConsole.Controls
                 jpeg[jpeg.Length - 2] != 0xFF || jpeg[jpeg.Length - 1] != 0xD9) return false;
             lock (_decodeSync)
             {
+                if (_disposed) return false;
                 _pending = new PendingFrame((byte[])jpeg.Clone(), receivedUtc.ToUniversalTime());
                 if (_decodeRunning) return true;
                 _decodeRunning = true;
@@ -68,11 +71,11 @@ namespace MasterConsole.Controls
                 StatusText.Foreground = System.Windows.Media.Brushes.LightGreen;
                 DetailText.Text = "JPEG帧已显示；独立影像链路";
             }
-            if (_lastDisplayedUtc != DateTime.MinValue && DateTime.UtcNow - _lastDisplayedUtc > TimeSpan.FromSeconds(2))
+            if (_lastDisplayedUtc != DateTime.MinValue && DateTime.UtcNow - _lastDisplayedUtc > TimeSpan.FromSeconds(StaleAfterSeconds))
             {
                 StatusText.Text = "过期";
                 StatusText.Foreground = System.Windows.Media.Brushes.Gold;
-                DetailText.Text = "2秒未收到新的DSA帧，保留最后画面";
+                DetailText.Text = StaleAfterSeconds + "秒未收到新影像，保留最后画面";
             }
         }
 
@@ -97,13 +100,16 @@ namespace MasterConsole.Controls
                         bitmap.StreamSource = stream;
                         bitmap.EndInit();
                         bitmap.Freeze();
-                        Interlocked.Exchange(ref _decoded, new DecodedFrame(bitmap, frame.ReceivedUtc));
+                        lock (_decodeSync)
+                            if (!_disposed) Interlocked.Exchange(ref _decoded, new DecodedFrame(bitmap, frame.ReceivedUtc));
                     }
                 }
                 catch (Exception ex)
                 {
+                    if (_disposed || Dispatcher.HasShutdownStarted) return;
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
+                        if (_disposed) return;
                         StatusText.Text = "失败";
                         StatusText.Foreground = System.Windows.Media.Brushes.IndianRed;
                         DetailText.Text = "JPEG解码失败：" + ex.GetType().Name;
@@ -114,6 +120,7 @@ namespace MasterConsole.Controls
 
         public void UpdateReceiverStatus(string status, string detail)
         {
+            if (_disposed || Dispatcher.HasShutdownStarted) return;
             if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => UpdateReceiverStatus(status, detail))); return; }
             if (_lastDisplayedUtc != DateTime.MinValue && status != "失败") return;
             StatusText.Text = status;

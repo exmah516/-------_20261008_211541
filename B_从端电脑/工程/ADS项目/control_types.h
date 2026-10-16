@@ -111,11 +111,11 @@ struct ControlConfig
 	// 正常换手的四步夹爪时序分别使用对应电缸的稳定等待时间。
 	DWORD cyl1_release_wait_ms = 100;
 	DWORD cyl1_clamp_wait_ms = 150;
-	DWORD cyl2_release_wait_ms = 200;
+	DWORD cyl2_release_wait_ms = 500;
 	DWORD cyl2_clamp_wait_ms = 150;
 	DWORD cyl3_release_wait_ms = 100;
 	DWORD cyl3_clamp_wait_ms = 150;
-	DWORD cyl4_release_wait_ms = 200;
+	DWORD cyl4_release_wait_ms = 500;
 	DWORD cyl4_clamp_wait_ms = 150;
 	// 启动最终姿态下的 axis6-axis5 间距，独立于运行时换手目标。
 	double startup_g_mm = 13.0;

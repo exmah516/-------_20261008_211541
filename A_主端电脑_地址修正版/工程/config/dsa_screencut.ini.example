@@ -1,6 +1,10 @@
-; 复制为 dsa_screencut.ini 后填写 DSA 电脑 ScreenCut 的 IP。
-; 主端监听 36661/36663；ScreenCut 控制端口为 36662/36664。
-screenCutIp=
+; 复制为 dsa_screencut.ini。以下是占位地址，现场只需改成真实 IP。
+; DSA 电脑点“持续传图”：两幅图均发往主端 36661；快发控制回到该电脑 36662。
+screenCutIp=192.168.50.3
+; 另一台截图/心电电脑点“持续传图2”：发往主端 36663；控制回到该电脑 36664。
+; 没有另一台电脑可以留空；同一电脑运行两实例时填写同一个 IP。
+ecgScreenCutIp=192.168.50.4
+; 主端监听所有本机网卡；ScreenCut 界面的“主端IP”填写主端实际地址（部署示例 192.168.50.1）。
 listenPort0=36661
 listenPort1=36663
 commandPort0=36662

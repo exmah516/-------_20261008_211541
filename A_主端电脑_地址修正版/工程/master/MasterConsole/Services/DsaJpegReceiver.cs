@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -16,6 +15,7 @@ namespace MasterConsole.Services
         public int CommandPort0 { get; set; } = 36662;
         public int CommandPort1 { get; set; } = 36664;
         public string ScreenCutIp { get; set; } = "";
+        public string EcgScreenCutIp { get; set; } = "";
         public int MaxJpegBytes { get; set; } = 64 * 1024 * 1024;
 
         internal static DsaJpegReceiverSettings Load()
@@ -32,6 +32,7 @@ namespace MasterConsole.Services
                 string key = line.Substring(0, equals).Trim();
                 string value = line.Substring(equals + 1).Trim();
                 if (key.Equals("screenCutIp", StringComparison.OrdinalIgnoreCase)) result.ScreenCutIp = value;
+                else if (key.Equals("ecgScreenCutIp", StringComparison.OrdinalIgnoreCase)) result.EcgScreenCutIp = value;
                 else if (key.Equals("listenPort0", StringComparison.OrdinalIgnoreCase) && int.TryParse(value, out int listen0) && listen0 > 0 && listen0 <= 65535) result.ListenPort0 = listen0;
                 else if (key.Equals("listenPort1", StringComparison.OrdinalIgnoreCase) && int.TryParse(value, out int listen1) && listen1 > 0 && listen1 <= 65535) result.ListenPort1 = listen1;
                 else if (key.Equals("commandPort0", StringComparison.OrdinalIgnoreCase) && int.TryParse(value, out int command0) && command0 > 0 && command0 <= 65535) result.CommandPort0 = command0;
@@ -64,6 +65,8 @@ namespace MasterConsole.Services
         private readonly Reassembler[] _reassemblers;
         private UdpClient[] _listeners;
         private Task[] _receiveTasks;
+        private Timer _speedTimer;
+        private int _fastStream;
         private bool _started;
         private bool _disposed;
 
@@ -86,24 +89,34 @@ namespace MasterConsole.Services
                 _receiveTasks = new Task[2];
                 Bind(0, _settings.ListenPort0);
                 Bind(1, _settings.ListenPort1);
+                // 旧主端每 30 ms 的 10 次刷新发送一次，默认优先显示第一路。
+                _speedTimer = new Timer(_ => RepeatSpeedCommand(), null, 0, 300);
             }
         }
 
-        private void Bind(int stream, int port)
+        private void Bind(int channel, int port)
         {
             try
             {
-                _listeners[stream] = new UdpClient(new IPEndPoint(IPAddress.Any, port));
-                StatusChanged?.Invoke(stream, "等待", "监听 UDP " + port);
-                _receiveTasks[stream] = Task.Run(() => ReceiveLoop(stream, _listeners[stream]));
+                var listener = new UdpClient(new IPEndPoint(IPAddress.Any, port));
+                _listeners[channel] = listener;
+                listener.Client.ReceiveBufferSize = 1024 * 1024;
+                ChannelStatus(channel, "等待", "监听 UDP " + port);
+                _receiveTasks[channel] = Task.Run(() => ReceiveLoop(channel, listener));
             }
             catch (Exception ex)
             {
-                StatusChanged?.Invoke(stream, "失败", "UDP " + port + " 绑定失败：" + ex.GetType().Name);
+                ChannelStatus(channel, "失败", "UDP " + port + " 绑定失败：" + ex.GetType().Name);
             }
         }
 
-        private async Task ReceiveLoop(int stream, UdpClient listener)
+        private void ChannelStatus(int channel, string status, string detail)
+        {
+            StatusChanged?.Invoke(channel == 0 ? 0 : 2, status, detail);
+            if (channel == 0) StatusChanged?.Invoke(1, status, detail);
+        }
+
+        private async Task ReceiveLoop(int channel, UdpClient listener)
         {
             while (!_stop.IsCancellationRequested)
             {
@@ -112,15 +125,15 @@ namespace MasterConsole.Services
                     UdpReceiveResult result = await listener.ReceiveAsync().ConfigureAwait(false);
                     if (result.Buffer.Length > DatagramBytes && result.Buffer.Length != HeaderBytes)
                     {
-                        StatusChanged?.Invoke(stream, "失败", "收到超过8192字节的JPEG数据报");
-                        _reassemblers[stream].Reset();
+                        ChannelStatus(channel, "失败", "收到超过8192字节的JPEG数据报");
+                        _reassemblers[channel].Reset();
                         continue;
                     }
-                    _reassemblers[stream].Accept(result.Buffer);
+                    _reassemblers[channel].Accept(result.Buffer, result.RemoteEndPoint);
                 }
                 catch (ObjectDisposedException) { break; }
-                catch (SocketException) { if (!_stop.IsCancellationRequested) StatusChanged?.Invoke(stream, "失败", "UDP接收失败"); break; }
-                catch (Exception ex) { if (!_stop.IsCancellationRequested) StatusChanged?.Invoke(stream, "失败", "UDP接收异常：" + ex.GetType().Name); break; }
+                catch (SocketException) { if (!_stop.IsCancellationRequested) ChannelStatus(channel, "失败", "UDP接收失败"); break; }
+                catch (Exception ex) { if (!_stop.IsCancellationRequested) ChannelStatus(channel, "失败", "UDP接收异常：" + ex.GetType().Name); break; }
             }
         }
 
@@ -130,14 +143,32 @@ namespace MasterConsole.Services
             FrameReceived?.Invoke(stream, jpeg, DateTime.UtcNow);
         }
 
-        internal bool SendSpeedCommand(bool fast)
+        internal bool SendSpeedCommand(bool fast, int stream = 0)
         {
-            if (string.IsNullOrWhiteSpace(_settings.ScreenCutIp)) return false;
-            if (!IPAddress.TryParse(_settings.ScreenCutIp, out IPAddress address)) return false;
-            bool sent = false;
-            sent |= SendCommand(address, _settings.CommandPort0, fast ? new byte[] { 1, 0 } : new byte[] { 0, 0 });
-            sent |= SendCommand(address, _settings.CommandPort1, fast ? new byte[] { 0, 1 } : new byte[] { 0, 0 });
-            return sent;
+            lock (_sync)
+            {
+                if (_disposed || stream < 0 || stream > 2) return false;
+                _fastStream = fast ? stream : -1;
+                return !fast || SendActiveSpeedCommand();
+            }
+        }
+
+        private void RepeatSpeedCommand()
+        {
+            lock (_sync)
+            {
+                if (!_disposed && _fastStream >= 0) SendActiveSpeedCommand();
+            }
+        }
+
+        private bool SendActiveSpeedCommand()
+        {
+            bool ecg = _fastStream == 2;
+            string ip = ecg ? _settings.EcgScreenCutIp : _settings.ScreenCutIp;
+            if (!IPAddress.TryParse(ip, out IPAddress address) || address.AddressFamily != AddressFamily.InterNetwork) return false;
+            // 旧发送端忽略 [0,0] 且重置超时计数；停止保活才能让非选中电脑退回慢发。
+            return SendCommand(address, ecg ? _settings.CommandPort1 : _settings.CommandPort0,
+                _fastStream == 1 ? new byte[] { 0, 1 } : new byte[] { 1, 0 });
         }
 
         private static bool SendCommand(IPAddress address, int port, byte[] command)
@@ -159,19 +190,22 @@ namespace MasterConsole.Services
             {
                 if (_disposed) return;
                 _disposed = true;
+                _speedTimer?.Dispose();
                 _stop.Cancel();
                 if (_listeners != null)
                     foreach (UdpClient listener in _listeners) try { listener?.Close(); } catch { }
                 if (_listeners != null)
                     for (int i = 0; i < _listeners.Length; i++)
-                        if (_listeners[i] != null) StatusChanged?.Invoke(i, "未连接", "已停止监听");
+                        if (_listeners[i] != null) ChannelStatus(i, "未连接", "已停止监听");
             }
             _stop.Dispose();
         }
 
         private sealed class Reassembler
         {
-            private readonly int _stream;
+            private readonly int _channel;
+            private int _stream;
+            private IPEndPoint _sender;
             private readonly int _maxBytes;
             private readonly Action<int, byte[]> _complete;
             private byte[] _buffer;
@@ -179,19 +213,26 @@ namespace MasterConsole.Services
             private int _received;
             private DateTime _startedUtc;
 
-            internal Reassembler(int stream, int maxBytes, Action<int, byte[]> complete)
+            internal Reassembler(int channel, int maxBytes, Action<int, byte[]> complete)
             {
-                _stream = stream; _maxBytes = maxBytes; _complete = complete;
+                _channel = channel; _maxBytes = maxBytes; _complete = complete;
             }
 
-            internal void Accept(byte[] datagram)
+            internal void Accept(byte[] datagram, IPEndPoint sender)
             {
                 if (datagram == null || datagram.Length == 0) return;
+                if (_expected != 0 && DateTime.UtcNow - _startedUtc > TimeSpan.FromSeconds(5)) Reset();
+                // 丢片后允许下一帧头重新开始；恰好剩 5 字节时仍按 JPEG 尾片处理。
+                if (_expected != 0 && datagram.Length == HeaderBytes && _expected - _received != HeaderBytes &&
+                    datagram[0] <= 1 && HeaderLength(datagram) >= 4 && HeaderLength(datagram) <= _maxBytes) Reset();
                 if (_expected == 0)
                 {
-                    if (datagram.Length != HeaderBytes || datagram[0] != (byte)_stream) return;
-                    int length = (datagram[1] << 24) | (datagram[2] << 16) | (datagram[3] << 8) | datagram[4];
+                    if (datagram.Length != HeaderBytes || datagram[0] > 1) return;
+                    int length = HeaderLength(datagram);
                     if (length < 4 || length > _maxBytes) return;
+                    // 36661 的编号 0/1 对应两幅 DSA；36663 是独立心电，旧发送端编号为 0。
+                    _stream = _channel == 0 ? datagram[0] : 2;
+                    _sender = sender;
                     _expected = length;
                     _received = 0;
                     _buffer = new byte[length];
@@ -199,7 +240,8 @@ namespace MasterConsole.Services
                     return;
                 }
 
-                if (DateTime.UtcNow - _startedUtc > TimeSpan.FromSeconds(5) || datagram.Length > _expected - _received)
+                if (!_sender.Equals(sender)) return;
+                if (datagram.Length > _expected - _received)
                 {
                     Reset();
                     return;
@@ -213,9 +255,12 @@ namespace MasterConsole.Services
                     _complete(_stream, complete);
             }
 
+            private static int HeaderLength(byte[] data)
+                => (data[1] << 24) | (data[2] << 16) | (data[3] << 8) | data[4];
+
             internal void Reset()
             {
-                _buffer = null; _expected = 0; _received = 0; _startedUtc = DateTime.MinValue;
+                _buffer = null; _expected = 0; _received = 0; _startedUtc = DateTime.MinValue; _sender = null;
             }
         }
     }

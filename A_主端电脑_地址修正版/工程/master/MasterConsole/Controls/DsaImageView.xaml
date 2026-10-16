@@ -7,7 +7,7 @@
             <Image x:Name="Image" Stretch="Uniform"/>
             <Border Background="#B80F172A" Padding="10,6" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12" CornerRadius="4">
                 <StackPanel>
-                    <TextBlock Text="DSA影像" Foreground="#E2E8F0" FontSize="15" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="TitleText" Text="DSA影像" Foreground="#E2E8F0" FontSize="15" FontWeight="SemiBold"/>
                     <TextBlock x:Name="StatusText" Text="等待DSA影像" Foreground="#CBD5E1" FontSize="11" Margin="0,3,0,0"/>
                 </StackPanel>
             </Border>

@@ -22,8 +22,8 @@ namespace MasterConsole.Views
         private static string _linkTokenPath;
         private readonly DsaJpegReceiver _dsaReceiver;
         private readonly VtkMotionReceiver _vtkMotionReceiver;
-        private readonly string[] _dsaStreamStatus = { "未连接", "未连接" };
-        private readonly object _dsaStatusSync = new object();
+        private readonly DsaImageView[] _dsaViews;
+        private int _dsaSelectedStream;
         private readonly DispatcherTimer _armKeepaliveTimer;
         private int _armJogAxis;
         private int _armJogDirection;
@@ -34,6 +34,8 @@ namespace MasterConsole.Views
         public MainWindow()
         {
             InitializeComponent();
+            _dsaViews = new[] { DsaImageView, DsaImageView1, EcgImageView };
+            DsaImageView.StaleAfterSeconds = 2;
             _vm = new MainViewModel(CreateLink());
             DataContext = _vm;
             _dsaReceiver = new DsaJpegReceiver(DsaJpegReceiverSettings.Load());
@@ -49,10 +51,10 @@ namespace MasterConsole.Views
             _armKeepaliveTimer.Start();
             if (_linkNotice != null) _vm.PostLog("warn", _linkNotice);
             else if (_linkTokenPath != null) _vm.PostLog("info", "已加载密钥：" + _linkTokenPath);
-            Closed += (s, e) => { _armKeepaliveTimer.Stop(); _vm.StopAllHoldActions(); _vtkMotionReceiver.Dispose(); _dsaReceiver.Dispose(); DsaImageView.Dispose(); HikCamera1.Dispose(); HikCamera2.Dispose(); _vm.Dispose(); RobotModelViewport.Dispose(); };
+            Closed += (s, e) => { _armKeepaliveTimer.Stop(); _vm.StopAllHoldActions(); _vtkMotionReceiver.Dispose(); _dsaReceiver.Dispose(); foreach (var view in _dsaViews) view.Dispose(); HikCamera1.Dispose(); HikCamera2.Dispose(); _vm.Dispose(); RobotModelViewport.Dispose(); };
         }
 
-        private void DsaFrameReceived(int stream, byte[] jpeg, DateTime receivedUtc) => DsaImageView.PublishJpeg(jpeg, receivedUtc);
+        private void DsaFrameReceived(int stream, byte[] jpeg, DateTime receivedUtc) => _dsaViews[stream].PublishJpeg(jpeg, receivedUtc);
 
         private bool VtkStateReceived(DsaArmDisplayState state) => RobotModelViewport.PublishTestDsaArmState(state);
 
@@ -64,25 +66,34 @@ namespace MasterConsole.Views
 
         private void DsaStatusChanged(int stream, string status, string detail)
         {
-            lock (_dsaStatusSync) _dsaStreamStatus[stream] = status;
-            string summary;
-            string overall;
-            lock (_dsaStatusSync)
-            {
-                summary = string.Format("流0 {0}；流1 {1}；{2}", _dsaStreamStatus[0], _dsaStreamStatus[1], detail);
-                overall = _dsaStreamStatus[0] == "失败" || _dsaStreamStatus[1] == "失败" ? "失败" : "等待";
-            }
-            DsaImageView.UpdateReceiverStatus(overall, summary);
+            _dsaViews[stream].UpdateReceiverStatus(status, detail);
+        }
+
+        private void DsaStream_Click(object sender, RoutedEventArgs e)
+        {
+            if (!(sender is Button button) || !int.TryParse(Convert.ToString(button.Tag), out int stream) || stream < 0 || stream > 2) return;
+            _dsaSelectedStream = stream;
+            for (int i = 0; i < _dsaViews.Length; i++)
+                _dsaViews[i].Visibility = i == stream ? Visibility.Visible : Visibility.Collapsed;
+            SetDisplayLayout("dsa");
+        }
+
+        private void SetDsaSpeed(bool fast)
+        {
+            for (int i = 0; i < _dsaViews.Length; i++)
+                _dsaViews[i].StaleAfterSeconds = fast && i == _dsaSelectedStream ? 2 : 10;
+            if (!_dsaReceiver.SendSpeedCommand(fast, _dsaSelectedStream))
+                _vm.PostLog("warn", "截图快发命令未发送：请检查 dsa_screencut.ini 中该截图电脑的 IP。");
         }
 
         private void DsaFast_Click(object sender, RoutedEventArgs e)
         {
-            if (!_dsaReceiver.SendSpeedCommand(true)) _vm.PostLog("warn", "DSA快发命令未发送：未配置有效 ScreenCut IP 或发送失败。");
+            SetDsaSpeed(true);
         }
 
         private void DsaSlow_Click(object sender, RoutedEventArgs e)
         {
-            if (!_dsaReceiver.SendSpeedCommand(false)) _vm.PostLog("warn", "DSA慢发命令未发送：未配置有效 ScreenCut IP 或发送失败。");
+            SetDsaSpeed(false);
         }
 
         private void DisplaySelect_Click(object sender, RoutedEventArgs e)
@@ -93,10 +104,11 @@ namespace MasterConsole.Views
 
         private void SetDisplayLayout(string selected)
         {
-            UIElement[] views = { DsaImageView, HikCamera1, HikCamera2 };
+            UIElement[] views = { DsaViews, HikCamera1, HikCamera2 };
             var keys = new[] { "dsa", "camera1", "camera2" };
             int main = Array.IndexOf(keys, selected);
             if (main < 0) main = 0;
+            SetDsaSpeed(string.Equals(selected, "dsa", StringComparison.OrdinalIgnoreCase));
             for (int i = 0, aux = 0; i < views.Length; i++)
             {
                 if (i == main)

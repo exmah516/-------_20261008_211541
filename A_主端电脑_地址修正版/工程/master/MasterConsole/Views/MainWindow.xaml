@@ -125,7 +125,17 @@
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="*"/></Grid.RowDefinitions>
 
-                            <ctl:DsaImageView x:Name="DsaImageView" Grid.Column="0" Grid.Row="0" Grid.RowSpan="2"/>
+                            <Grid x:Name="DsaViews" Grid.Column="0" Grid.Row="0" Grid.RowSpan="2">
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <Button Content="画面1" Tag="0" Click="DsaStream_Click" Style="{StaticResource CompactButton}"/>
+                                    <Button Content="画面2" Tag="1" Click="DsaStream_Click" Style="{StaticResource CompactButton}" Margin="4,0,0,0"/>
+                                    <Button Content="心电" Tag="2" Click="DsaStream_Click" Style="{StaticResource CompactButton}" Margin="4,0,0,0"/>
+                                </StackPanel>
+                                <ctl:DsaImageView x:Name="DsaImageView" Grid.Row="1" Caption="DSA画面1"/>
+                                <ctl:DsaImageView x:Name="DsaImageView1" Grid.Row="1" Caption="DSA画面2" Visibility="Collapsed"/>
+                                <ctl:DsaImageView x:Name="EcgImageView" Grid.Row="1" Caption="心电影像" Visibility="Collapsed"/>
+                            </Grid>
                             <ctl:HikCameraView x:Name="HikCamera1" Tag="1" Grid.Column="2" Grid.Row="0"/>
                             <ctl:HikCameraView x:Name="HikCamera2" Tag="2" Grid.Column="2" Grid.Row="1"/>
                         </Grid>
