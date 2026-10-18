@@ -33,11 +33,10 @@ dsa_screencut.ini
 *.key
 
 # 历史运行包可能包含现场凭据，仅保留在本地。
-/A_主端电脑/运行/
+/介入机器人/A主端/运行/
 **/归档_旧运行_*.zip
 /验证记录/20261010_工程迁移/归档原目录/
-A_主端电脑.zip
-A_主端电脑/*
+介入机器人/A主端.zip
 验证记录/动态被动换手_20261013/final_offline/test_source_hashes.json
 *.json
 *.csv

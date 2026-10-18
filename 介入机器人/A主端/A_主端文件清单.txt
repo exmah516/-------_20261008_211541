@@ -1,4 +1,4 @@
-包目录：D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\A_主端电脑_地址修正版
+包目录：D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\A主端
 运行内容大小：96.2 MiB
 
 关键文件哈希：
