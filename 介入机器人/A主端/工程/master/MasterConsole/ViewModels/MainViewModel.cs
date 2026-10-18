@@ -183,9 +183,9 @@ namespace MasterConsole.ViewModels
         public bool CanStartControl => CanOperate && !ControlActive;
 
         public string Force582F => FormatForce(_s.Force582F, "N");
-        public string Force582N => FormatForce(_s.Force582N, "N·m");
+        public string Force582N => FormatTorque(_s.Force582N);
         public string Force587F => FormatForce(_s.Force587F, "N");
-        public string Force587N => FormatForce(_s.Force587N, "N·m");
+        public string Force587N => FormatTorque(_s.Force587N);
 
         public string Axis1NetDistance => FormatDistance(_s.Axis1NetDistanceMm);
         public string Axis6NetDistance => FormatDistance(_s.Axis6NetDistanceMm);
@@ -217,6 +217,9 @@ namespace MasterConsole.ViewModels
 
         private string FormatForce(float v, string unit)
             => _hasStatus ? v.ToString("0.000", CultureInfo.InvariantCulture) + " " + unit : "—";
+
+        private string FormatTorque(float v)
+            => _hasStatus ? (v * 1000.0f).ToString("0.000", CultureInfo.InvariantCulture) + " N·mm" : "—";
 
         // ============================================================ 操作区
 

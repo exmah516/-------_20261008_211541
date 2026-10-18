@@ -67,7 +67,7 @@
 | `fn_2_value` | `G.fn_2_value` | short | 读 | 第二组轴向力（仅 ADS 链路使用） |
 | `ft_2_value` | `G.ft_2_value` | short | 读 | 第二组扭矩（同上） |
 
-> 力反馈链路真正消费的是 `force_sample.fn_1_value_v` / `ft_1_value_v`。默认 ADS 分支在 `plc_io::read_force_sample` 内完成 `INT -> V` 换算；`calibrate_force` 再分别按 `0.701461986 N/V`、`0.620117055 N/V` 做动态零点后的 `F_direct` 映射。TCP_DAQ 模式才会覆盖这两路。ADS 读取同时返回 axis1/axis2 实际位置（`act_pos` 快照），见 [力反馈说明.md §2.2](力反馈说明.md#22-主循环采样maincpp-主循环步骤-15力采样节拍段)。
+> 力反馈链路真正消费的是 `force_sample.fn_1_value_v` / `ft_1_value_v`。默认 ADS 分支在 `plc_io::read_force_sample` 内完成 `INT -> V` 换算；`calibrate_force` 再分别按 `0.319519429 N/V`、`0.620117055 N/V` 做动态零点后的 `F_direct` 映射。TCP_DAQ 模式才会覆盖这两路。ADS 读取同时返回 axis1/axis2 实际位置（`act_pos` 快照），见 [力反馈说明.md §2.2](力反馈说明.md#22-主循环采样maincpp-主循环步骤-15力采样节拍段)。
 
 重新标定工具直接读取 PLC 原始 `short` 计数，不执行 `raw / 1000.0` 换算。工具内的固定映射为：传感器1 -> `G.ft_1_value`、传感器2 -> `G.fn_1_value`、传感器3 -> `G.fn_2_value`、传感器4 -> `G.ft_2_value`。每个采样时刻通过同一次 `ADSReadSum` 获取四路快照，避免四次独立读取造成通道时间错位。
 
@@ -458,3 +458,4 @@ cancel / fault
 - 通讯变化：`Prepare/Commit/Clear` 使用 32 槽 SPSC 命令环和 128 槽结果环异步进入 100 Hz ADS 线程；Clear 提交时建立 axis1/axis6 逐轴序号屏障，未开始的同轴旧命令不会越过取消命令落到 PLC。
 - 取消与诊断：`CancelWait` 等待精确 Clear、PLC 停稳、新鲜快照 rebase 及已写入 `refer` 的 motion output generation；执行、取消和普通导管自动先行共享 5 秒安全上限。失败 Commit 的部分成功/未知腿会被保守锁存并禁止自动重发。PLC 状态 40 会把 `MC_Stop.Error/ErrorID` 暴露为回退 Error Notification，同时保持 Busy 和受控停止重试；主动取消不产生 Done。
 - 互斥与接口：力过渡实验和计划回退在两边入口互相拒绝；未增加 ADS 符号、WPF 字段或运行时依赖。
+

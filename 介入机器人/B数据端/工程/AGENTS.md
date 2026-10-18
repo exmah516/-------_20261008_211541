@@ -18,3 +18,4 @@ Issues 和 specs 存放在 GitHub Issues 中，使用 `gh` CLI 管理。See `doc
 ### Domain docs
 
 这是一个 single-context repo：根目录使用 `CONTEXT.md`，架构决策使用 `docs/adr/`。See `docs/agents/domain.md`.
+

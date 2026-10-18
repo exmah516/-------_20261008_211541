@@ -26,10 +26,10 @@ namespace rp = remote_protocol;
 
 namespace
 {
-	constexpr ULONGLONG kControlFrameWarnMs = 200;    // 控制帧超时：点动归零
-	constexpr ULONGLONG kControlFrameReleaseMs = 2000; // 控制帧持续超时：释放控制权
+	constexpr ULONGLONG kControlFrameWarnMs = 3000;    // 控制帧超时：点动归零
+	constexpr ULONGLONG kControlFrameReleaseMs = 3000; // 控制帧持续超时：释放控制权
 	constexpr ULONGLONG kHoldRenewMs = 100;           // 点动租约续期周期（租约 500 ms）
-	constexpr ULONGLONG kStateFreshMs = 1000;         // 状态快照有效期
+	constexpr ULONGLONG kStateFreshMs = 3000;         // 状态快照有效期
 	constexpr ULONGLONG kTcpIdleMs = 20000;           // TCP 空闲断开
 	constexpr size_t kMaxJsonBytes = 65536;
 	constexpr size_t kMaxQueuedCommands = 64;
@@ -849,7 +849,7 @@ bool RemoteGateway::handle_message(std::uintptr_t sock_handle, const std::string
 		{
 			std::lock_guard<std::mutex> lock(m_);
 			lease_held_ = true;
-			last_frame_ms_ = GetTickCount64(); // 给控制帧 2 s 的起步宽限
+			last_frame_ms_ = GetTickCount64(); // 给控制帧 3 s 的起步宽限
 		}
 		std::cout << "远程网关：主端获得控制权。" << std::endl;
 		return send_ack(sock, id, "done");
@@ -952,7 +952,7 @@ void RemoteGateway::handle_command(std::uintptr_t sock_handle, int id, const std
 			p.kind = PendingKind::FfZero; // 开启前先自动零点采集
 			p.zero_ok0 = st.extra.force_zero_ok_count;
 			p.zero_fail0 = st.extra.force_zero_fail_count;
-			p.deadline_ms = now + 5000;
+			p.deadline_ms = now + 3000;
 			push_cmd(VisCommandType::ZeroForceSensor);
 			ff_zeroing_.store(true);
 		}
@@ -960,7 +960,7 @@ void RemoteGateway::handle_command(std::uintptr_t sock_handle, int id, const std
 		{
 			if (!st.vs.ff_enabled) { send_ack(sock, id, "done"); return; }
 			p.kind = PendingKind::FfDisable;
-			p.deadline_ms = now + 2000;
+			p.deadline_ms = now + 3000;
 			push_cmd(VisCommandType::ToggleForceFeedback);
 		}
 		pending.push_back(p);
@@ -1179,7 +1179,7 @@ void RemoteGateway::process_pending(std::uintptr_t sock_handle, std::vector<Pend
 				if (!st.vs.ff_enabled) push_cmd(VisCommandType::ToggleForceFeedback);
 				p.kind = PendingKind::FfEnable;
 				p.state_seq0 = st.seq;
-				p.deadline_ms = now + 2000;
+				p.deadline_ms = now + 3000;
 			}
 			else if (timed_out)
 			{

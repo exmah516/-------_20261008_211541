@@ -188,8 +188,6 @@ int main(int argc, char* argv[])
 	GuidewireMode single_handle_requested_mode = GuidewireMode::None;
 	Handle* axis1_input_handle = &handle_axis1;
 	Handle* axis6_input_handle = &handle_axis6;
-	Handle* catheter_force_output_handle = &handle_axis1;
-	Handle* guidewire_force_output_handle = &handle_axis6;
 
 	auto lock_handle_mode = [&](bool axis1_ok, bool axis6_ok)
 	{
@@ -199,8 +197,6 @@ int main(int argc, char* argv[])
 			single_handle_mode = false;
 			axis1_input_handle = &handle_axis1;
 			axis6_input_handle = &handle_axis6;
-			catheter_force_output_handle = &handle_axis1;
-			guidewire_force_output_handle = &handle_axis6;
 			handle_startup_locked = true;
 		}
 		else if (axis1_ok || axis6_ok)
@@ -210,8 +206,6 @@ int main(int argc, char* argv[])
 			const DWORD single_serial = axis1_ok ? serial_axis1_handle : serial_axis6_handle;
 			axis1_input_handle = single_handle;
 			axis6_input_handle = single_handle;
-			catheter_force_output_handle = single_handle;
-			guidewire_force_output_handle = single_handle;
 			single_handle_requested_mode = GuidewireMode::None;
 			handle_startup_locked = true;
 			std::cout << "单手柄模式已锁定（序列号: " << single_serial << "）。" << std::endl;
@@ -231,8 +225,8 @@ int main(int argc, char* argv[])
 	// 力输出统一入口：轴向力按配置的 SDK force axis 下发，力矩仍走 torque 参数。
 	auto apply_force_output = [&](double force_582_f, double force_582_n, double force_587_f, double force_587_n)
 	{
-		handle_axis1.setforce_axis(force_582_f, cfg.axial_force_axis, force_582_n);
-		handle_axis6.setforce_axis(force_587_f, cfg.axial_force_axis, force_587_n);
+		handle_axis6.setforce_axis(force_582_f, cfg.axial_force_axis, force_582_n);
+		handle_axis1.setforce_axis(force_587_f, cfg.axial_force_axis, force_587_n);
 	};
 
 	// 双手柄力输出清零（用于暂停、急停保持、F=OFF 等场景）。
@@ -818,29 +812,39 @@ int main(int argc, char* argv[])
 
 	auto zero_force_sensor_impl = [&](const char* source) -> bool
 	{
-		// 零点采集必须同步读取一帧 ADS 数据，不能依赖旧采样节拍或力反馈开关。
-		ForceSampleFrame sampled_frame;
-		if (read_force_sample(sampled_frame))
+		// 零点使用连续 3 帧 ADS 力数据平均值，避免单帧抖动进入零点。
+		std::uint64_t after_sequence = ads_snapshot_sequence;
+		double sums[5] = {};
+		for (int i = 0; i < 3; ++i)
 		{
-			force_sample = sampled_frame;
-			cal_state.ft_zero = sampled_frame.ft_1_value_v;
-			cal_state.f_zero = sampled_frame.fn_1_value_v;
-			cal_state.fn_2_zero = sampled_frame.fn_2_value_v;
-			cal_state.ft_2_zero = sampled_frame.ft_2_value_v;
-			cal_state.theta0_deg = sampled_frame.axis2_pos_rel;
-			cal_state.zeroed = true;
-			ff.reset();
-			clear_force_output();
-			std::cout << source << "力传感器零点已采集（ADS 当前采样）：ft_zero=" << cal_state.ft_zero
-				<< " V, f_zero=" << cal_state.f_zero << " V"
-				<< ", fn_2_zero=" << cal_state.fn_2_zero << " V"
-				<< ", ft_2_zero=" << cal_state.ft_2_zero << " V"
-				<< ", axis2/theta0=" << cal_state.theta0_deg << " deg" << std::endl;
-			return true;
+			AdsFastSnapshot snapshot{};
+			if (!ads_communication.wait_for_snapshot(after_sequence, 500, snapshot) || !snapshot.force_valid)
+			{
+				std::cout << source << "零点采集失败：ADS 连续 3 帧数据不完整。" << std::endl;
+				return false;
+			}
+			after_sequence = snapshot.attempt_sequence;
+			sums[0] += static_cast<double>(snapshot.fn_1_value) / 1000.0;
+			sums[1] += static_cast<double>(snapshot.ft_1_value) / 1000.0;
+			sums[2] += static_cast<double>(snapshot.fn_2_value) / 1000.0;
+			sums[3] += static_cast<double>(snapshot.ft_2_value) / 1000.0;
+			sums[4] += snapshot.act_pos_rel[1];
 		}
-
-		std::cout << source << "零点采集失败：ADS 力采样读取失败。" << std::endl;
-		return false;
+		ads_snapshot_sequence = after_sequence;
+		cal_state.f_zero = sums[0] / 3.0;
+		cal_state.ft_zero = sums[1] / 3.0;
+		cal_state.fn_2_zero = sums[2] / 3.0;
+		cal_state.ft_2_zero = sums[3] / 3.0;
+		cal_state.theta0_deg = sums[4] / 3.0;
+		cal_state.zeroed = true;
+		ff.reset();
+		clear_force_output();
+		std::cout << source << "力传感器零点已采集（ADS 连续 3 帧平均）：ft_zero=" << cal_state.ft_zero
+			<< " V, f_zero=" << cal_state.f_zero << " V"
+			<< ", fn_2_zero=" << cal_state.fn_2_zero << " V"
+			<< ", ft_2_zero=" << cal_state.ft_2_zero << " V"
+			<< ", axis2/theta0=" << cal_state.theta0_deg << " deg" << std::endl;
+		return true;
 	};
 	// 远程网关据此判断“开启力反馈前自动零点采集”是否已完成（成功/失败各自计数）。
 	std::uint32_t remote_force_zero_ok_count = 0;
@@ -4510,16 +4514,11 @@ int main(int argc, char* argv[])
 			planned_return.phase = PlannedReturnPhase::AwaitHandoffApplied;
 		}
 
-		// 两只手柄的恒力均按当前实际模式的递送/撤出方向换向。
-		const bool bias_reverse = guidewire_mode == GuidewireMode::Independent
-			? axis6_effective_reverse_pressed : axis1_reverse_pressed;
-		const bool handle_bias_enabled = false; // 力反馈关闭时手柄保持 0 力，不再下发任何结构补偿恒力
 		process_force_feedback(
 			ff,
 			force_sample,
-			*catheter_force_output_handle,
-			*guidewire_force_output_handle,
-			guidewire_mode,
+			handle_axis6,
+			handle_axis1,
 			control_active && !spacing_recovery.active() &&
 				!ads_soft_hold_active && !return_ads_fault_hold,
 			estop_hold_active,
@@ -4528,16 +4527,9 @@ int main(int argc, char* argv[])
 			clamp_hold_582_trigger,
 			clamp_hold_587_trigger,
 			GetTickCount64(),
-			loop_count,
 			cfg,
 			cal_cfg,
-			cal_state,
-			handle_bias_enabled
-				? (bias_reverse ? -cfg.handle_587_outward_force_n : cfg.handle_587_outward_force_n)
-				: 0.0,
-			handle_bias_enabled
-				? (bias_reverse ? -cfg.handle_582_outward_force_n : cfg.handle_582_outward_force_n)
-				: 0.0);
+			cal_state);
 
 		// 无论本拍是否进入控制分支，都更新线性差分基准，避免等待期间累积大跳变。
 		axis1_prev_linear_filtered = axis1_handle_filter.axis0_filtered;

@@ -55,3 +55,4 @@ dotnet build master/MasterConsole/MasterConsole.csproj -c Release -p:Platform=x6
 ```
 
 Debug/Release 均通过，0 错误。离线回环测试已覆盖：36661 的首字节 0/1 分流、36663 的独立通道、8192 字节分片、JPEG 解码显示、无效长度丢弃、快发保活切换和端口释放。没有运行真实 DSA ScreenCut，未声称实机影像联调成功。
+

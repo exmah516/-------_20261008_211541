@@ -143,7 +143,7 @@ namespace MasterConsole.Controls
                 ModelShow.RenderWindow.Render();
                 _modelReady = true;
                 _stateTimer.Start();
-                StatusText.Text = "旧模型默认姿态 / 未接入 DSA 机械臂";
+                StatusText.Text = "默认姿态 / 等待运动数据";
             }
             catch (Exception ex)
             {

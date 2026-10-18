@@ -106,7 +106,7 @@ G.estop_hold_req / G.host_comm_timeout
 `calculate_clean_force` 只做装机零点扣除和本次 `F_direct` 映射：
 
 ```text
-F = 0.701461986 * (Fn_V - Fn0_V)
+F = 0.319519429 * (Fn_V - Fn0_V)
 T = 0.620117055 * (Ft_V - Ft0_V) * 3.0 * 0.001
 ```
 
@@ -210,3 +210,4 @@ MSBuild.exe AdsControlUI\AdsControlUI.csproj /m /p:Configuration=Debug /p:Platfo
 Release 同理。C++ 和 WPF 协议必须成对替换；499 字节版不能与旧 UI/C++ 混用。
 
 ## 14. 扩展检查
+

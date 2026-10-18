@@ -42,7 +42,7 @@
 
 - 从端：`remote_gateway.cpp/.h` 已实现并接入 `main.cpp`（TCP 32000 命令、UDP 32001 控制/状态）。命令翻译成既有 `VisCommand`，与本地调试台共用 `main.cpp` 的命令循环。注射器与轴4点动租约统一为 500 ms。
 - 主端：`RemoteRobotLink` 已实现；找到 `remote.token` 就连真实从端，否则退回模拟链路。
-- 手柄已迁移到主端：主端 `HandleService` 用 `FLCatheter.dll` 读取本机手柄（物理 SN 582/587），采样随 100 Hz 控制帧上行；从端 `Handle` 类在网关启用时自动切到远程来源（经 `手柄/remote_handle_bridge.h`），算法代码不变；力反馈指令经触觉帧回传，主端 200 ms 收不到就清零。从端加参数 `--local-handles` 可强制用本机 SDK 手柄（单机调试）。
+- 手柄已迁移到主端：主端 `HandleService` 用 `FLCatheter.dll` 读取本机手柄（物理 SN 582/587），采样随 100 Hz 控制帧上行；从端 `Handle` 类在网关启用时自动切到远程来源（经 `手柄/remote_handle_bridge.h`），算法代码不变；力反馈指令经触觉帧回传，主端 3 s 收不到就清零。从端加参数 `--local-handles` 可强制用本机 SDK 手柄（单机调试）。
 - 尚未实现：影像、URDF。
 - 所有新增 C++ 与 C# 代码均未在本机编译过（沙箱没有 MSVC），需在 Visual Studio 中编译。
 
@@ -68,3 +68,5 @@
 3. 手柄上线后做实机验证：双手柄递送/撤出、断网时的保持与恢复、力反馈方向与大小。
 4. 拆分 `main.cpp`（约 5000 行）并把 C++ 源码移入 `slave/`，同步修改 `ADS.vcxproj` 路径。
 5. 影像和 URDF 控件接入占位框。
+
+

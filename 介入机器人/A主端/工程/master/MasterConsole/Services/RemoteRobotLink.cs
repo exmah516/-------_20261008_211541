@@ -23,7 +23,7 @@ namespace MasterConsole.Services
     /// <summary>
     /// 真实网络链路：TCP 命令通道（长度前缀 JSON）+ UDP 控制/状态通道，协议见 protocol/PROTOCOL.md。
     /// 手柄在主端：由 <see cref="HandleService"/> 读取本机手柄，采样随 100 Hz 控制帧上行；
-    /// 从端回传的触觉帧驱动本机手柄的力输出（200 ms 无触觉帧即清零）。
+    /// 从端回传的触觉帧驱动本机手柄的力输出（3 s 无触觉帧即清零）。
     /// </summary>
     public sealed class RemoteRobotLink : IRobotLink
     {
@@ -32,7 +32,7 @@ namespace MasterConsole.Services
 
         private const int ControlPeriodMs = 10;      // 100 Hz
         private const int PingPeriodMs = 5000;
-        private const int AcquireGraceMs = 1500;     // 申请控制权后，状态帧里的租约标志可能滞后
+        private const int AcquireGraceMs = 3000;     // 申请控制权后，状态帧里的租约标志可能滞后
 
         private readonly RemoteLinkSettings _cfg;
         private readonly object _stateLock = new object();
@@ -51,7 +51,6 @@ namespace MasterConsole.Services
         private SeqGuard _rxGuardHaptic = new SeqGuard();    // 触觉帧（与状态帧共用发送序号，各自独立判重）
         private int _nextId;
         private readonly HandleService _handles;
-        private readonly DsaCanControlSender _dsaCan;
         private long _lastHapticMs = -1;
 
         private volatile bool _connected;
@@ -71,11 +70,10 @@ namespace MasterConsole.Services
         private long _dropped;
 
         /// <param name="handles">本机手柄服务；传入后由本链路负责释放。为 null 时不上传手柄。</param>
-        public RemoteRobotLink(RemoteLinkSettings cfg, HandleService handles = null, DsaCanControlSender dsaCan = null)
+        public RemoteRobotLink(RemoteLinkSettings cfg, HandleService handles = null)
         {
             _cfg = cfg ?? throw new ArgumentNullException(nameof(cfg));
             _handles = handles;
-            _dsaCan = dsaCan;
         }
 
         public string Name => "远程链路 " + _cfg.Host;
@@ -160,12 +158,8 @@ namespace MasterConsole.Services
             }
             timeBeginPeriod(1);
 
-            try { _dsaCan?.Open(); }
-            catch (Exception ex) { Log("warn", "DSA CAN 原始链路未启动：" + ex.Message); }
-
             var token = _cts.Token;
             StartThread("控制帧发送", () => ControlLoop(token));
-            StartThread("DSA CAN 原始发送", () => DsaLoop(token));
             StartThread("状态帧接收", () => UdpReceiveLoop(token));
             StartThread("命令通道接收", () => TcpReadLoop(token));
             StartThread("链路保活", () => KeepAliveLoop(token));
@@ -196,7 +190,6 @@ namespace MasterConsole.Services
                 try { _stream?.Close(); } catch { }
                 try { _tcp?.Close(); } catch { }
                 try { _udp?.Close(); } catch { }
-                try { _dsaCan?.Dispose(); } catch { }
                 _stream = null; _tcp = null; _udp = null;
             }
             foreach (var kv in _pending)
@@ -400,32 +393,6 @@ namespace MasterConsole.Services
                 catch (ObjectDisposedException) { break; }
                 catch (NullReferenceException) { break; }
             }
-        }
-
-        private void DsaLoop(CancellationToken token)
-        {
-            while (!token.IsCancellationRequested)
-            {
-                if (DsaControlReady())
-                {
-                    try { _dsaCan?.PollAndSend(); }
-                    catch (Exception ex) { Log("warn", "DSA CAN 原始采样失败：" + ex.Message); break; }
-                }
-                if (token.WaitHandle.WaitOne(20)) break;
-            }
-        }
-
-        private bool DsaControlReady()
-        {
-            lock (_statsLock)
-            {
-                if (_lastStatusMs < 0 || _clock.ElapsedMilliseconds - _lastStatusMs >= ProtocolConstants.StatusTimeoutMs)
-                    return false;
-            }
-            StatusFlags flags = _statusFlags;
-            return _connected && _hasControl &&
-                   (flags & StatusFlags.ControlActive) != 0 &&
-                   (flags & (StatusFlags.EstopHold | StatusFlags.HostCommTimeout)) == 0;
         }
 
         private void UdpReceiveLoop(CancellationToken token)

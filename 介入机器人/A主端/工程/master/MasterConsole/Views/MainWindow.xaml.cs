@@ -8,7 +8,6 @@ using System.Windows.Input;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Threading;
-using MasterConsole.Controls;
 using MasterConsole.Services;
 using MasterConsole.ViewModels;
 
@@ -20,10 +19,6 @@ namespace MasterConsole.Views
         // CreateLink 的结果说明，窗口建好后写进事件日志，避免“静默退回模拟链路”。
         private static string _linkNotice;
         private static string _linkTokenPath;
-        private readonly DsaJpegReceiver _dsaReceiver;
-        private readonly VtkMotionReceiver _vtkMotionReceiver;
-        private readonly DsaImageView[] _dsaViews;
-        private int _dsaSelectedStream;
         private readonly DispatcherTimer _armKeepaliveTimer;
         private int _armJogAxis;
         private int _armJogDirection;
@@ -34,108 +29,39 @@ namespace MasterConsole.Views
         public MainWindow()
         {
             InitializeComponent();
-            _dsaViews = new[] { DsaImageView, DsaImageView1, EcgImageView };
-            DsaImageView.StaleAfterSeconds = 2;
+            PlaceDefaultWindow();
             _vm = new MainViewModel(CreateLink());
             DataContext = _vm;
-            _dsaReceiver = new DsaJpegReceiver(DsaJpegReceiverSettings.Load());
-            _dsaReceiver.FrameReceived += DsaFrameReceived;
-            _dsaReceiver.StatusChanged += DsaStatusChanged;
-            _dsaReceiver.Start();
-            _vtkMotionReceiver = new VtkMotionReceiver();
-            _vtkMotionReceiver.StateReceived += VtkStateReceived;
-            _vtkMotionReceiver.StatusChanged += VtkStatusChanged;
-            _vtkMotionReceiver.Start();
             _armKeepaliveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
             _armKeepaliveTimer.Tick += ArmKeepaliveTimer_Tick;
             _armKeepaliveTimer.Start();
             if (_linkNotice != null) _vm.PostLog("warn", _linkNotice);
             else if (_linkTokenPath != null) _vm.PostLog("info", "已加载密钥：" + _linkTokenPath);
-            Closed += (s, e) => { _armKeepaliveTimer.Stop(); _vm.StopAllHoldActions(); _vtkMotionReceiver.Dispose(); _dsaReceiver.Dispose(); foreach (var view in _dsaViews) view.Dispose(); HikCamera1.Dispose(); HikCamera2.Dispose(); _vm.Dispose(); RobotModelViewport.Dispose(); };
-        }
-
-        private void DsaFrameReceived(int stream, byte[] jpeg, DateTime receivedUtc) => _dsaViews[stream].PublishJpeg(jpeg, receivedUtc);
-
-        private bool VtkStateReceived(DsaArmDisplayState state) => RobotModelViewport.PublishTestDsaArmState(state);
-
-        private void VtkStatusChanged(string message)
-        {
-            if (Dispatcher.HasShutdownStarted) return;
-            Dispatcher.BeginInvoke(new Action(() => _vm.PostLog("info", message)));
-        }
-
-        private void DsaStatusChanged(int stream, string status, string detail)
-        {
-            _dsaViews[stream].UpdateReceiverStatus(status, detail);
-        }
-
-        private void DsaStream_Click(object sender, RoutedEventArgs e)
-        {
-            if (!(sender is Button button) || !int.TryParse(Convert.ToString(button.Tag), out int stream) || stream < 0 || stream > 2) return;
-            _dsaSelectedStream = stream;
-            for (int i = 0; i < _dsaViews.Length; i++)
-                _dsaViews[i].Visibility = i == stream ? Visibility.Visible : Visibility.Collapsed;
-            SetDisplayLayout("dsa");
-        }
-
-        private void SetDsaSpeed(bool fast)
-        {
-            for (int i = 0; i < _dsaViews.Length; i++)
-                _dsaViews[i].StaleAfterSeconds = fast && i == _dsaSelectedStream ? 2 : 10;
-            if (!_dsaReceiver.SendSpeedCommand(fast, _dsaSelectedStream))
-                _vm.PostLog("warn", "截图快发命令未发送：请检查 dsa_screencut.ini 中该截图电脑的 IP。");
-        }
-
-        private void DsaFast_Click(object sender, RoutedEventArgs e)
-        {
-            SetDsaSpeed(true);
-        }
-
-        private void DsaSlow_Click(object sender, RoutedEventArgs e)
-        {
-            SetDsaSpeed(false);
-        }
-
-        private void DisplaySelect_Click(object sender, RoutedEventArgs e)
-        {
-            if (!(sender is Button button)) return;
-            SetDisplayLayout(Convert.ToString(button.Tag, CultureInfo.InvariantCulture));
-        }
-
-        private void SetDisplayLayout(string selected)
-        {
-            UIElement[] views = { DsaViews, HikCamera1, HikCamera2 };
-            var keys = new[] { "dsa", "camera1", "camera2" };
-            int main = Array.IndexOf(keys, selected);
-            if (main < 0) main = 0;
-            SetDsaSpeed(string.Equals(selected, "dsa", StringComparison.OrdinalIgnoreCase));
-            for (int i = 0, aux = 0; i < views.Length; i++)
+            Closed += (s, e) =>
             {
-                if (i == main)
-                {
-                    Grid.SetColumn(views[i], 0);
-                    Grid.SetRow(views[i], 0);
-                    Grid.SetRowSpan(views[i], 2);
-                }
-                else
-                {
-                    Grid.SetColumn(views[i], 2);
-                    Grid.SetRow(views[i], aux++);
-                    Grid.SetRowSpan(views[i], 1);
-                }
-            }
-            if (string.Equals(selected, "model", StringComparison.OrdinalIgnoreCase))
-            {
-                DisplayTopRow.Height = new GridLength(2, GridUnitType.Star);
-                DisplayBottomRow.Height = new GridLength(3, GridUnitType.Star);
-            }
-            else
-            {
-                DisplayTopRow.Height = new GridLength(3, GridUnitType.Star);
-                DisplayBottomRow.Height = new GridLength(2, GridUnitType.Star);
-            }
+                _armKeepaliveTimer.Stop();
+                _vm.StopAllHoldActions();
+                _vm.Dispose();
+            };
         }
 
+        private void PlaceDefaultWindow()
+        {
+            var work = SystemParameters.WorkArea;
+            const double gap = 8;
+            double sideWidth = Math.Max(320, work.Width * 0.35);
+            double primaryWidth = work.Width - sideWidth - gap;
+            if (primaryWidth < 600)
+            {
+                primaryWidth = 600;
+                sideWidth = Math.Max(320, work.Width - primaryWidth - gap);
+            }
+
+            Left = work.Left;
+            Top = work.Top;
+            Width = primaryWidth;
+            Height = work.Height;
+        }
         /// <summary>
         /// 链路选择：找到 remote.token 就连真实从端，否则用模拟链路。
         /// 命令行：--sim 强制模拟；--host &lt;地址&gt; 指定从端地址（默认 192.168.50.2，即从端电脑）；
@@ -180,8 +106,7 @@ namespace MasterConsole.Views
                 // 手柄服务随链路创建：应用启动即开始打开本机手柄，连接从端时已就绪。
                 return new RemoteRobotLink(
                     new RemoteLinkSettings { Host = host, Token = token },
-                    new HandleService(),
-                    new DsaCanControlSender(host));
+                    new HandleService());
             }
             _linkNotice = rejected != null
                 ? "密钥文件太短（至少 16 个字符）：" + rejected + "。已退回模拟链路，命令不会发给从端。"
@@ -206,8 +131,6 @@ namespace MasterConsole.Views
             if (b.IsMouseCaptured) b.ReleaseMouseCapture();
             Apply(target, 0);
         }
-
-        private void Window_Deactivated(object sender, EventArgs e) => _vm.StopAllHoldActions();
 
         private async void ArmManualEnable_Click(object sender, RoutedEventArgs e)
         {

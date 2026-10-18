@@ -39,3 +39,4 @@ dotnet build master/MasterConsole/MasterConsole.csproj -c Release -p:Platform=x6
 ```
 
 Debug/Release 均通过，0 错误；既有 `_linkStatsText` 警告仍存在。离线启动后确认主端占用 UDP 36661 和 36663；使用假发送端分别发送协议头和 JPEG 数据报后进程保持响应并可正常退出。没有运行真实 DSA ScreenCut，未声称实机影像联调成功。
+

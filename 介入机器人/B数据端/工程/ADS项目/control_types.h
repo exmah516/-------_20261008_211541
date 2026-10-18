@@ -84,9 +84,8 @@ struct ControlConfig
 
 	// 力反馈输出配置：轴向力映射到 SDK 三轴力向量中的一个轴。
 	int axial_force_axis = 1;
-	// 两只物理手柄的结构补偿恒力：正值向外推，撤出模式取反，开启力反馈后停用。
-	double handle_587_outward_force_n = 0.05;
-	double handle_582_outward_force_n = 0.05;
+	// 力反馈全局缩放系数，轴向力和力矩统一使用。
+	double force_feedback_scale = 0.3;
 
 	// 按键映射来自 buttons2 位掩码。
 	unsigned char btn_b6 = 0x40;
@@ -451,7 +450,7 @@ struct CrawlState
 
 struct ForceFeedbackState
 {
-	// 力反馈开关：F=ON 时使用传感器反馈，F=OFF 时仅保留指定手柄的结构补偿恒力。
+	// 力反馈开关：F=ON 时使用传感器反馈，F=OFF 时输出为 0。
 	bool enabled = false;
 	bool clamp_hold_enabled = true;
 	// 当前输出命令缓存（用于调试与冻结保持）。
@@ -465,7 +464,7 @@ struct ForceFeedbackState
 	bool freeze_582_active = false;
 	double freeze_582_f = 0.0;
 	double freeze_582_n = 0.0;
-	// 导丝快进/快退期间冻结 587 输出，避免模式回切时出现力反馈跳变。
+	// 另一侧快进/快退期间冻结 587 输出，避免动作切换时出现力反馈跳变。
 	bool freeze_587_active = false;
 	double freeze_587_f = 0.0;
 	double freeze_587_n = 0.0;
@@ -484,7 +483,6 @@ struct ForceFeedbackState
 	short last_fn_2_raw = 0;
 	short last_ft_2_raw = 0;
 	bool last_fast_move = false;
-	GuidewireMode last_mode = GuidewireMode::None;
 
 	void clear_clamp_holds()
 	{
@@ -524,7 +522,6 @@ struct ForceFeedbackState
 		freeze_587_n = 0.0;
 		clear_clamp_holds();
 		last_fast_move = false;
-		last_mode = GuidewireMode::None;
 	}
 
 	void clear_output()

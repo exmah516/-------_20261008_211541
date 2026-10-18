@@ -67,7 +67,7 @@ HandleSample（26 字节）：
 
 手柄 A、B 指**物理序列号** 582、587（协议字段按物理序列号排列）。字段与本地 SDK 的 `buttons2 / encoders2 / fJoints2 / fVels2` 一一对应。主端对未打开或本次读取失败的手柄必须置 `valid=0`。
 
-从端只在主端持有控制权时才使用手柄采样，并且只使用 250 ms 内的最新一帧：采样过期等同于“手柄断开”，从端沿用既有的手柄软保持逻辑（保持最后参考、丢弃故障期间增量、恢复后自动重建基准），不会进入故障。
+从端只在主端持有控制权时才使用手柄采样，并且只使用 3 s 内的最新一帧：采样过期等同于“手柄断开”，从端沿用既有的手柄软保持逻辑（保持最后参考、丢弃故障期间增量、恢复后自动重建基准），不会进入故障。
 
 ### 3.4 HapticFrame（type=2，载荷 26 字节，整帧 50）
 
@@ -78,7 +78,7 @@ HandleSample（26 字节）：
 | 6 | HapticOut | 手柄 A |
 | 16 | HapticOut | 手柄 B |
 
-HapticOut（10 字节）：u8 enable，i8 axis，f32 force_n，f32 torque_nm。axis 为力作用的 SDK 轴（从端 `axial_force_axis`，当前为 1）。主端收到后在对应轴上调用手柄 `sendForce`。从端每收到一个合法 ControlFrame 就回一个 HapticFrame（约 100 Hz）；未持有控制权时 enable 恒为 0。**主端 200 ms 内未收到有效 HapticFrame 时，必须把两只手柄的力输出置 0。**
+HapticOut（10 字节）：u8 enable，i8 axis，f32 force_n，f32 torque_nm。axis 为力作用的 SDK 轴（从端 `axial_force_axis`，当前为 1）。主端收到后在对应轴上调用手柄 `sendForce`。从端每收到一个合法 ControlFrame 就回一个 HapticFrame（约 100 Hz）；未持有控制权时 enable 恒为 0。**主端 3 s 内未收到有效 HapticFrame 时，必须把两只手柄的力输出置 0。**
 
 RTT = `now_ms − echo_ts_ms − hold_ms`。
 
@@ -147,7 +147,7 @@ M→S {"t":"acquire","id":1}      S→M {"t":"ack","id":1,"state":"done"}   或 
 M→S {"t":"release","id":2}
 ```
 
-未持有控制权时，除 `hello/acquire/ping` 外的命令一律 `rejected`，且从端忽略 ControlFrame 中的手柄与注射器内容。TCP 断开或 ControlFrame 持续超时 2 s，从端释放租约。
+未持有控制权时，除 `hello/acquire/ping` 外的命令一律 `rejected`，且从端忽略 ControlFrame 中的手柄与注射器内容。TCP 断开或 ControlFrame 持续超时 3 s，从端释放租约。
 
 ### 4.3 命令
 
@@ -185,10 +185,10 @@ M→S {"t":"release","id":2}
 
 | 现象 | 检测方 | 处理 |
 |---|---|---|
-| ControlFrame 超过 200 ms 未到 | 从端 | 手柄输入视为无效，注射器与轴4点动方向置 0，力反馈输出置 0 |
-| ControlFrame 超过 2 s 未到或 TCP 断开 | 从端 | 释放控制租约；恢复需主端重新握手与 acquire |
-| HapticFrame 超过 200 ms 未到 | 主端 | 本地手柄力输出置 0，链路区告警 |
-| StatusFrame 超过 1 s 未到 | 主端 | 界面标记“数据过期”，禁用所有操作按钮 |
+| ControlFrame 超过 3 s 未到 | 从端 | 手柄输入视为无效，注射器与轴4点动方向置 0，力反馈输出置 0 |
+| ControlFrame 超过 3 s 未到或 TCP 断开 | 从端 | 释放控制租约；恢复需主端重新握手与 acquire |
+| HapticFrame 超过 3 s 未到 | 主端 | 本地手柄力输出置 0，链路区告警 |
+| StatusFrame 超过 3 s 未到 | 主端 | 界面标记“数据过期”，禁用所有操作按钮 |
 | MAC/序号校验失败 | 双方 | 丢弃并计数，不回应 |
 
 这些门限为初始值，需结合停止距离与风险分析确认（文档 13.3 节）。
@@ -198,3 +198,5 @@ M→S {"t":"release","id":2}
 - 协议字段或长度变化必须同时递增 `version`，并重新生成测试向量。
 - `python tools/gen_protocol_vectors.py` 生成 `protocol/test_vectors/*`；C# 的 `MasterConsole.Protocol.Tests` 读取同一批向量逐字节比对。
 - 帧长常量：Control 79、Haptic 50、Status 142。
+
+

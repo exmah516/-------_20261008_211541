@@ -46,3 +46,4 @@ Start-Process master/MasterConsole/bin/x64/Debug/net472/MasterConsole.exe -Argum
 - 尚未在不同工作目录启动并人工观察模型画面，也未故意删除单个网格做弹窗/状态文字视觉测试。
 - ActiViz/VTK DLL 已随输出复制，但未做显卡、不同 DPI、最小窗口和重复打开/关闭的实机视觉验收。
 - 海康、DSA 截屏、中继和独立 DSA 机械臂状态均不属于本步骤。
+

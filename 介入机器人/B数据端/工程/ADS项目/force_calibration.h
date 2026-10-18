@@ -31,10 +31,10 @@ namespace force_direct_calibration
 
 struct ForceCalibrationConfig
 {
-	// 传感器2(fn_1)为导管轴向力，传感器1(ft_1)为导管切向力；四路仅验证0～50 g正向载荷。
+	// 第一组传感器（fn_1/ft_1）；四路仅验证0～50 g正向载荷。
 	double axial_direct_n_per_v = force_direct_calibration::fn_1_slope_n_per_volt;
 	double tangential_direct_n_per_v = force_direct_calibration::ft_1_slope_n_per_volt;
-	// 传感器3(fn_2)和传感器4(ft_2)分别驱动导丝手柄的轴向力与力矩。
+	// 第二组传感器（fn_2/ft_2）分别提供另一只手柄的轴向力与力矩。
 	double guidewire_axial_direct_n_per_v = force_direct_calibration::fn_2_slope_n_per_volt;
 	double guidewire_tangential_direct_n_per_v = force_direct_calibration::ft_2_slope_n_per_volt;
 
@@ -62,7 +62,8 @@ struct ForceCalibrationConfig
 	double f_max_n = force_direct_calibration::operational_force_limit_n;
 	double t_max_nm = force_direct_calibration::operational_handle_torque_limit_nm;
 	double deadband_f_n = 0.02;
-	double deadband_t_nm = 0.0001;
+	// 0.01 N·mm = 0.00001 N·m。
+	double deadband_t_nm = 0.00001;
 };
 
 struct ForceCalibrationState
@@ -107,7 +108,7 @@ inline CleanForce calculate_clean_force(
 	return out;
 }
 
-// 导丝侧纯净力与导管侧保持相同语义：只扣除装机零点并应用本侧 F_direct 斜率。
+// 第二组传感器的纯净力：只扣除装机零点并应用本侧 F_direct 斜率。
 inline CleanForce calculate_clean_guidewire_force(
 	double fn_2_raw_v,
 	double ft_2_raw_v,

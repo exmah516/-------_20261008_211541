@@ -67,7 +67,7 @@
 | `fn_2_value` | `G.fn_2_value` | short | 读 | 第二组轴向力（仅 ADS 链路使用） |
 | `ft_2_value` | `G.ft_2_value` | short | 读 | 第二组扭矩（同上） |
 
-> 力反馈链路真正消费的是 `force_sample.fn_1_value_v` / `ft_1_value_v`。默认 ADS 分支在 `plc_io::read_force_sample` 内完成 `INT -> V` 换算；`calibrate_force` 再分别按 `0.701461986 N/V`、`0.620117055 N/V` 做动态零点后的 `F_direct` 映射。TCP_DAQ 模式才会覆盖这两路。ADS 读取同时返回 axis1/axis2 实际位置（`act_pos` 快照），见 [力反馈说明.md §2.2](力反馈说明.md#22-主循环采样maincpp-主循环步骤-15力采样节拍段)。
+> 力反馈链路真正消费的是 `force_sample.fn_1_value_v` / `ft_1_value_v`。默认 ADS 分支在 `plc_io::read_force_sample` 内完成 `INT -> V` 换算；`calibrate_force` 再分别按 `0.319519429 N/V`、`0.620117055 N/V` 做动态零点后的 `F_direct` 映射。TCP_DAQ 模式才会覆盖这两路。ADS 读取同时返回 axis1/axis2 实际位置（`act_pos` 快照），见 [力反馈说明.md §2.2](力反馈说明.md#22-主循环采样maincpp-主循环步骤-15力采样节拍段)。
 
 重新标定工具直接读取 PLC 原始 `short` 计数，不执行 `raw / 1000.0` 换算。工具内的固定映射为：传感器1 -> `G.ft_1_value`、传感器2 -> `G.fn_1_value`、传感器3 -> `G.fn_2_value`、传感器4 -> `G.ft_2_value`。每个采样时刻通过同一次 `ADSReadSum` 获取四路快照，避免四次独立读取造成通道时间错位。
 
@@ -474,3 +474,4 @@ cancel / fault
 网关优先提示通信恢复，避免把清空缓存解释成必须重新准备；额外状态暴露回退锁止用于解释拒绝原因，不改变远程报文布局。连接失败同时保留本地和备用错误，故障包含目标地址，符号解析错误包含变量名。300 ms 阈值及原路由不变。
 
 49 项离线断言和 Debug/Release 构建通过。168 个本地 TMC 符号名称/字段/下标核查通过；现场在线版本和首次超时根因仍未验证。详见软件包 `验证记录/20261010_ADS恢复排查/排查与修复报告.md`。
+
