@@ -23,7 +23,8 @@ namespace MasterConsole.Services
         {
             var value = new HikCameraSettings {
                 Name = "海康 " + index,
-                Ip = index == 1 ? "192.168.1.32" : "192.168.1.64"
+                Ip = "192.168.50.2",
+                Port = 18000 + index - 1
             };
             string path = FindConfig();
             if (path == null) return value;

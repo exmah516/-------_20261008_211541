@@ -207,6 +207,10 @@ namespace plc_io
 			copy_positions(snapshot.act_pos_from_left, ctx.plc_act_pos_from_left, 7);
 			copy_positions(snapshot.init_pos, ctx.plc_init_pos, 7);
 			copy_positions(snapshot.leftlimit, ctx.plc_leftlimit, 7);
+			ctx.plc_act_velocity_mm_s[0] = snapshot.axis1_act_velocity_mm_s;
+			ctx.plc_act_velocity_mm_s[2] = snapshot.axis3_act_velocity_mm_s;
+			ctx.plc_act_velocity_mm_s[4] = snapshot.axis5_act_velocity_mm_s;
+			ctx.plc_act_velocity_mm_s[5] = snapshot.axis6_act_velocity_mm_s;
 			ctx.plc_snapshot_qpc_ticks = snapshot.qpc_ticks;
 			ctx.plc_snapshot_sequence = snapshot.attempt_sequence;
 			return true;
@@ -218,19 +222,28 @@ namespace plc_io
 		const char* symbols[] = {
 			AdsSymbol::act_pos,
 			AdsSymbol::init_pos,
-			AdsSymbol::leftlimit
+			AdsSymbol::leftlimit,
+			"G.axis[1].NcToPlc.ActVelo",
+			"G.axis[3].NcToPlc.ActVelo",
+			"G.axis[5].NcToPlc.ActVelo",
+			"G.axis[6].NcToPlc.ActVelo"
 		};
 		const unsigned long lengths[] = {
 			static_cast<unsigned long>(sizeof(double) * 7),
 			static_cast<unsigned long>(sizeof(double) * 7),
-			static_cast<unsigned long>(sizeof(double) * 7)
+			static_cast<unsigned long>(sizeof(double) * 7),
+			sizeof(double), sizeof(double), sizeof(double), sizeof(double)
 		};
 		void* outputs[] = {
 			ctx.plc_act_pos,
 			ctx.plc_init_pos,
-			ctx.plc_leftlimit
+			ctx.plc_leftlimit,
+			&ctx.plc_act_velocity_mm_s[0],
+			&ctx.plc_act_velocity_mm_s[2],
+			&ctx.plc_act_velocity_mm_s[4],
+			&ctx.plc_act_velocity_mm_s[5]
 		};
-		const bool success = ads_read_sum(ctx, symbols, lengths, outputs, 3);
+		const bool success = ads_read_sum(ctx, symbols, lengths, outputs, 7);
 		QueryPerformanceCounter(&qpc_after);
 		if (success)
 		{

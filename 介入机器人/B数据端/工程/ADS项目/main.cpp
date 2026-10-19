@@ -10,7 +10,6 @@
 #include "motion_sync.h"
 #include "plc_io.h"
 #include "remote_gateway.h"
-#include "hik_camera_relay.h"
 #include "startup_sequence.h"
 #include "vis_server.h"
 
@@ -126,8 +125,6 @@ int main(int argc, char* argv[])
 	ExperimentRecorder experiment_recorder;
 	VisServer vis_server;
 	RemoteGateway remote_gateway;
-	HikCameraRelay camera_relay;
-	(void)camera_relay.start();
 	HandleFilterState axis1_handle_filter;
 	HandleFilterState axis6_handle_filter;
 	// 首位启动 ADS 100 Hz 后台通信服务与辅助服务，彻底消除主线程直连并发竞争。
@@ -345,6 +342,7 @@ int main(int argc, char* argv[])
 	CrawlState axis1_crawl;
 	CrawlState axis6_crawl;
 	PlannedReturnCoordinator planned_return;
+	DualHandoffRequest dual_handoff;
 	SpacingRecoveryState spacing_recovery;
 	axis1_crawl.enabled = true;
 	// 开始控制默认目标：轴1=28，轴3=610，轴5=615，轴6=641 mm。
@@ -710,6 +708,7 @@ int main(int argc, char* argv[])
 	auto reset_planned_return = [&]()
 	{
 		planned_return.reset();
+		dual_handoff.reset();
 		axis1_fast_return = false;
 		axis6_fast_retract = false;
 	};
@@ -718,6 +717,7 @@ int main(int argc, char* argv[])
 	// 才能重建基准并把协调器恢复为Follow，避免本地先于PLC伪装完成。
 	auto cancel_active_return_motion = [&](bool clear_plc_requests) -> bool
 	{
+		dual_handoff.reset();
 		const bool had_active_return = planned_return.active();
 		if (!had_active_return) return true;
 		clear_axis1_delivery_mapping();
@@ -1574,11 +1574,11 @@ int main(int argc, char* argv[])
 			clear_axis1_delivery_mapping();
 		}
 		// 统一回退任务不能穿越急停、通信保持或其它接管状态。
-		if (planned_return.active() &&
+		if ((planned_return.active() || dual_handoff.active()) &&
 			(!control_active || connection_hold_active ||
 			estop_hold_active || return_ads_fault_hold ||
 			spacing_recovery.active() || spacing_recovery.requested ||
-			startup_sequence_active || axis6_soft_limit_hold))
+			startup_sequence_active || emergency_retract_active || axis6_soft_limit_hold))
 		{
 			(void)cancel_active_return_motion(true);
 		}
@@ -3057,6 +3057,7 @@ int main(int argc, char* argv[])
 			// 防止 axis6 已停而 axis1/3/5 或旋转轴继续造成相对拉扯。
 				auto hold_axis6_related_axes = [&]()
 				{
+					dual_handoff.reset();
 					pos[0] = plc_act_pos[0];
 					pos[1] = plc_act_pos[1];
 					pos[2] = plc_act_pos[2];
@@ -3653,6 +3654,10 @@ int main(int argc, char* argv[])
 				const double lo1 = axis1_crawl.min_abs();
 				const double hi1 = axis1_crawl.max_abs();
 				const bool reverse = axis1_reverse_pressed;
+				if (dual_handoff.active() && dual_handoff.reverse != reverse)
+				{
+					dual_handoff.reset();
+				}
 				if (!axis1_crawl.window_active &&
 					is_within_range(axis1_abs, lo1, hi1, tol))
 				{
@@ -3661,11 +3666,11 @@ int main(int argc, char* argv[])
 				}
 				const bool axis1_window_ok = axis1_crawl.window_active;
 
-				double inc1 = axis1_linear_increment_mm;
+				double inc1 = dual_handoff.active() ? 0.0 : axis1_linear_increment_mm;
 				// 投送停止位只拦截继续递送的增量，撤出方向始终放行。
 				if (axis3_delivery_stop_active && inc1 < 0.0) inc1 = 0.0;
-				double inc6 = axis6_linear_increment_mm;
-				if (guidewire_mode == GuidewireMode::None &&
+				double inc6 = dual_handoff.active() ? 0.0 : axis6_linear_increment_mm;
+				if (!dual_handoff.active() && guidewire_mode == GuidewireMode::None &&
 					(axis4_forward_request || axis4_reverse_request))
 				{
 					// 轴4点动：前进对应 axis6 位置减少，作为导丝链路的附加增量来源，同样受 g 约束。
@@ -3747,16 +3752,36 @@ int main(int argc, char* argv[])
 					(cmd1 <= lo1 + tol) && inc1 < 0.0;
 				const bool trig_1_right = axis1_window_ok && reverse &&
 					(cmd1 >= hi1 - tol) && inc1 > 0.0;
-				const bool want_axis1_leg = trig_1_left || trig_1_right;
-				// 仅轴1可合并临近被动端的轴6；主动换手必须由导丝自身触发。
-				const bool merge_axis6 = want_axis1_leg &&
-					(reverse ? g_now < gmin + merge_eps - 1e-9 : g_now > gmax - merge_eps + 1e-9);
-				const bool wire_caused_g = wire_hit_hi || wire_hit_lo;
-				const bool want_axis6_leg = wire_caused_g || cath_hit_hi || cath_hit_lo || merge_axis6;
-				if ((want_axis1_leg || want_axis6_leg) && !planned_return.active())
+				if (!dual_handoff.active())
+				{
+					dual_handoff.axis1 = trig_1_left || trig_1_right;
+					// 仅轴1可合并临近被动端的轴6；主动换手必须由导丝自身触发。
+					const bool merge_axis6 = dual_handoff.axis1 &&
+						(reverse ? g_now < gmin + merge_eps - 1e-9 : g_now > gmax - merge_eps + 1e-9);
+					dual_handoff.wire_caused = wire_hit_hi || wire_hit_lo;
+					dual_handoff.gap_boundary = dual_handoff.wire_caused || cath_hit_hi || cath_hit_lo;
+					dual_handoff.axis6 = dual_handoff.gap_boundary || merge_axis6;
+					dual_handoff.reverse = reverse;
+				}
+				const bool want_axis1_leg = dual_handoff.axis1;
+				const bool want_axis6_leg = dual_handoff.axis6;
+				const bool wire_caused_g = dual_handoff.wire_caused;
+				const double g_actual = (axis6_abs - plc_leftlimit[5]) - (axis5_abs - plc_leftlimit[4]);
+				const double gap_edge = (wire_caused_g ? reverse : !reverse) ? gmax : gmin;
+				bool handoff_ready = dual_handoff.active() &&
+					(!want_axis1_leg || std::abs(axis1_abs - (reverse ? hi1 : lo1)) <= tol + 1e-9) &&
+					(!dual_handoff.gap_boundary || std::abs(g_actual - gap_edge) <= tol + 1e-9);
+				// 换手会冻结两条链路，轴3/5及另一轴的剩余递送也必须先完成。
+				for (int axis : { 0, 2, 4, 5 })
+				{
+					handoff_ready = handoff_ready &&
+						std::abs(ctx.plc_act_pos[axis] - pos[axis]) <= tol + 1e-9 &&
+						std::abs(ctx.plc_act_velocity_mm_s[axis]) <= cfg.handoff_stop_velocity_mm_s;
+				}
+				if (handoff_ready && !planned_return.active())
 				{
 					// 换手时axis3/5保持，g目标以axis5当前实际位置计算。
-					const double axis1_target_abs = trig_1_left ? hi1 : lo1;
+					const double axis1_target_abs = reverse ? lo1 : hi1;
 					const double axis5_left_now = axis5_abs - plc_leftlimit[4];
 					// 同时换手按轴1换手后的位置预留行程，否则使用本次快照的实际位置。
 					const double axis1_after_return_abs = want_axis1_leg ? axis1_target_abs : axis1_abs;
@@ -3781,10 +3806,12 @@ int main(int argc, char* argv[])
 							use_axis6_leg,
 							axis6_target_abs))
 						{
-							// 本拍先完成持有者夹紧和跨链路冻结，电机请求仍等待两级夹爪时序。
+							// 实际到位并低速后才夹紧；电机请求仍等待原有两级夹爪时序。
+							dual_handoff.reset();
 							apply_planned_return_outputs();
 						}
 					}
+					else dual_handoff.reset();
 				}
 			}
 			else
@@ -4427,7 +4454,7 @@ int main(int argc, char* argv[])
 		ads_output.cylinder_valid = cylinder_output_enabled;
 		ads_output.cylinder5_press_req = cylinder_output_enabled && cylinder5_req;
 		const bool axis4_paused_by_axis6 =
-			planned_return.active() || axis6_soft_limit_hold;
+			planned_return.active() || dual_handoff.active() || axis6_soft_limit_hold;
 		ads_output.axis4_forward_req =
 			ads_motion_cycle_valid && !axis4_paused_by_axis6 && axis4_manual_forward_req;
 		ads_output.axis4_reverse_req =
@@ -5247,7 +5274,6 @@ int main(int argc, char* argv[])
 	arm_manual_ads.stop();
 	ads_communication.stop();
 	remote_gateway.stop();
-	camera_relay.stop();
 	vis_server.stop();
 	handle_axis1.close();
 	handle_axis6.close();

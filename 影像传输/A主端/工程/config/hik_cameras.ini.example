@@ -10,8 +10,8 @@ stream=0
 
 [camera2]
 name=海康 2
-ip=192.168.1.64
-port=8000
+ip=192.168.50.2
+port=18001
 username=admin
 password=
 channel=1

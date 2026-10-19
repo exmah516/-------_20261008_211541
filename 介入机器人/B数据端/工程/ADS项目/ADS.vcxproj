@@ -155,7 +155,6 @@
     <ClCompile Include="experiment_recorder.cpp" />
     <ClCompile Include="vis_server.cpp" />
     <ClCompile Include="remote_gateway.cpp" />
-    <ClCompile Include="hik_camera_relay.cpp" />
     <ClCompile Include="ads_communication.cpp" />
     <ClCompile Include="plc_io.cpp" />
     <ClCompile Include="motion_sync.cpp" />
@@ -177,7 +176,6 @@
     <ClInclude Include="force_calibration.h" />
     <ClInclude Include="vis_server.h" />
     <ClInclude Include="remote_gateway.h" />
-    <ClInclude Include="hik_camera_relay.h" />
     <ClInclude Include="手柄\remote_handle_bridge.h" />
     <ClInclude Include="protocol\cpp\remote_protocol.h" />
     <ClInclude Include="ads_communication.h" />

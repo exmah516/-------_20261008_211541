@@ -13,8 +13,6 @@
     <!-- 手柄 SDK（x64）：从项目根复制到输出目录，主端直接读取本机手柄。 -->
     <None Include="..\..\FLCatheter.dll" Link="FLCatheter.dll" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\Runtime\VC142\*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Compile Remove="Controls\DsaImageView.xaml.cs;Controls\HikCameraView.xaml.cs;Controls\RobotViewport.xaml.cs;Services\DsaCanControlSender.cs;Services\DsaJpegReceiver.cs;Services\HikCameraService.cs;Services\HikNetSdk.cs;Services\UrdfStruct.cs;Services\VtkMotionReceiver.cs" />
-    <Page Remove="Controls\DsaImageView.xaml;Controls\HikCameraView.xaml;Controls\RobotViewport.xaml" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MasterConsole.Protocol\MasterConsole.Protocol.csproj" />

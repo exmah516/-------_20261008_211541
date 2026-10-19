@@ -1,9 +1,15 @@
-包目录：D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\B数据端
-运行内容大小：11.3 MiB
+介入机器人 B数据端
 
-关键文件哈希：
-运行\ADS.exe | 463872 bytes | SHA-256 2cb6bc5819d8f7e871fbdddb3fd56d0bdb404bd219233916d7cf15cdb43ea5e6
-运行\FLCatheter.dll | 6273536 bytes | SHA-256 2788f7b266917e259395cdbd8f7bfcbbbe4ea05a8f0980827068710bfbf3dca0
-运行\TcAdsDll.dll | 832072 bytes | SHA-256 46b306a26f54210dab7279f0a7880f3122ad7e9ff7b0e946ddcdc69434d44cec
+工程：工程/ADS项目/ADS.sln
+日常入口：编译并启动数据端.cmd
+本地调试台入口：编译并启动本地调试台.cmd
 
-“源码备份”是本地已有源码和库源码的归档，不作为运行依赖。
+ADS 输出：工程/ADS项目/x64/Release/ADS.exe
+调试台输出：工程/ADS项目/AdsControlUI/bin/Release/net472/AdsControlUI.exe
+运行依赖：FLCatheter.dll、TcAdsDll.dll、工程/Runtime/VC142；由构建复制。
+配置：工程/config/remote.token，保留现有密钥。
+定位臂：工程/PositioningArmKinematics，属于介入机器人。
+实验数据：ADS 当前工作目录下的 records，保留现有文件。
+
+旧运行包和历史混合测试移至：验证记录/20261019_介入目录清理/旧文件/B数据端。
+截图和海康转发运行于：影像传输/B数据端/ScreenCut。

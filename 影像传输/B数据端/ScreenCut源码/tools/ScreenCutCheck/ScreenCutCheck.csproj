@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>9.0</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System.Configuration" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="ScreenCut">
+      <HintPath>../../ScreenCut/bin/x64/Release/ScreenCut.exe</HintPath>
+    </Reference>
+    <Compile Include="../../../../A主端/工程/ImagingMaster/Services/DsaJpegReceiver.cs" Link="DsaJpegReceiver.cs" />
+    <Compile Include="../../../../A主端/工程/ImagingMaster/Controls/DsaImageView.xaml.cs" Link="DsaImageView.xaml.cs" />
+    <Page Include="../../../../A主端/工程/ImagingMaster/Controls/DsaImageView.xaml" Link="DsaImageView.xaml" />
+    <None Include="../../CameraRelay/bin/Release/ImagingCameraRelay.dll" Link="ImagingCameraRelay.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

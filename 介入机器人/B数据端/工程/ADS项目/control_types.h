@@ -146,6 +146,7 @@ struct ControlConfig
 
 	// 计划运动到位容差。
 	double crawl_arrive_tol_mm = 0.2;
+	double handoff_stop_velocity_mm_s = 0.5;
 	// 线性增量抗噪死区：仅用于抑制差分噪声，不承担方向门控。
 	double linear_increment_noise_deadband_mm = 0.02;
 	// 正反切换一次性触发保护距离（离开该距离后重新允许触发）。
@@ -360,6 +361,19 @@ struct PlannedReturnCoordinator
 	{
 		*this = PlannedReturnCoordinator{};
 	}
+};
+
+// 指令触边只记住换手意图；实际到位并低速后才切换夹爪。
+struct DualHandoffRequest
+{
+	bool axis1 = false;
+	bool axis6 = false;
+	bool wire_caused = false;
+	bool gap_boundary = false;
+	bool reverse = false;
+
+	bool active() const { return axis1 || axis6; }
+	void reset() { *this = DualHandoffRequest{}; }
 };
 
 enum class SpacingRecoveryPhase
@@ -635,6 +649,7 @@ struct AppContext
 	double* plc_leftlimit = nullptr;
 	double* plc_act_pos_from_left = nullptr;
 	double* plc_v_limit = nullptr;
+	double plc_act_velocity_mm_s[7] = {};
 	std::uint64_t plc_snapshot_sequence = 0;
 	std::int64_t plc_snapshot_qpc_ticks = 0;
 

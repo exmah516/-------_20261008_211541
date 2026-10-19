@@ -5,13 +5,13 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:ScreenCut"
         mc:Ignorable="d"
-        Title="截图传输工具" Height="500.994" Width="739">
+        Title="影像传输 · 数据端（截图与海康转发）" Height="550" Width="860" MinWidth="840" MinHeight="400">
     <Grid>
         <Button Content="截图测试1" HorizontalAlignment="Left" Height="21" Margin="8,8,0,0" VerticalAlignment="Top" Width="63" Click="Button_Click_Cut1"/>
         <Button Content="截图测试2" HorizontalAlignment="Left" Height="21" Margin="7,34,0,0" VerticalAlignment="Top" Width="64" Click="Button_Click_Cut2"/>
         
         <Label Content="左：" HorizontalAlignment="Left" Height="24" Margin="78,5,0,0" VerticalAlignment="Top" Width="33"/>
-        <TextBox x:Name="txtLeft" HorizontalAlignment="Left" Height="20" Margin="111,5,0,0" TextWrapping="Wrap" Text="-1280" VerticalAlignment="Top" Width="42" RenderTransformOrigin="-0.137,0.471"/>
+        <TextBox x:Name="txtLeft" HorizontalAlignment="Left" Height="20" Margin="111,5,0,0" TextWrapping="Wrap" Text="0" VerticalAlignment="Top" Width="42" RenderTransformOrigin="-0.137,0.471"/>
         <Label Content="上：" HorizontalAlignment="Left" Height="24" Margin="158,5,0,0" VerticalAlignment="Top" Width="33"/>
         <TextBox x:Name="txtTop" HorizontalAlignment="Left" Height="20" Margin="194,5,0,0" TextWrapping="Wrap" Text="0" VerticalAlignment="Top" Width="37" RenderTransformOrigin="-0.529,0.588"/>
         <Label Content="宽：" HorizontalAlignment="Left" Height="24" Margin="233,5,0,0" VerticalAlignment="Top" Width="33"/>
@@ -21,7 +21,8 @@
         <Button Content="持续传图" Name="btn_keep1" HorizontalAlignment="Left" Height="20" Margin="488,5,0,0" VerticalAlignment="Top" Width="64" Click="Button_Click_1"/>
         <Button Content="持续传图2" Name="btn_keep2" HorizontalAlignment="Left" Height="20" Margin="488,36,0,0" VerticalAlignment="Top" Width="64" Click="Button_Click_2" />
         <Label Content="主端IP：" HorizontalAlignment="Left" Margin="552,5,0,0" VerticalAlignment="Top" RenderTransformOrigin="0.478,-0.472"/>
-        <TextBox Name="txtIP" HorizontalAlignment="Left" Height="20" Margin="609,5,0,0" TextWrapping="Wrap" Text="192.168.1.100" VerticalAlignment="Top" Width="115"/>
+        <TextBox Name="txtIP" HorizontalAlignment="Left" Height="20" Margin="609,5,0,0" TextWrapping="Wrap" Text="192.168.50.1" VerticalAlignment="Top" Width="115" LostFocus="MasterIp_LostFocus"/>
+        <Button Content="停止传图" HorizontalAlignment="Left" Margin="735,5,0,0" VerticalAlignment="Top" Click="Button_Stop"/>
         <Label Content="压缩率" HorizontalAlignment="Left" Margin="380,5,0,0" VerticalAlignment="Top"/>
         <TextBox Name="p" HorizontalAlignment="Left" Height="20" Margin="431,5,0,0" TextWrapping="Wrap" Text="40" VerticalAlignment="Top" Width="40"/>
 
@@ -37,9 +38,11 @@
         <TextBox Name="p1" HorizontalAlignment="Left" Height="20" Margin="431,35,0,0" TextWrapping="Wrap" Text="40" VerticalAlignment="Top" Width="40"/>
 
 
-        <Label Content="压缩后大小：" HorizontalAlignment="Left" Margin="552,35,0,0" VerticalAlignment="Top" RenderTransformOrigin="-0.2,-0.04"/>
-        <TextBlock Name="sizeShow" HorizontalAlignment="Left" Margin="657,40,0,0" TextWrapping="Wrap" Text="TextBlock" VerticalAlignment="Top" RenderTransformOrigin="0.127,0.933"/>
+        <Label Content="发送到：" HorizontalAlignment="Left" Margin="552,35,0,0" VerticalAlignment="Top"/>
+        <TextBlock Name="sizeShow" HorizontalAlignment="Left" Margin="609,40,0,0" VerticalAlignment="Top"/>
 
-        <Image Name="pictureBox" Margin="5,73,5,5"/>
+        <TextBlock Name="sendStatus" Margin="8,66,8,0" VerticalAlignment="Top" TextWrapping="Wrap" Text="先预览截图区域，再点击“持续传图”；摄像头转发随窗口自动启动。"/>
+        <TextBlock Name="cameraStatus" Margin="8,104,8,0" VerticalAlignment="Top" TextWrapping="Wrap"/>
+        <Image Name="pictureBox" Margin="5,152,5,5" Stretch="Uniform"/>
     </Grid>
 </Window>

@@ -13,9 +13,12 @@ G.axis[1].NcToPlc.ActPos	8
 G.axis[1].NcToPlc.ActVelo	8
 G.axis[2].NcToPlc.ActPos	8
 G.axis[3].NcToPlc.ActPos	8
+G.axis[3].NcToPlc.ActVelo	8
 G.axis[4].NcToPlc.ActPos	8
 G.axis[5].NcToPlc.ActPos	8
+G.axis[5].NcToPlc.ActVelo	8
 G.axis[6].NcToPlc.ActPos	8
+G.axis[6].NcToPlc.ActVelo	8
 G.axis[7].NcToPlc.ActPos	8
 G.cylinder1_value	2
 G.cylinder2_value	2

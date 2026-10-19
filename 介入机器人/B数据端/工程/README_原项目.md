@@ -11,9 +11,9 @@
 
 ## 当前职责
 
-`ADS.exe` 负责 ADS/PLC 通信、介入机器人运动、手柄、力反馈、远程网关、定位臂和暂时保留的海康转发。现场 PLC 程序和 ADS 符号本阶段不改。
+`ADS.exe` 负责 ADS/PLC 通信、介入机器人运动、手柄、力反馈、远程网关和定位臂。现场 PLC 程序和 ADS 符号本阶段不改。
 
-`hik_camera_relay.*` 仍由 `ADS.vcxproj` 一起编译；后续迁移到 `影像传输/B数据端` 时，再同步调整工程文件和启动顺序。
+`hik_camera_relay.*` 已整体移至 `影像传输/B数据端/ScreenCut源码/CameraRelay`，由 ScreenCut 加载运行；ADS 工程已移除相关编译和启动入口。
 
 ## 启动
 

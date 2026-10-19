@@ -11,3 +11,5 @@
 - 不包含血管介入机器人控制、DSA 影像和海康监控。
 
 运行本目录的 编译并启动主端.cmd。运行时需要工程/DsaMaster/URDF 和 VTK 运行库。
+
+模型相关本地库源码（`Math4wpf`、`can4wpf` 及 Eigen）位于 `工程/本地库源码`；运行仍使用 `工程/DsaMaster/Runtime` 中的现有 DLL。

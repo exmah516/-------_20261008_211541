@@ -1,4 +1,4 @@
-// 生产分支由run_dual_control_test.py抽取，设备读写仅用内存替身。
+// 生产分支由run_offline_tests.cjs抽取，设备读写仅用内存替身。
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -21,6 +21,7 @@ struct AppContext {
     double* plc_leftlimit;
     double* plc_init_pos;
     double* plc_act_pos;
+    double plc_act_velocity_mm_s[7] = {};
 };
 namespace motion_sync {
     void calculate_axis6_window_from_axis5_abs(const AppContext&, double, double&, double&);
@@ -35,7 +36,15 @@ struct Crawl {
     double max_abs() const { return end_abs; }
 };
 struct Transaction { bool running=false; bool active() const { return running; } };
-struct Plant { double a1=28, a5=615, a6=628; };
+struct Plant { double a1=28, a5=615, a6=628, a3=0; };
+#include "handoff_type.inc"
+struct FollowSession {
+    Plant command;
+    double base1, base3, base5;
+    DualHandoffRequest pending;
+    std::array<double,7> velocity{};
+    explicit FollowSession(Plant p):command(p),base1(p.a1),base3(p.a3),base5(p.a5) {}
+};
 struct Outcome {
     Plant after, follow;
     bool transaction=false, leg1=false, leg6=false;
@@ -48,7 +57,7 @@ static void require(bool ok, const char* name) {
 }
 static bool close(double a, double b) { return std::abs(a-b)<1e-7; }
 static Outcome tick(Plant p, double raw1, double raw6, bool reverse_input=false,
-                    int axis4=0, bool window_active=true) {
+                    int axis4=0, bool window_active=true, FollowSession* session=nullptr) {
     Config cfg;
     auto gate=[&](double d) { return std::abs(d)>=cfg.linear_increment_noise_deadband_mm ? d : 0.0; };
     const double axis1_linear_increment_mm=gate(raw1), axis6_linear_increment_mm=gate(raw6);
@@ -60,17 +69,24 @@ static Outcome tick(Plant p, double raw1, double raw6, bool reverse_input=false,
     const double axis4_coupled_axis6_speed_mm_s=10;
     auto GetTickCount64=[]() { return ULONGLONG(1010); };
     double plc_init_pos[7]={}, plc_leftlimit[7]={}, actual[7]={};
+    actual[0]=p.a1; actual[2]=p.a3; actual[4]=p.a5; actual[5]=p.a6;
     AppContext ctx{&cfg,&reverse_input,&guidewire_mode,plc_leftlimit,plc_init_pos,actual};
-    Crawl axis1_crawl{p.a1,motion_sync::axis1_window_left_abs(ctx),motion_sync::axis1_window_right_abs(ctx)};
+    if (session) std::copy(session->velocity.begin(),session->velocity.end(),ctx.plc_act_velocity_mm_s);
+    DualHandoffRequest local_handoff;
+    auto& dual_handoff=session?session->pending:local_handoff;
+    Crawl axis1_crawl{session?session->base1:p.a1,motion_sync::axis1_window_left_abs(ctx),motion_sync::axis1_window_right_abs(ctx)};
     axis1_crawl.window_active=window_active;
-    double axis1_follow_cmd_abs=p.a1, axis6_follow_cmd_abs=p.a6;
-    const double axis1_abs=p.a1, axis5_abs=p.a5, axis6_abs=p.a6, axis5_base_rel=p.a5;
-    double pos[7]={p.a1,0,0,0,p.a5,p.a6,0}, axis2_hold_rel=0;
+    double axis1_follow_cmd_abs=session?session->command.a1:p.a1, axis6_follow_cmd_abs=session?session->command.a6:p.a6;
+    const double axis1_abs=p.a1, axis5_abs=p.a5, axis6_abs=p.a6, axis5_base_rel=session?session->base5:p.a5;
+    double pos[7]={p.a1,0,p.a3,0,p.a5,p.a6,0}, axis2_hold_rel=0;
     const double axis1_rot_filtered=0;
     const bool axis3_delivery_stop_active=false;
     auto is_within_range=[](double x,double lo,double hi,double tol) { return x>=lo-tol && x<=hi+tol; };
     auto capture_axis1_follow_baseline=[]() {};
-    auto apply_axis1_mirror_from_abs=[&](double x,bool) { pos[4]=p.a5+(x-p.a1); };
+    auto apply_axis1_mirror_from_abs=[&](double x,bool) {
+        pos[4]=(session?session->base5:p.a5)+(x-axis1_crawl.base_rel);
+        pos[2]=(session?session->base3:p.a3)+(x-axis1_crawl.base_rel);
+    };
     auto compute_axis7_cmd_rel=[]() { return 0.0; };
     struct { int cyl1_open=0, cyl2_clamp=1800, cyl3_open=0, cyl4_clamp=1800; } cyl;
     int cylinder1_cmd=0,cylinder2_cmd=0,cylinder3_cmd=0,cylinder4_cmd=0;
@@ -83,7 +99,8 @@ static Outcome tick(Plant p, double raw1, double raw6, bool reverse_input=false,
     };
     auto apply_planned_return_outputs=[]() {};
 #include "motion.inc"
-    out.follow={pos[0],pos[4],pos[5]};
+    out.follow={pos[0],pos[4],pos[5],pos[2]};
+    if (session) session->command=out.follow;
     // 事务触发拍保持实际位置，理想PLC只完成重定位，不能把候选位移计入递送量。
     if (out.transaction) {
         if (out.leg1) out.after.a1=out.target1;
@@ -421,7 +438,107 @@ static void test_trajectories() {
         csv<<(rev?"retraction":"delivery")<<",25,"<<inputs[0]<<','<<inputs[1]<<','<<count<<','<<total1<<','<<total6<<'\n';
     }
 }
+static double approach(double a,double b,double step) { return a+std::clamp(b-a,-step,step); }
+static void advance(Plant& p,FollowSession& s,double mirror_step=0.25) {
+    const Plant before=p;
+    p.a1=approach(p.a1,s.command.a1,0.25);
+    p.a3=approach(p.a3,s.command.a3,mirror_step);
+    p.a5=approach(p.a5,s.command.a5,mirror_step);
+    p.a6=approach(p.a6,s.command.a6,0.25);
+    s.velocity[0]=(p.a1-before.a1)/0.01; s.velocity[2]=(p.a3-before.a3)/0.01;
+    s.velocity[4]=(p.a5-before.a5)/0.01; s.velocity[5]=(p.a6-before.a6)/0.01;
+}
+static void test_handoff_lag() {
+    for(int axis:{1,6}) for(bool rev:{false,true}) for(double input:{0.1,1.,4.}) {
+        Plant p=axis==1?(rev?Plant{5,100,132}:Plant{30,100,102})
+                       :(rev?Plant{18,100,106}:Plant{18,100,128});
+        FollowSession session(p);
+        const Plant start=p;
+        bool completed=false, stopped_while_pending=false;
+        for(int n=0;n<1500;++n) {
+            const double d=n<300?(rev?input:-input):0;
+            // 请求记住后立即停手，验证无需后续手柄增量。
+            const double move=session.pending.active()?0:d;
+            const auto r=tick(p,axis==1?move:0,axis==6?move:0,rev,0,true,&session);
+            if(session.pending.active() && move==0) stopped_while_pending=true;
+            if(r.transaction) {
+                const double edge=axis==1?(rev?30:5):(rev?33:1);
+                require(std::abs((axis==1?p.a1:p.a6-p.a5)-edge)<=0.2+1e-9,"actual boundary reached before clamping");
+                require(std::abs(axis==1?p.a1-start.a1:p.a6-start.a6)>=(axis==1?24.8:26.8)-1e-9,"fast handle preserves full effective travel");
+                for(int a:{0,2,4,5}) require(std::abs(session.velocity[a])<=0.5,"actual speed below handoff threshold");
+                require(!session.pending.active(),"request cleared after handoff");
+                completed=true; break;
+            }
+            // 镜像轴比轴1慢，防止只等轴1而截断轴3/5行程。
+            advance(p,session,axis==1?0.12:0.25);
+        }
+        require(completed && stopped_while_pending,"handoff completes after fast input stops");
+    }
+    for(bool rev:{false,true}) for(int moving_axis:{0,2,4,5}) for(double v:{-0.51,-0.5,0.,0.5,0.51}) {
+        Plant p{18,100,rev?133.:101.}; FollowSession session(p);
+        session.velocity[moving_axis]=v;
+        auto r=tick(p,0,rev?0.1:-0.1,rev,0,true,&session);
+        require(r.transaction==(std::abs(v)<=0.5),"inclusive 0.5mm/s gate checks every frozen linear axis");
+    }
+    Plant p{18,100,128}; FollowSession session(p);
+    auto r=tick(p,0,-100,false,0,true,&session);
+    require(session.pending.active() && !r.transaction,"command endpoint only arms handoff");
+    const Plant endpoint=session.command;
+    r=tick(p,-4,-4,false,0,true,&session);
+    require(close(r.follow.a1,endpoint.a1)&&close(r.follow.a6,endpoint.a6),"pending handoff preserves both endpoint targets");
+    r=tick(p,0,0,true,0,true,&session);
+    require(!r.transaction&&!session.pending.active(),"direction change discards pending handoff");
+    for(bool rev:{false,true}) {
+        // 导管推动g到被动端，轴1尚未到自身端点；停手后也必须完成被动换手。
+        Plant passive=rev?Plant{18,100,102}:Plant{18,100,132};
+        FollowSession s(passive); bool done=false;
+        for(int n=0;n<500;++n) {
+            auto out=tick(passive,s.pending.active()?0:(rev?4.:-4.),0,rev,0,true,&s);
+            if(out.transaction) {require(out.leg6&&!out.leg1,"passive gap handoff retains its original cause");done=true;break;}
+            advance(passive,s,0.12);
+        }
+        require(done,"passive handoff completes with lag and stopped handle");
+    }
+    std::cout<<"PASS lag, stop-input, mirror lag, passive handoff, reversal and 0.5mm/s cases\n";
+}
+static void test_pending_guards() {
+    bool control_active=true, connection_hold_active=false, estop_hold_active=false;
+    bool return_ads_fault_hold=false, startup_sequence_active=false, emergency_retract_active=false;
+    bool axis6_soft_limit_hold=false;
+    SpacingRecoveryState spacing_recovery;
+    Transaction planned_return;
+    DualHandoffRequest dual_handoff;
+    int cancel_calls=0;
+    auto cancel_active_return_motion=[&](bool) { ++cancel_calls; dual_handoff.reset(); return true; };
+    auto cancel_if_needed=[&]() {
+#include "cancel.inc"
+    };
+    auto axis4_paused=[&]() {
+#include "axis4_pause.inc"
+        return axis4_paused_by_axis6;
+    };
+    require(!axis4_paused(),"axis4 jog allowed during ordinary follow");
+    dual_handoff.axis6=true;
+    require(axis4_paused(),"pending handoff pauses axis4 together with axis6 target");
+    cancel_if_needed();
+    require(cancel_calls==0 && dual_handoff.active(),"ordinary follow retains pending handoff");
+    for(bool* flag:{&connection_hold_active,&estop_hold_active,&return_ads_fault_hold,
+                   &startup_sequence_active,&emergency_retract_active,&axis6_soft_limit_hold,
+                   &spacing_recovery.requested}) {
+        dual_handoff.axis6=true; *flag=true;
+        const int before=cancel_calls;
+        cancel_if_needed();
+        require(cancel_calls==before+1 && !dual_handoff.active(),"takeover clears pending handoff");
+        *flag=false;
+    }
+    dual_handoff.axis1=true; control_active=false;
+    cancel_if_needed();
+    require(!dual_handoff.active(),"pause clears pending handoff");
+    require(!axis4_paused(),"axis4 pause clears after pending request cancellation");
+}
 int main() {
+    test_pending_guards();
+    test_handoff_lag();
     test_passive_targets();
     test_one_way_merge();
     test_windows();

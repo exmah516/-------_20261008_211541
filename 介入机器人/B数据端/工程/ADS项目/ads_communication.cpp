@@ -1297,6 +1297,9 @@ bool AdsCommunicationService::resolve_fast_handles()
 	unsigned long init_pos = 0;
 	unsigned long leftlimit = 0;
 	unsigned long axis1_act_velocity = 0;
+	unsigned long axis3_act_velocity = 0;
+	unsigned long axis5_act_velocity = 0;
+	unsigned long axis6_act_velocity = 0;
 	unsigned long ft_1 = 0;
 	unsigned long fn_1 = 0;
 	unsigned long fn_2 = 0;
@@ -1309,6 +1312,9 @@ bool AdsCommunicationService::resolve_fast_handles()
 		!required_handle(AdsSymbol::init_pos, init_pos) ||
 		!required_handle(AdsSymbol::leftlimit, leftlimit) ||
 		!required_handle("G.axis[1].NcToPlc.ActVelo", axis1_act_velocity) ||
+		!required_handle("G.axis[3].NcToPlc.ActVelo", axis3_act_velocity) ||
+		!required_handle("G.axis[5].NcToPlc.ActVelo", axis5_act_velocity) ||
+		!required_handle("G.axis[6].NcToPlc.ActVelo", axis6_act_velocity) ||
 		!required_handle(AdsSymbol::ft_1_value, ft_1) ||
 		!required_handle(AdsSymbol::fn_1_value, fn_1) ||
 		!required_handle(AdsSymbol::fn_2_value, fn_2) ||
@@ -1322,20 +1328,24 @@ bool AdsCommunicationService::resolve_fast_handles()
 
 	fast_fallback_read_handles_ = {
 		cycle, dc_time, act_pos, axis1_act_velocity,
+		axis3_act_velocity, axis5_act_velocity, axis6_act_velocity,
 		ft_1, fn_1, fn_2, ft_2, estop, host_timeout, init_pos, leftlimit, cycle
 	};
 	fast_direct_read_handles_[0] = cycle;
 	fast_direct_read_handles_[1] = dc_time;
 	fast_direct_read_handles_[9] = axis1_act_velocity;
-	fast_direct_read_handles_[10] = ft_1;
-	fast_direct_read_handles_[11] = fn_1;
-	fast_direct_read_handles_[12] = fn_2;
-	fast_direct_read_handles_[13] = ft_2;
-	fast_direct_read_handles_[14] = estop;
-	fast_direct_read_handles_[15] = host_timeout;
-	fast_direct_read_handles_[16] = init_pos;
-	fast_direct_read_handles_[17] = leftlimit;
-	fast_direct_read_handles_[18] = cycle;
+	fast_direct_read_handles_[10] = axis3_act_velocity;
+	fast_direct_read_handles_[11] = axis5_act_velocity;
+	fast_direct_read_handles_[12] = axis6_act_velocity;
+	fast_direct_read_handles_[13] = ft_1;
+	fast_direct_read_handles_[14] = fn_1;
+	fast_direct_read_handles_[15] = fn_2;
+	fast_direct_read_handles_[16] = ft_2;
+	fast_direct_read_handles_[17] = estop;
+	fast_direct_read_handles_[18] = host_timeout;
+	fast_direct_read_handles_[19] = init_pos;
+	fast_direct_read_handles_[20] = leftlimit;
+	fast_direct_read_handles_[21] = cycle;
 	use_direct_nc_position_ = true;
 	for (int axis = 0; axis < 7; ++axis)
 	{
@@ -1440,8 +1450,8 @@ bool AdsCommunicationService::read_fast_snapshot(AdsFastSnapshot& snapshot, bool
 	QueryPerformanceCounter(&before);
 	double nc_absolute[7] = {};
 	double relative_fallback[7] = {};
-	std::array<unsigned long, 19> lengths{};
-	std::array<void*, 19> outputs{};
+	std::array<unsigned long, 22> lengths{};
+	std::array<void*, 22> outputs{};
 	auto read_snapshot = [&](const unsigned long* handles, bool direct_nc_position)
 	{
 		std::size_t count = 0;
@@ -1465,6 +1475,9 @@ bool AdsCommunicationService::read_fast_snapshot(AdsFastSnapshot& snapshot, bool
 			append(sizeof(relative_fallback), relative_fallback);
 		}
 		append(sizeof(snapshot.axis1_act_velocity_mm_s), &snapshot.axis1_act_velocity_mm_s);
+		append(sizeof(snapshot.axis3_act_velocity_mm_s), &snapshot.axis3_act_velocity_mm_s);
+		append(sizeof(snapshot.axis5_act_velocity_mm_s), &snapshot.axis5_act_velocity_mm_s);
+		append(sizeof(snapshot.axis6_act_velocity_mm_s), &snapshot.axis6_act_velocity_mm_s);
 		append(sizeof(snapshot.ft_1_value), &snapshot.ft_1_value);
 		append(sizeof(snapshot.fn_1_value), &snapshot.fn_1_value);
 		append(sizeof(snapshot.fn_2_value), &snapshot.fn_2_value);
@@ -1526,7 +1539,10 @@ bool AdsCommunicationService::read_fast_snapshot(AdsFastSnapshot& snapshot, bool
 		std::isfinite(static_cast<double>(snapshot.fn_2_value)) &&
 		std::isfinite(static_cast<double>(snapshot.ft_2_value));
 	snapshot.position_valid = positions_finite &&
-		std::isfinite(snapshot.axis1_act_velocity_mm_s);
+		std::isfinite(snapshot.axis1_act_velocity_mm_s) &&
+		std::isfinite(snapshot.axis3_act_velocity_mm_s) &&
+		std::isfinite(snapshot.axis5_act_velocity_mm_s) &&
+		std::isfinite(snapshot.axis6_act_velocity_mm_s);
 	snapshot.force_valid = force_values_finite;
 	snapshot.valid = snapshot.position_valid && snapshot.force_valid;
 
@@ -1564,7 +1580,7 @@ bool AdsCommunicationService::read_fast_snapshot(AdsFastSnapshot& snapshot, bool
 		return false;
 	}
 	// 返回值表示本拍是否仍可用于运动控制，而不是力数据是否有效。
-	if (!snapshot.position_valid) record_failure("NONFINITE_POSITION", "Position, coordinates or axis1 velocity is not finite");
+	if (!snapshot.position_valid) record_failure("NONFINITE_POSITION", "Position, coordinates or linear axis velocity is not finite");
 	return snapshot.position_valid;
 }
 

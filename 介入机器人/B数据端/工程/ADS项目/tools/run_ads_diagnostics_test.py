@@ -12,11 +12,9 @@ vs = subprocess.check_output([str(vswhere), '-latest', '-products', '*', '-requi
                              text=True).strip()
 build = Path(tempfile.mkdtemp(prefix='ads-offline-diagnostics-'))
 test = sys.argv[1] if len(sys.argv) > 1 else 'ads_diagnostics_test'
-if test not in ('ads_diagnostics_test', 'remote_recovery_test', 'main_recovery_test', 'handle_net_distance_test', 'net_distance_gateway_test', 'hik_camera_relay_test'):
+if test not in ('ads_diagnostics_test', 'remote_recovery_test', 'main_recovery_test', 'handle_net_distance_test', 'net_distance_gateway_test'):
     raise SystemExit('Unknown offline test')
 extra_source = f'"{project / "plc_io.cpp"}" ' if test == 'ads_diagnostics_test' else ''
-if test == 'hik_camera_relay_test':
-    extra_source = f'"{project / "hik_camera_relay.cpp"}" '
 if test == 'handle_net_distance_test':
     source = (project / 'main.cpp').read_text(encoding='utf-8-sig')
     for name, start, end in (

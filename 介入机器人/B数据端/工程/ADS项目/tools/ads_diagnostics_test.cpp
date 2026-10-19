@@ -23,7 +23,17 @@ namespace {
     std::uint32_t cycle = 10;
     bool fail_read = false, fail_transport = false, stall = false, nonfinite = false;
     bool fail_local = false, fail_remote = false;
-    std::string missing_symbol;
+    std::string missing_symbol, nonfinite_velocity;
+    const std::unordered_map<std::string,double> velocities = {
+        {"G.axis[1].NcToPlc.ActVelo",1.25}, {"G.axis[3].NcToPlc.ActVelo",-3.5},
+        {"G.axis[5].NcToPlc.ActVelo",5.75}, {"G.axis[6].NcToPlc.ActVelo",-6.25}
+    };
+    void fill_velocity(const std::string& symbol, void* out) {
+        const auto it=velocities.find(symbol);
+        if(it!=velocities.end()) *static_cast<double*>(out)=it->second;
+        if(!nonfinite_velocity.empty() && symbol==nonfinite_velocity)
+            *static_cast<double*>(out)=std::numeric_limits<double>::quiet_NaN();
+    }
     std::string fail_item, error;
     std::vector<double> targets;
     unsigned int committed = 0;
@@ -62,6 +72,7 @@ unsigned long CADSComm::ADSGetAddr(const char* name) {
 bool CADSComm::ADSRead(const char* name, unsigned long size, void* out) {
     validate_size(name, size);
     std::memset(out, 0, size);
+    fill_velocity(name, out);
     if (std::string(name) == "G.self_check_done" || std::string(name) == "G.handle_reinit_done") *static_cast<bool*>(out) = true;
     return true;
 }
@@ -80,6 +91,7 @@ bool CADSComm::ADSReadSumByHandle(const unsigned long* handles, const unsigned l
         std::memset(out[i], 0, sizes[i]);
         const auto& s = symbols.at(handles[i]);
         validate_size(s, sizes[i]);
+        fill_velocity(s, out[i]);
         if (s.find("CycleCount") != std::string::npos) *static_cast<std::uint32_t*>(out[i]) = cycle;
         if (s.find("DcTaskTime") != std::string::npos) *static_cast<std::int64_t*>(out[i]) = static_cast<std::int64_t>(cycle) * 10000000;
         if (nonfinite && s == "G.axis[1].NcToPlc.ActPos") *static_cast<double*>(out[i]) = std::numeric_limits<double>::quiet_NaN();
@@ -149,6 +161,37 @@ int main() {
     service.event_state_.self_check_done = true;
     check(service.read_fast_snapshot(snapshot, true) && snapshot.position_valid, "valid snapshot accepted");
     const auto confirmed_snapshot = snapshot;
+    double actual[7]={}, from_left[7]={}, init[7]={}, left[7]={};
+    AppContext ctx;
+    ctx.ads=&ads; ctx.ads_service=&service;
+    ctx.plc_act_pos=actual; ctx.plc_act_pos_from_left=from_left;
+    ctx.plc_init_pos=init; ctx.plc_leftlimit=left;
+    // 用不同的有符号速度检查句柄顺序，防止全零样本掩盖映射错误。
+    for(bool direct:{true,false}) {
+        service.use_direct_nc_position_=direct;
+        snapshot={};
+        check(service.read_fast_snapshot(snapshot,false) && snapshot.position_valid,"direct/fallback snapshot reads velocity");
+        check(snapshot.axis1_act_velocity_mm_s==1.25 && snapshot.axis3_act_velocity_mm_s==-3.5 &&
+              snapshot.axis5_act_velocity_mm_s==5.75 && snapshot.axis6_act_velocity_mm_s==-6.25,
+              "axis 1/3/5/6 signed velocities map to their own snapshot fields");
+        service.publish_snapshot(snapshot);
+        check(plc_io::read_plc_state(ctx) && ctx.plc_act_velocity_mm_s[0]==1.25 &&
+              ctx.plc_act_velocity_mm_s[2]==-3.5 && ctx.plc_act_velocity_mm_s[4]==5.75 &&
+              ctx.plc_act_velocity_mm_s[5]==-6.25,"control reads position and velocity from same published snapshot");
+        for(int axis:{1,3,5,6}) {
+            nonfinite_velocity="G.axis["+std::to_string(axis)+"].NcToPlc.ActVelo";
+            snapshot={};
+            check(!service.read_fast_snapshot(snapshot,false) && !snapshot.position_valid,"nonfinite velocity rejects motion snapshot");
+            service.publish_snapshot(snapshot);
+            check(!plc_io::read_plc_state(ctx),"invalid velocity cannot reach motion control");
+        }
+        nonfinite_velocity.clear();
+    }
+    service.use_direct_nc_position_=true;
+    ctx.ads_service=nullptr;
+    check(plc_io::read_plc_state(ctx) && ctx.plc_act_velocity_mm_s[0]==1.25 &&
+          ctx.plc_act_velocity_mm_s[2]==-3.5 && ctx.plc_act_velocity_mm_s[4]==5.75 &&
+          ctx.plc_act_velocity_mm_s[5]==-6.25,"startup compatibility read maps all four velocities");
     fail_read = true;
     snapshot = {};
     check(!service.read_fast_snapshot(snapshot, false) && !snapshot.position_valid, "read timeout invalidates snapshot");
