@@ -64,7 +64,7 @@ namespace MasterConsole.Views
         }
         /// <summary>
         /// 链路选择：找到 remote.token 就连真实从端，否则用模拟链路。
-        /// 命令行：--sim 强制模拟；--host &lt;地址&gt; 指定从端地址（默认 192.168.50.2，即从端电脑）；
+        /// 命令行：--sim 强制模拟；--host &lt;地址&gt; 指定从端地址（默认 192.168.60.1，即从端电脑）；
         /// --token &lt;文件&gt; 指定密钥文件。密钥文件默认在 exe 同目录、其上两级的 config 目录中查找。
         /// </summary>
         private static IRobotLink CreateLink()

@@ -66,7 +66,7 @@ static Outcome tick(Plant p, double raw1, double raw6, bool reverse_input=false,
     const bool axis4_forward_request=axis4<0, axis4_reverse_request=axis4>0;
     bool axis4_axis6_coupling_active_prev=true;
     ULONGLONG axis4_axis6_coupling_last_ms=1000;
-    const double axis4_coupled_axis6_speed_mm_s=10;
+#include "axis4_speed.inc"
     auto GetTickCount64=[]() { return ULONGLONG(1010); };
     double plc_init_pos[7]={}, plc_leftlimit[7]={}, actual[7]={};
     actual[0]=p.a1; actual[2]=p.a3; actual[4]=p.a5; actual[5]=p.a6;

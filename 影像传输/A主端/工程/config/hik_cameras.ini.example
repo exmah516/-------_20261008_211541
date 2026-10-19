@@ -1,7 +1,7 @@
 ; 复制为同目录的 hik_cameras.ini 后填写私有凭据；密码不会写入日志。
 [camera1]
 name=海康 1
-ip=192.168.50.2
+ip=192.168.60.1
 port=18000
 username=admin
 password=
@@ -10,7 +10,7 @@ stream=0
 
 [camera2]
 name=海康 2
-ip=192.168.50.2
+ip=192.168.60.1
 port=18001
 username=admin
 password=

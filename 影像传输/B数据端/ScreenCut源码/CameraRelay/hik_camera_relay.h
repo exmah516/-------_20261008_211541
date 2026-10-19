@@ -7,7 +7,7 @@
 
 struct HikCameraRelayConfig
 {
-	std::string listen_ip = "192.168.50.2";
+	std::string listen_ip = "192.168.60.1";
 	std::uint16_t listen_port = 18000;
 	std::string master_ip = "192.168.50.1";
 	std::string camera_ip = "192.168.1.64";

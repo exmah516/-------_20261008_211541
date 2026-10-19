@@ -27,7 +27,7 @@ try {
     }
     Write-Host "Build verified: $exe"
     if (!$BuildOnly) {
-        $arguments = if ($Sim) { '--sim' } else { '--host 192.168.50.2 --token "' + $token + '"' }
+        $arguments = if ($Sim) { '--sim' } else { '--host 192.168.60.1 --token "' + $token + '"' }
         Start-Process -FilePath $exe -ArgumentList $arguments -WorkingDirectory $runtime -WindowStyle Normal
     }
     exit 0

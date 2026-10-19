@@ -54,8 +54,8 @@ int main(int argc, char* argv[])
 	constexpr DWORD ads_snapshot_wait_timeout_ms = 300;
 	// WPF 状态只用于显示；降低推送频率不会改变 100 Hz ADS、运动或实验记录节拍。
 	constexpr std::int64_t vis_publish_rate_hz = 15;
-	// 球囊递送时，轴4每运动一秒，轴6沿位置减少方向递进10 mm。
-	constexpr double axis4_coupled_axis6_speed_mm_s = 10.0;
+	// 轴4为30°/s、传动轮半径7.45 mm且1∶1，轴6线速度=7.45×30×π/180 mm/s。
+	constexpr double axis4_coupled_axis6_speed_mm_s = 3.9008108782;
 	const char* hardcoded_ads_netid = "169.254.119.135.1.1";
 
 	// 工具模式：不进入运动环前先查看按键位掩码。

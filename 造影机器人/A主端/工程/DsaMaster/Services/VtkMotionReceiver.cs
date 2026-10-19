@@ -25,7 +25,7 @@ namespace MasterConsole.Services
         internal event Func<DsaArmDisplayState, bool> StateReceived;
         internal event Action<string> StatusChanged;
 
-        internal VtkMotionReceiver(string peerAddress = "192.168.50.2")
+        internal VtkMotionReceiver(string peerAddress = "192.168.60.1")
         {
             _peerAddress = IPAddress.Parse(peerAddress);
             _listener = new TcpListener(IPAddress.Any, Port);
