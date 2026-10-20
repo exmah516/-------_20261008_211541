@@ -1,8 +1,10 @@
+> 2026-10-20 Zenoh 迁移：主端与 ADS 仅使用四个 MessagePack 位置数组 Topic，经数据端 TCP 7447；旧 TCP/UDP/JSON 与命名管道已移除。控制域类型移至 control_messages.h，网络线格式为 zenoh_protocol.h / ZenohFrames.cs。以下旧接口、字节布局和频率记录仅供历史查阅；当前以本端 工程/protocol/PROTOCOL.md 为准。
+
 # ADS 通讯说明 / 项目内维护文档
 
 > 本文档梳理上位机与倍福 PLC 之间的 ADS 通讯实现：连接、符号表、读写封装、断线/重同步路径，以及与主循环的契约。
 >
-> 2026-10-20 当前入口：B 端本地调试 UI、键盘控制和本地手柄 SDK 已移除；调零等操作通过主端命令发起。`VisServer` 与命名管道后端仍保留，下文旧 UI/键盘变更记录作为历史说明。
+> 2026-10-20 当前入口：B 端本地调试 UI、键盘控制和本地手柄 SDK 已移除；调零等操作由主端通过 Zenoh 发起。`ZenohService` 将网络命令转换为 `control_messages.h` 中的控制域类型，交给原控制循环；旧 TCP/UDP/JSON 和命名管道后端已移除。下文旧 UI/键盘变更记录作为历史说明。
 > 修改 `ads_communication.cpp/.h`、`plc_io.cpp/.h`、`ADSComm.cpp`、`sensor_calibration_experiment.cpp/.h`、符号表、或新增 PLC 变量时，请同步在最末"变更日志"追加条目。
 
 更新时间：2026-08-11

@@ -8,7 +8,7 @@ ADS 输出：工程/ADS项目/x64/Release/ADS.exe
 配置：工程/config/remote.token，保留现有密钥。
 定位臂：工程/PositioningArmKinematics，属于介入机器人。
 实验数据：ADS 当前工作目录下的 records，保留现有文件。
-本地接口：VisServer 与 ADS_Control_Vis 命名管道后端保留；随包不提供本地 UI、键盘控制或手柄测试入口。
+网络接口：ZenohService 四个 Topic，TCP 7447，旧网关与命名管道已移除；随包不提供本地 UI、键盘控制或手柄测试入口。
 
 旧运行包和历史混合测试移至：验证记录/20261019_介入目录清理/旧文件/B数据端。
 截图和海康转发运行于：影像传输/B数据端/ScreenCut。

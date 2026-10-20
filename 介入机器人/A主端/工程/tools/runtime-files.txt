@@ -9,3 +9,7 @@ msvcp140_codecvt_ids.dll
 vccorlib140.dll
 vcruntime140.dll
 vcruntime140_1.dll
+VI.Service.Net.dll
+MessagePack.dll
+MessagePack.Annotations.dll
+zenohc.dll

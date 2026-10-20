@@ -2,31 +2,9 @@ using System;
 
 namespace MasterConsole.Protocol
 {
-    /// <summary>协议常量。必须与 protocol/PROTOCOL.md、protocol/cpp/remote_protocol.h 一致。</summary>
+    /// <summary>界面与手柄的本地超时设置。</summary>
     public static class ProtocolConstants
     {
-        public const ushort Magic = 0x4956;
-        public const byte Version = 1;
-
-        public const byte TypeControl = 1;
-        public const byte TypeHaptic = 2;
-        public const byte TypeStatus = 3;
-
-        public const int HeaderLen = 16;
-        public const int MacLen = 8;
-        public const int ControlPayloadLen = 55;
-        public const int HapticPayloadLen = 26;
-        public const int StatusPayloadLen = 118;
-        public const int StatusDistancePayloadLen = StatusPayloadLen + 16;
-        public const int StatusDistanceFrameLen = HeaderLen + StatusDistancePayloadLen + MacLen; // 158
-
-        public const int ControlFrameLen = HeaderLen + ControlPayloadLen + MacLen; // 79
-        public const int HapticFrameLen = HeaderLen + HapticPayloadLen + MacLen;   // 50
-        public const int StatusFrameLen = HeaderLen + StatusPayloadLen + MacLen;   // 142
-
-        public const int TcpPort = 32000;
-        public const int UdpPort = 32001;
-
         /// <summary>主端 3 s 未收到触觉帧即把手柄力输出清零。</summary>
         public const int HapticTimeoutMs = 3000;
         /// <summary>主端 3 s 未收到状态帧即视为数据过期。</summary>
@@ -50,5 +28,6 @@ namespace MasterConsole.Protocol
         AdsHealthy = 1u << 9,
         FfZeroing = 1u << 10,
         GlobalReverse = 1u << 11,
+        CleanForceValid = 1u << 12,
     }
 }

@@ -1,203 +1,173 @@
-# 主从远程通信协议 v1
+# 介入机器人 Zenoh + MessagePack 协议 v1
 
-适用范围：**主端**（MasterConsole，只有界面和手柄）⇄ **从端/数据端**（机器人附近的电脑，运行 `ADS.exe`，经本地网线直连倍福 PLC）。两端通过 SD-WAN 异地组网。
+字段依据当前主端和 ADS 工程中实际使用的载荷定义。C# 镜像为 `MasterConsole.Protocol/ZenohFrames.cs`，C++ 镜像为 `ADS项目/protocol/cpp/zenoh_protocol.h`。
 
-> 本文是协议唯一权威定义。C++（`protocol/cpp/remote_protocol.h`）、C#（`master/MasterConsole.Protocol`）、Python 测试向量（`tools/gen_protocol_vectors.py`）三份实现必须同时修改、同时通过对拍。
+## 传输与部署
 
-## 1. 设计原则
-
-1. **手柄与界面在主端，PLC/ADS/力传感器在数据端。** 广域网只承载“意图”和“状态”，不承载伺服闭环。
-2. **按住类动作随高频帧携带。** 手柄输入、注射器推拉都放在 UDP 控制帧里，断网后从端因帧超时自动归零，不依赖“松开”事件能送达。
-3. **一次性命令走 TCP。** 准备位置、力反馈开关、电缸、Y 阀等有确认回执（已接收/已拒绝/已完成）。
-4. **超时降级，不主动进故障。** 帧超时后从端把手柄输入视为无效、注射器方向置 0、力反馈输出置 0；是否进入保持由从端既有逻辑决定。
-5. **单写者控制权。** 同一时刻只有一个主端持有控制租约。
-
-## 2. 端口与传输
-
-| 通道 | 方向 | 传输 | 默认端口 | 频率 |
-|---|---|---|---|---|
-| 命令/事件 | 双向 | TCP，长度前缀 JSON | 32000（从端监听） | 事件驱动 |
-| ControlFrame | 主→从 | UDP | 32001（从端监听） | 100 Hz |
-| HapticFrame | 从→主 | UDP | 回到 ControlFrame 的源地址端口 | 100 Hz |
-| StatusFrame | 从→主 | UDP | 同上 | 15 Hz |
-
-从端把主端最近一个**通过校验**的 ControlFrame 的源 IP:端口作为 UDP 回传目标，因此主端穿越 NAT/SD-WAN 时不需要开放入站端口。
-
-> 与文档 VIR-SW-ARCH-001 中 A 系统（HTTP 7998 + UDP 31001/31002）的关系：沿用“低频命令 + 高频 UDP 流”的分层，但命令通道改为 TCP 长连接 JSON，因为 HTTP 无法由从端主动推送事件；端口避开 A 系统端口，避免两套系统同机时冲突。
-
-## 3. UDP 二进制帧（小端，无填充）
-
-不使用 `Marshal`/结构体直接转换，两端都按字段逐个读写，避免 ABI 与对齐问题。
-
-### 3.1 帧头（16 字节）
-
-| 偏移 | 类型 | 字段 | 说明 |
-|---|---|---|---|
-| 0 | u16 | magic | 0x4956（字节序列 `56 49`） |
-| 2 | u8 | version | 1 |
-| 3 | u8 | type | 1=Control，2=Haptic，3=Status |
-| 4 | u32 | session | 会话号，由从端在握手时分配 |
-| 8 | u32 | seq | 发送方单调递增序号 |
-| 12 | u32 | ts_ms | 发送方单调时钟毫秒 |
-
-### 3.2 帧尾（8 字节）
-
-`MAC = HMAC-SHA256(session_key, 帧头 ‖ 载荷)` 的前 8 字节。
-
-接收方处理顺序：长度 → magic/version → type → session → MAC → seq。任一步失败直接丢弃，不回应。`seq` 必须严格大于上一个已接受序号（按 u32 回绕比较：`(int)(seq - last) > 0`），否则视为重放/乱序丢弃。
-
-### 3.3 ControlFrame（type=1，载荷 55 字节，整帧 79）
-
-| 偏移 | 类型 | 字段 |
+| Topic | 方向 | 频率 |
 |---|---|---|
-| 0 | HandleSample | 手柄 A（序列号 582） |
-| 26 | HandleSample | 手柄 B（序列号 587） |
-| 52 | i8[2] | 注射器 1/2 方向：-1 拉，0 停，+1 推 |
-| 54 | i8 | 轴4点动方向：-1 后退，0 停，+1 前进 |
+| `vi/ads/handle/v1` | 主端 → ADS | 100 Hz |
+| `vi/ads/command/v1` | 主端 → ADS | 按需 |
+| `vi/ads/state/v1` | ADS → 主端 | 约 30 Hz |
+| `vi/ads/force/v1` | ADS → 主端 | 100 Hz |
 
-HandleSample（26 字节）：
+路由器由数据端启动或复用，默认监听 `tcp/192.168.60.1:7447`；仅关闭本进程启动的路由器。主端仅打开 client session。两端 x64，Zenoh-C 1.10.1；C++ 头文件 SDK 同版本；C# 使用 net472 + P/Invoke，MessagePack 3.1.12；C++ msgpack-cxx 9.0.0。
 
-| 偏移 | 类型 | 字段 |
+## 线格式
+
+所有消息为位置数组，禁止 map。BIN 为二进制，不接受 STR 或整数数组代替。整数按声明范围验证；float 固定为 MessagePack float32，double 固定 float64；拒绝 NaN、Infinity、错误长度/类型及尾部额外数据。版本固定 1。未列出的旧 VisState 内存字段不直接上网。
+
+手柄按物理序列号 582、587 排列，每只 8 个字段直接放在顶层。关节/编码器/速度来自本机 SDK，轴向力单位 N，扭矩 N·m，位置及累计净距离 mm。
+
+## HandleFrame（24 项）
+
+| 索引 | 类型 | 字段 |
 |---|---|---|
-| 0 | u8 | buttons（`buttons2` 位掩码） |
-| 1 | u8 | valid（1=本次采样有效） |
-| 2 | i32[2] | encoders |
-| 10 | f32[2] | joints |
-| 18 | f32[2] | vels |
+| 0 | byte | Version |
+| 1 | ulong | SessionId |
+| 2 | ulong | Sequence |
+| 3 | ulong | MonotonicMs |
+| 4 | byte | Buttons582 |
+| 5 | bool | Valid582 |
+| 6 | int | Encoder582_0 |
+| 7 | int | Encoder582_1 |
+| 8 | float | Joint582_0 |
+| 9 | float | Joint582_1 |
+| 10 | float | Velocity582_0 |
+| 11 | float | Velocity582_1 |
+| 12 | byte | Buttons587 |
+| 13 | bool | Valid587 |
+| 14 | int | Encoder587_0 |
+| 15 | int | Encoder587_1 |
+| 16 | float | Joint587_0 |
+| 17 | float | Joint587_1 |
+| 18 | float | Velocity587_0 |
+| 19 | float | Velocity587_1 |
+| 20 | sbyte | Injector1Direction |
+| 21 | sbyte | Injector2Direction |
+| 22 | sbyte | Axis4Direction |
+| 23 | byte[] | AuthTag |
 
-手柄 A、B 指**物理序列号** 582、587（协议字段按物理序列号排列）。字段与本地 SDK 的 `buttons2 / encoders2 / fJoints2 / fVels2` 一一对应。主端对未打开或本次读取失败的手柄必须置 `valid=0`。
+## CommandFrame（15 项）
 
-从端只在主端持有控制权时才使用手柄采样，并且只使用 3 s 内的最新一帧：采样过期等同于“手柄断开”，从端沿用既有的手柄软保持逻辑（保持最后参考、丢弃故障期间增量、恢复后自动重建基准），不会进入故障。
-
-### 3.4 HapticFrame（type=2，载荷 26 字节，整帧 50）
-
-| 偏移 | 类型 | 字段 |
+| 索引 | 类型 | 字段 |
 |---|---|---|
-| 0 | u32 | echo_ts_ms：回显最近收到的 ControlFrame.ts_ms |
-| 4 | u16 | hold_ms：从收到该帧到发出本帧的停留毫秒 |
-| 6 | HapticOut | 手柄 A |
-| 16 | HapticOut | 手柄 B |
+| 0 | byte | Version |
+| 1 | ulong | SessionId |
+| 2 | ulong | Sequence |
+| 3 | ulong | MonotonicMs |
+| 4 | int | CommandId |
+| 5 | ZenohCommand | Command |
+| 6 | int | Param1 |
+| 7 | int | Param2 |
+| 8 | double | Value1 |
+| 9 | double | Value2 |
+| 10 | string | Payload |
+| 11 | byte[] | NonceClient |
+| 12 | byte[] | NonceServer |
+| 13 | byte[] | Proof |
+| 14 | byte[] | AuthTag |
 
-HapticOut（10 字节）：u8 enable，i8 axis，f32 force_n，f32 torque_nm。axis 为力作用的 SDK 轴（从端 `axial_force_axis`，当前为 1）。主端收到后在对应轴上调用手柄 `sendForce`。从端每收到一个合法 ControlFrame 就回一个 HapticFrame（约 100 Hz）；未持有控制权时 enable 恒为 0。**主端 3 s 内未收到有效 HapticFrame 时，必须把两只手柄的力输出置 0。**
+## StateFrame（49 项）
 
-RTT = `now_ms − echo_ts_ms − hold_ms`。
-
-### 3.5 StatusFrame（type=3，载荷 118 字节，整帧 142）
-
-| 偏移 | 类型 | 字段 |
+| 索引 | 类型 | 字段 |
 |---|---|---|
-| 0 | u32 | echo_ts_ms |
-| 4 | u16 | hold_ms |
-| 6 | u32 | flags |
-| 10 | i32 | mode（`guidewire_mode`，仅显示） |
-| 14 | i32 | phase（`startup_phase`） |
-| 18 | i32 | selfcheck_status |
-| 22 | i32 | ads_state |
-| 26 | u16[4] | cylinder_cmd（电缸 1–4 当前命令值） |
-| 34 | u8 | cylinder_manual_mask（位0..3=电缸1..4 手动覆盖） |
-| 35 | i8[2] | injector_active（注射器当前动作方向） |
-| 37 | i8 | axis4_active（轴4当前点动方向） |
-| 38 | f32[5] | force_582_f, force_582_n, force_587_f, force_587_n, clean_force_n |
-| 58 | f32 | ads_actual_hz |
-| 62 | f32[7] | axis_pos（预留，界面暂不显示） |
-| 90 | f32[7] | axis_from_left（预留，界面暂不显示） |
+| 0 | byte | Version |
+| 1 | ulong | SessionId |
+| 2 | ulong | Sequence |
+| 3 | byte | AuthState |
+| 4 | byte[] | NonceServer |
+| 5 | ulong | EchoMainMonotonicMs |
+| 6 | uint | Flags |
+| 7 | int | Mode |
+| 8 | int | Phase |
+| 9 | int | SelfCheckStatus |
+| 10 | int | AdsState |
+| 11 | ushort | Cylinder1 |
+| 12 | ushort | Cylinder2 |
+| 13 | ushort | Cylinder3 |
+| 14 | ushort | Cylinder4 |
+| 15 | byte | CylinderManualMask |
+| 16 | sbyte | Injector1Direction |
+| 17 | sbyte | Injector2Direction |
+| 18 | sbyte | Axis4Direction |
+| 19 | float | Force582F |
+| 20 | float | Force582N |
+| 21 | float | Force587F |
+| 22 | float | Force587N |
+| 23 | float | CleanForceN |
+| 24 | float | AdsActualHz |
+| 25 | float | AxisPos0 |
+| 26 | float | AxisPos1 |
+| 27 | float | AxisPos2 |
+| 28 | float | AxisPos3 |
+| 29 | float | AxisPos4 |
+| 30 | float | AxisPos5 |
+| 31 | float | AxisPos6 |
+| 32 | float | AxisFromLeft0 |
+| 33 | float | AxisFromLeft1 |
+| 34 | float | AxisFromLeft2 |
+| 35 | float | AxisFromLeft3 |
+| 36 | float | AxisFromLeft4 |
+| 37 | float | AxisFromLeft5 |
+| 38 | float | AxisFromLeft6 |
+| 39 | bool | HasNetDistance |
+| 40 | double | Axis1NetDistanceMm |
+| 41 | double | Axis6NetDistanceMm |
+| 42 | byte | PrepareTaskState |
+| 43 | int | PrepareTaskCommandId |
+| 44 | byte | StartTaskState |
+| 45 | int | StartTaskCommandId |
+| 46 | CommandResultFrame[] | Results |
+| 47 | string | EventText |
+| 48 | byte[] | AuthTag |
 
-flags 位定义：
+## ForceFrame（13 项）
 
-| 位 | 含义 | 位 | 含义 |
-|---|---|---|---|
-| 0 | control_active | 6 | yvalve_closed |
-| 1 | estop_hold | 7 | lease_held（本主端持有控制权） |
-| 2 | self_check_done | 8 | startup_completed |
-| 3 | ff_enabled | 9 | ads_healthy |
-| 4 | cal_zeroed | 10 | ff_zeroing（力反馈开启前自动零点采集中） |
-| 5 | host_comm_timeout | 11 | global_reverse（任一B6按住：撤出；两只均松开：递送） |
-
-global_reverse报告从端已生效的方向。换手和屈曲恢复期间方向冻结，结束后重新读取两只B6；主端以本标志显示方向。该标志不改变基础StatusFrame长度和旧字段。
-
-### 3.6 净前进距离扩展（可选）
-
-新主端在认证 JSON 中附带 "net_distance":true。新从端只对该会话发送158字节StatusFrame：原118字节载荷后追加两个小端f64，分别为轴1、轴6手柄控制的实际净前进距离（mm），载荷偏移为118、126；MAC仍覆盖完整帧头和全部载荷。
-
-旧主端未请求扩展时仍收到142字节。新主端同时接受142/158字节；旧从端忽略认证消息中的未知字段，距离显示“—”。原状态字段、控制帧、触觉帧和防重放规则保持原义。
-
-从端依据实际轴位置累计，递送增加、撤出扣减；自动换手、启动、屈曲恢复、手动夹爪覆盖及轴4点动接管的轴6位移排除。换手触发前已经发生的手柄位移保留，回位及交接期间不计；恢复后以当前位置续计。无效快照或坐标基准改变不会拼接位移。累计随从端进程启动归零，主端重连保留。
-
-## 4. TCP 命令通道
-
-帧格式：`u32 小端长度 ‖ UTF-8 JSON`，长度上限 64 KiB。每条消息含 `"t"` 类型字段。
-
-### 4.1 握手与认证（不在链路上传输 token）
-
-```
-M→S {"t":"hello","proto":1,"client":"MasterConsole","nonce_c":"<16B hex>"}
-S→M {"t":"challenge","nonce_s":"<16B hex>"}
-M→S {"t":"auth","mac":"<hex>"}          mac = HMAC-SHA256(token, "auth"‖nonce_c‖nonce_s)
-S→M {"t":"hello_ack","session":<u32>,"udp_port":32001}
-```
-
-双方各自派生 `session_key = HMAC-SHA256(token, "key"‖nonce_c‖nonce_s)[0..16]`，用于 UDP 帧 MAC。`token` 是现场配置的预共享密钥（见 `config/`），不进入版本库。
-
-> 当前版本 TCP 内容为明文 JSON，机密性依赖 SD-WAN 隧道加密。后续可在 TCP 上加 TLS，不改变本协议字段。
-
-### 4.2 控制权
-
-```
-M→S {"t":"acquire","id":1}      S→M {"t":"ack","id":1,"state":"done"}   或 rejected + reason
-M→S {"t":"release","id":2}
-```
-
-未持有控制权时，除 `hello/acquire/ping` 外的命令一律 `rejected`，且从端忽略 ControlFrame 中的手柄与注射器内容。TCP 断开或 ControlFrame 持续超时 3 s，从端释放租约。
-
-### 4.3 命令
-
-所有命令形如 `{"t":"cmd","id":<n>,"name":"...",...}`，从端回 `ack`：`state` ∈ `accepted`（已接收，执行中）、`done`、`rejected`（含 `reason`）。**客户端不得把 `accepted` 当作执行完成。**
-
-| name | 参数 | 从端对应既有动作 |
+| 索引 | 类型 | 字段 |
 |---|---|---|
-| `prepare_position` | `catheter_mm`（5–95），`wire_mm`（10–639） | `SetSelfCheckAxisPos` + `StartSelfCheck`（进入器械准备位置） |
-| `start_control` | — | `SelectDirectControl`（已到达准备位置后，在当前位置直接进入手柄控制） |
-| `force_feedback` | `enable`（bool） | 开启前自动零点采集（`ZeroForceSensor`），完成后 `ToggleForceFeedback`；零点采集期间状态帧 `ff_zeroing=1` |
-| `cylinder` | `index`（1–4），`engaged`（bool） | engaged=true：电缸 1/3 写 2000，电缸 2/4 写 10（`SetCylinderManualPosition`）；engaged=false：`ResetCylinderManual` 恢复原状态 |
-| `yvalve` | `closed`（bool） | `SetYValveOpen(!closed)` |
-| `arm_manual_enable` | `enable`（bool） | `SetArmManualEnable` |
-| `arm_axis_enable` | `axis`（1–5），`enable`（bool） | `SetArmAxisEnable` |
-| `arm_axis_reset` | `axis`（1–5） | `RequestArmAxisReset` |
-| `arm_axis_jog` | `axis`（1–5），`direction`（-1/0/1） | `SetArmAxisJog`；主端按住期间周期重发 |
-| `arm_cartesian_jog` | `mode`（1–5），`speed`（mm/s 或 °/s ×1000） | `SetArmCartesianJog`；主端按住期间周期重发 |
-| `arm_cartesian_parameter` | `field`（0–3），`value`（单位 ×1000） | `SetArmCartesianParameter` |
-| `arm_program_zero` | — | `ReturnArmProgramZero` |
-| `arm_stop` | — | `StopArmCartesian` + 清零各轴点动 |
-| `arm_cartesian_alive` | — | `KeepArmCartesianAlive` |
-| `ping` | — | 返回 `pong`，用于 TCP 保活（5 s） |
+| 0 | byte | Version |
+| 1 | ulong | SessionId |
+| 2 | ulong | Sequence |
+| 3 | ulong | EchoMainMonotonicMs |
+| 4 | bool | Enable582 |
+| 5 | sbyte | Axis582 |
+| 6 | float | Force582N |
+| 7 | float | Torque582Nm |
+| 8 | bool | Enable587 |
+| 9 | sbyte | Axis587 |
+| 10 | float | Force587N |
+| 11 | float | Torque587Nm |
+| 12 | byte[] | AuthTag |
 
-注射器推拉和轴4点动**不是**命令：它们是“按住才动”的动作，随 ControlFrame 持续发送方向，松手或断网后从端因帧超时自动归零，见 3.3 节。
+## CommandResultFrame（3 项）
 
-> 旧本地调试台（AdsControlUI）的轴4点动是“点击开始、再点停止”并由界面周期重发；远程版改为按住式，避免广域网下动作被锁存。
-
-已移除的旧功能（不进入远程协议）：实时力窗口、重力补偿、力反馈保持、手动零点采集按钮。
-
-### 4.4 事件（从→主）
-
-`{"t":"event","level":"info|warn|error","text":"..."}`：自检完成、命令被拒绝、ADS 重连等，主端显示在日志区。
-
-## 5. 超时与降级矩阵
-
-| 现象 | 检测方 | 处理 |
+| 索引 | 类型 | 字段 |
 |---|---|---|
-| ControlFrame 超过 3 s 未到 | 从端 | 手柄输入视为无效，注射器与轴4点动方向置 0，力反馈输出置 0 |
-| ControlFrame 超过 3 s 未到或 TCP 断开 | 从端 | 释放控制租约；恢复需主端重新握手与 acquire |
-| HapticFrame 超过 3 s 未到 | 主端 | 本地手柄力输出置 0，链路区告警 |
-| StatusFrame 超过 3 s 未到 | 主端 | 界面标记“数据过期”，禁用所有操作按钮 |
-| MAC/序号校验失败 | 双方 | 丢弃并计数，不回应 |
+| 0 | int | CommandId |
+| 1 | byte | Result |
+| 2 | string | Reason |
 
-这些门限为初始值，需结合停止距离与风险分析确认（文档 13.3 节）。
+## 命令及状态语义
 
-## 6. 版本与对拍
+`ZenohCommand`：0 Hello，1 Authenticate，2 Acquire，3 Release，4 PreparePosition，5 StartControl，6 ForceFeedback，7 Cylinder，8 ArmManualEnable，9 ArmAxisEnable，10 ArmAxisReset，11 ArmAxisJog，12 ArmCartesianJog，13 ArmStop，14 ArmProgramZero，15 ArmCartesianParameter，16 ArmCartesianAlive，17 YValve。没有软件急停命令；ArmStop 仅停止定位臂，PLC 急停继续走原独立路径。
 
-- 协议字段或长度变化必须同时递增 `version`，并重新生成测试向量。
-- `python tools/gen_protocol_vectors.py` 生成 `protocol/test_vectors/*`；C# 的 `MasterConsole.Protocol.Tests` 读取同一批向量逐字节比对。
-- 帧长常量：Control 79、Haptic 50、Status 142。
+PreparePosition 的两个 double 是导管与导丝准备位置；Cylinder 的 Param1 为 1..4，Param2 为打开/恢复；YValve Param1 表示关闭；定位臂轴号 1..5，点动方向 -1/0/1，速度和参数继续沿用现有 ×1000 整数单位。ForceFeedback 开启沿用零点采集后开启的流程。
 
+AuthState：0 未认证、1 挑战、2 已认证。准备和开始控制任务状态：0 空闲、1 运行中、2 完成、3 拒绝/失败，分别带关联 CommandId。Results 最多 32 项，Result=0 完成、1 拒绝；定位臂点动和保活不入结果队列。普通短命令 Result=0 表示通过服务门控且已由原控制循环消费，不等同于实体机构已到位。准备、开始控制、力反馈切换、电缸和 Y 阀由实际状态快照确认完成。
 
+## 认证、时钟与队列
 
+两端 `config/remote.token` 相同，UTF-8 去 BOM/首尾空白后至少 16 字节。主端 Hello 携带 16 字节随机 nonce；数据端回送 16 字节随机 nonce；Authenticate 的 Proof 为 HMAC-SHA256(token, ASCII "auth" + nonceC + nonceS)，32 字节。session key 为 HMAC-SHA256(token, ASCII "key" + nonceC + nonceS) 的前 16 字节。
+
+已认证消息的 AuthTag 为 HMAC-SHA256(session key, 本消息 AuthTag 置空 BIN 后的规范序列化字节) 的前 16 字节。两端字段次序、整数编码和浮点位宽必须相同；握手帧按各自握手字段验证。handle 和 command 始终带 SessionId；认证成功才替换会话，旧会话的命令不得执行。各 Topic 序号严格递增，拒绝重复和乱序。
+
+MonotonicMs 来自发送方单调时钟。ADS 原样 Echo 最近有效主端时间；主端用自己当前单调时间减 Echo 计算 RTT。不同机器的单调时间不作大小比较，不携带 Unix 时间，不做未来时间检查。
+
+ADS 命令接收 FIFO 为 256 项，满时丢弃最旧并记录诊断；本地记录入队时刻，消费时超过 2000 ms 拒绝。接收回调不运行控制逻辑，高频手柄走独立最新值路径。控制循环按 FIFO 顺序执行原有安全校验。主端仅在 publisher 可用时发送，不缓存、不补发。
+
+IsConnected = Zenoh Session 可用，并且最近通过协议/认证/session/序号校验的 state 接收间隔 ≤500 ms。该值不代表 PLC 已就绪。原控制权租约与手柄失联保持继续保留，不新增软件急停。Flags bit12 为 CleanForceValid；该位为 0 时线上 CleanForceN 为 0，主端本地域将其还原为无效值。
+
+## 验证入口
+
+共享黄金 Hex 样本位于包根 protocol/fixtures/zenoh-v1，两端协议测试读取同一组固定文件；从包根运行 `验证记录/20261020_Zenoh迁移/验证.ps1`（完成后以脚本实际输出为准）。测试使用本机回环和模拟控制状态，不启动 ADS.exe，不连接 PLC。

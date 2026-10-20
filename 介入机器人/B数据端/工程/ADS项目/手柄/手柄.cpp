@@ -78,7 +78,7 @@ void Handle::close()
 {
 	iID1 = -1;
 	clear_cache();
-	// 关闭时撤销要经网关回传主端的力指令，重复关闭也保持清零。
+	// 关闭时撤销经 Zenoh force Topic 回传主端的力目标，重复关闭也保持清零。
 	remote_handle_bridge::set_output(remote_handle_bridge::slot_of(serial_number_), remote_handle_bridge::Output());
 }
 

@@ -69,7 +69,11 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Label="UserMacros">
+    <PackageRoot>$(ProjectDir)..\..\..\..\</PackageRoot>
+    <ZenohSdk>$(PackageRoot)zenoh\sdk\zenoh-c-1.10.1-msvc\</ZenohSdk>
+    <MsgpackSdk>$(PackageRoot)zenoh\sdk\msgpack-cxx-9.0.0\</MsgpackSdk>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
   </PropertyGroup>
@@ -86,10 +90,10 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>MSGPACK_NO_BOOST;WIN32;_DEBUG;_CONSOLE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>.\ADS\Include;.\protocol\cpp;.\手柄;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ZenohSdk)include;$(MsgpackSdk)include;.\ADS\Include;.\protocol\cpp;.\手柄;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -102,10 +106,10 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>MSGPACK_NO_BOOST;WIN32;NDEBUG;_CONSOLE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>.\ADS\Include;.\protocol\cpp;.\手柄;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ZenohSdk)include;$(MsgpackSdk)include;.\ADS\Include;.\protocol\cpp;.\手柄;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -118,16 +122,16 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>MSGPACK_NO_BOOST;_DEBUG;_CONSOLE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>.\ADS\Include;.\protocol\cpp;.\手柄;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ZenohSdk)include;$(MsgpackSdk)include;.\ADS\Include;.\protocol\cpp;.\手柄;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>.\ADS\x64\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>TcAdsDll.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ZenohSdk)lib;.\ADS\x64\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>zenohc.dll.lib;bcrypt.lib;ws2_32.lib;TcAdsDll.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -136,25 +140,24 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>MSGPACK_NO_BOOST;NDEBUG;_CONSOLE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>.\ADS\Include;.\protocol\cpp;.\手柄;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ZenohSdk)include;$(MsgpackSdk)include;.\ADS\Include;.\protocol\cpp;.\手柄;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>.\ADS\x64\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>TcAdsDll.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ZenohSdk)lib;.\ADS\x64\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>zenohc.dll.lib;bcrypt.lib;ws2_32.lib;TcAdsDll.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="control_types.cpp" />
     <ClCompile Include="experiment_recorder.cpp" />
-    <ClCompile Include="vis_server.cpp" />
-    <ClCompile Include="remote_gateway.cpp" />
+    <ClCompile Include="zenoh_service.cpp" />
     <ClCompile Include="ads_communication.cpp" />
     <ClCompile Include="plc_io.cpp" />
     <ClCompile Include="motion_sync.cpp" />
@@ -174,10 +177,10 @@
     <ClInclude Include="async_csv_writer.h" />
     <ClInclude Include="experiment_recorder.h" />
     <ClInclude Include="force_calibration.h" />
-    <ClInclude Include="vis_server.h" />
-    <ClInclude Include="remote_gateway.h" />
+    <ClInclude Include="control_messages.h" />
+    <ClInclude Include="zenoh_service.h" />
+    <ClInclude Include="protocol\cpp\zenoh_protocol.h" />
     <ClInclude Include="手柄\remote_handle_bridge.h" />
-    <ClInclude Include="protocol\cpp\remote_protocol.h" />
     <ClInclude Include="ads_communication.h" />
     <ClInclude Include="plc_io.h" />
     <ClInclude Include="motion_sync.h" />
@@ -212,6 +215,7 @@
       <LocalVCRuntime Include="$(ProjectDir)..\Runtime\VC142\*.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(LocalVCRuntime)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ZenohSdk)bin\zenohc.dll;$(PackageRoot)zenoh\zenohd.exe" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="$(ProjectDir)ADS\x64\TcAdsDll.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>
 </Project>

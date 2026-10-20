@@ -1,190 +1,156 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text;
 using MasterConsole.Protocol;
 
 namespace MasterConsole.Protocol.Tests
 {
-    /// <summary>与 tools/gen_protocol_vectors.py 对拍的最小自检程序（无第三方测试框架依赖）。</summary>
-    internal static class Program
+    internal static partial class Program
     {
-        private static int _fail;
-        private static int _pass;
+        private const ulong Session = 0x1122334455667788UL;
+        private static int _passed;
+        private static int _failed;
 
         private static int Main(string[] args)
         {
-            string dir = args.Length > 0 ? args[0] : FindVectorDir();
-            Console.WriteLine("测试向量目录：" + dir);
-
-            byte[] key = FrameAuth.FromHex(File.ReadAllText(Path.Combine(dir, "session_key.hex")));
-            const uint session = 0xA1B2C3D4;
-
-            TestControl(dir, key, session);
-            TestHaptic(dir, key, session);
-            TestStatus(dir, key, session);
-            TestStatusDistance(dir, key, session);
-            TestGlobalDirection(key, session);
-            TestAuth(dir);
-            TestSeqGuard();
-
-            Console.WriteLine($"通过 {_pass} 项，失败 {_fail} 项");
-            return _fail == 0 ? 0 : 1;
-        }
-
-        private static void TestControl(string dir, byte[] key, uint session)
-        {
-            var f = new ControlFrame
+            try
             {
-                HandleA = new HandleSample { Buttons = 0x05, Valid = true, Encoder0 = 1234, Encoder1 = -5678, Joint0 = 0.5f, Joint1 = -0.25f, Vel0 = 1.5f, Vel1 = -2.5f },
-                HandleB = new HandleSample { Buttons = 0x02, Valid = true, Encoder0 = -1, Encoder1 = 2, Joint0 = 1.0f, Joint1 = 2.0f, Vel0 = 0f, Vel1 = 0.125f },
-                Injector1Dir = 1,
-                Injector2Dir = -1,
-                Axis4Dir = -1,
-            };
-            byte[] mine = FrameCodec.EncodeControl(new FrameHeader { Session = session, Seq = 100, TsMs = 123456 }, f, key);
-            byte[] want = ReadHex(dir, "control_frame.hex");
-            Check("Control 长度 = 79", mine.Length == ProtocolConstants.ControlFrameLen);
-            Check("Control 编码与 Python 向量逐字节一致", mine.SequenceEqual(want));
-
-            bool ok = FrameCodec.TryDecodeControl(want, want.Length, session, key, out var h, out var d, out var err);
-            Check("Control 解码成功", ok && err == FrameError.None);
-            Check("Control 字段还原", ok && h.Seq == 100 && d.HandleA.Encoder1 == -5678 && d.HandleB.Vel1 == 0.125f && d.Injector2Dir == -1 && d.Axis4Dir == -1);
-
-            byte[] bad = (byte[])want.Clone();
-            bad[20] ^= 0x01;
-            Check("Control 载荷被篡改时 MAC 校验失败",
-                !FrameCodec.TryDecodeControl(bad, bad.Length, session, key, out _, out _, out var e2) && e2 == FrameError.BadMac);
-            Check("Control 会话号不符被拒绝",
-                !FrameCodec.TryDecodeControl(want, want.Length, session + 1, key, out _, out _, out var e3) && e3 == FrameError.BadSession);
-            Check("Control 截断帧被拒绝",
-                !FrameCodec.TryDecodeControl(want, want.Length - 1, session, key, out _, out _, out var e4) && e4 == FrameError.BadLength);
-        }
-
-        private static void TestHaptic(string dir, byte[] key, uint session)
-        {
-            var f = new HapticFrame
-            {
-                EchoTsMs = 123450, HoldMs = 3,
-                HandleA = new HapticOut { Enable = true, Axis = 1, ForceN = 0.5f, TorqueNm = 0.01f },
-                HandleB = new HapticOut { Enable = false },
-            };
-            byte[] mine = FrameCodec.EncodeHaptic(new FrameHeader { Session = session, Seq = 7, TsMs = 200000 }, f, key);
-            byte[] want = ReadHex(dir, "haptic_frame.hex");
-            Check("Haptic 长度 = 50", mine.Length == ProtocolConstants.HapticFrameLen);
-            Check("Haptic 编码与 Python 向量逐字节一致", mine.SequenceEqual(want));
-            bool ok = FrameCodec.TryDecodeHaptic(want, want.Length, session, key, out _, out var d, out _);
-            Check("Haptic 解码字段还原", ok && d.EchoTsMs == 123450 && d.HoldMs == 3 && d.HandleA.Enable && !d.HandleB.Enable && d.HandleA.ForceN == 0.5f && d.HandleA.Axis == 1);
-        }
-
-        private static void TestStatus(string dir, byte[] key, uint session)
-        {
-            var f = new StatusFrame
-            {
-                EchoTsMs = 123450, HoldMs = 3,
-                Flags = StatusFlags.ControlActive | StatusFlags.FfEnabled | StatusFlags.CalZeroed | StatusFlags.LeaseHeld | StatusFlags.AdsHealthy,
-                Mode = 2, Phase = 1, SelfCheckStatus = 4, AdsState = 3,
-                Cylinder1 = 2000, Cylinder2 = 10, Cylinder3 = 2000, Cylinder4 = 10,
-                CylinderManualMask = 0x05,
-                InjectorActive1 = 0, InjectorActive2 = 1, Axis4Active = 1,
-                Force582F = 0.25f, Force582N = 0.01f, Force587F = 0.5f, Force587N = 0.02f, CleanForceN = 0.3f,
-                AdsActualHz = 99.5f,
-                AxisPos = new float[] { 1, 2, 3, 4, 5, 6, 7 },
-                AxisFromLeft = new float[] { 11, 12, 13, 14, 15, 16, 17 },
-            };
-            byte[] mine = FrameCodec.EncodeStatus(new FrameHeader { Session = session, Seq = 9, TsMs = 300000 }, f, key);
-            byte[] want = ReadHex(dir, "status_frame.hex");
-            Check("Status 长度 = 142", mine.Length == ProtocolConstants.StatusFrameLen);
-            Check("Status 编码与 Python 向量逐字节一致", mine.SequenceEqual(want));
-            bool ok = FrameCodec.TryDecodeStatus(want, want.Length, session, key, out _, out var d, out _);
-            Check("Status 解码字段还原", ok && d.Has(StatusFlags.LeaseHeld) && !d.Has(StatusFlags.EstopHold)
-                && d.Cylinder2 == 10 && d.AxisFromLeft[6] == 17f && d.AdsActualHz == 99.5f && d.Axis4Active == 1);
-        }
-
-        private static void TestGlobalDirection(byte[] key, uint session)
-        {
-            foreach (bool reverse in new[] { false, true, false })
-            {
-                var frame = new StatusFrame
+                string fixtures = args.Length > 0 ? args[0] : FindFixtures();
+                byte[] key = ReadAuth(fixtures, "session_key");
+                Golden(fixtures, "handle", NewHandle(), key);
+                Golden(fixtures, "command", NewCommand(), key);
+                Golden(fixtures, "state", NewState(), key);
+                Golden(fixtures, "force", NewForce(), key);
+                var hello = ZenohWire.Deserialize<CommandFrame>(ReadHex(fixtures, "hello"));
+                Check("Hello 固定挑战字段", hello.Command == ZenohCommand.Hello && hello.NonceClient.Length == 16 && hello.SessionId == 0);
+                Check("Hello 字节一致", ZenohWire.Serialize(hello).SequenceEqual(ReadHex(fixtures, "hello")));
+                var auth = ZenohWire.Deserialize<CommandFrame>(ReadHex(fixtures, "authenticate"));
+                byte[] token = Encoding.ASCII.GetBytes("zenoh-golden-token");
+                Check("挑战 HMAC 黄金值", FrameAuth.ComputeAuth(token, auth.NonceClient, auth.NonceServer).SequenceEqual(auth.Proof));
+                Check("会话密钥黄金值", FrameAuth.DeriveSessionKey(token, auth.NonceClient, auth.NonceServer).SequenceEqual(key));
+                Check("认证帧字节一致", ZenohWire.Serialize(auth).SequenceEqual(ReadHex(fixtures, "authenticate")));
+                var challenge = ZenohWire.Deserialize<StateFrame>(ReadHex(fixtures, "challenge"));
+                Check("挑战状态字节一致", challenge.AuthState == 1 && ZenohWire.Serialize(challenge).SequenceEqual(ReadHex(fixtures, "challenge")));
+                foreach (string path in Directory.GetFiles(fixtures, "invalid_*.hex").OrderBy(p => p))
                 {
-                    Flags = StatusFlags.ControlActive | StatusFlags.LeaseHeld
-                        | (reverse ? StatusFlags.GlobalReverse : StatusFlags.None),
-                    AxisPos = new float[7], AxisFromLeft = new float[7],
-                };
-                byte[] bytes = FrameCodec.EncodeStatus(new FrameHeader { Session = session }, frame, key);
-                bool ok = FrameCodec.TryDecodeStatus(bytes, bytes.Length, session, key, out _, out var decoded, out _);
-                Check("全局方向置位/清零，保持其他标志和帧长度",
-                    ok && bytes.Length == 142 && decoded.Has(StatusFlags.GlobalReverse) == reverse
-                    && decoded.Has(StatusFlags.ControlActive) && decoded.Has(StatusFlags.LeaseHeld));
+                    string name = Path.GetFileNameWithoutExtension(path);
+                    byte[] bytes = FrameAuth.FromHex(File.ReadAllText(path));
+                    if (name.StartsWith("invalid_handle_")) Reject<HandleFrame>(name, bytes);
+                    else if (name.StartsWith("invalid_command_")) Reject<CommandFrame>(name, bytes);
+                    else if (name.StartsWith("invalid_state_")) Reject<StateFrame>(name, bytes);
+                    else if (name.StartsWith("invalid_force_")) Reject<ForceFrame>(name, bytes);
+                    else throw new InvalidDataException(name);
+                }
+                byte[] frameBytes = ReadHex(fixtures, "handle");
+                Reject<HandleFrame>("截断二进制", frameBytes.Take(frameBytes.Length - 1).ToArray());
+                var bad = NewForce();
+                bad.Force582N = float.NaN;
+                CheckThrows("发送端拒绝非有限值", () => ZenohWire.Serialize(bad));
+                byte[] wrongKey = (byte[])key.Clone();
+                wrongKey[0] ^= 1;
+                Check("错误密钥拒绝", !ZenohWire.Verify(ZenohWire.Deserialize<HandleFrame>(frameBytes), wrongKey));
+                Check("空密钥拒绝", !ZenohWire.Verify(ZenohWire.Deserialize<HandleFrame>(frameBytes), new byte[0]));
+                if (args.Contains("--network")) NetworkSmoke(args, key);
             }
-        }
-
-        private static void TestStatusDistance(string dir, byte[] key, uint session)
-        {
-            byte[] legacy = ReadHex(dir, "status_frame.hex");
-            FrameCodec.TryDecodeStatus(legacy, legacy.Length, session, key, out var h, out var f, out _);
-            Check("旧从端不冒充零距离", !f.HasNetDistance);
-            f.HasNetDistance = true;
-            f.Axis1NetDistanceMm = 12.25;
-            f.Axis6NetDistanceMm = -3.125;
-            byte[] encoded = FrameCodec.EncodeStatus(h, f, key);
-            byte[] want = ReadHex(dir, "status_distance_frame.hex");
-            Check("扩展状态帧与独立 Python 向量逐字节一致", encoded.SequenceEqual(want));
-            Check("扩展状态还原正负净距离", FrameCodec.TryDecodeStatus(want, want.Length, session, key, out _, out var result, out _)
-                && result.HasNetDistance && result.Axis1NetDistanceMm == 12.25 && result.Axis6NetDistanceMm == -3.125
-                && result.AxisPos[0] == 1f);
-            byte[] bad = (byte[])want.Clone();
-            bad[ProtocolConstants.HeaderLen + ProtocolConstants.StatusPayloadLen] ^= 1;
-            Check("距离字段受 MAC 保护", !FrameCodec.TryDecodeStatus(bad, bad.Length, session, key, out _, out _, out var err)
-                && err == FrameError.BadMac);
-            Check("扩展帧截断被拒绝", !FrameCodec.TryDecodeStatus(want, want.Length - 1, session, key, out _, out _, out _));
-            Check("缓冲区过短不会抛异常", !FrameCodec.TryDecodeStatus(new byte[1], want.Length, session, key, out _, out _, out _));
-            Check("自动协商距离扩展", CommandMessages.Auth(new byte[32]).Contains("\"net_distance\":true"));
-        }
-
-        private static void TestAuth(string dir)
-        {
-            var kv = File.ReadAllLines(Path.Combine(dir, "auth.txt"))
-                .Where(l => l.Contains("=")).ToDictionary(l => l.Split('=')[0], l => l.Substring(l.IndexOf('=') + 1).Trim());
-            byte[] token = System.Text.Encoding.ASCII.GetBytes(kv["token_ascii"]);
-            byte[] nc = FrameAuth.FromHex(kv["nonce_client"]);
-            byte[] ns = FrameAuth.FromHex(kv["nonce_server"]);
-            Check("握手 auth_mac 与 Python 一致", FrameAuth.ToHex(FrameAuth.ComputeAuth(token, nc, ns)) == kv["auth_mac"]);
-            Check("会话密钥派生与 Python 一致", FrameAuth.ToHex(FrameAuth.DeriveSessionKey(token, nc, ns)) == kv["session_key"]);
-        }
-
-        private static void TestSeqGuard()
-        {
-            var g = new SeqGuard();
-            Check("序号首帧接受", g.Accept(10));
-            Check("重复序号拒绝", !g.Accept(10));
-            Check("乱序（更小）序号拒绝", !g.Accept(9));
-            Check("递增序号接受", g.Accept(11));
-            var w = new SeqGuard();
-            w.Accept(uint.MaxValue - 1);
-            Check("u32 回绕后序号接受", w.Accept(2));
-        }
-
-        // ------------------------------------------------------------ 辅助
-
-        private static byte[] ReadHex(string dir, string name)
-            => FrameAuth.FromHex(File.ReadAllText(Path.Combine(dir, name)));
-
-        private static void Check(string name, bool ok)
-        {
-            if (ok) _pass++; else _fail++;
-            Console.WriteLine((ok ? "  [通过] " : "  [失败] ") + name);
-        }
-
-        private static string FindVectorDir()
-        {
-            string d = AppDomain.CurrentDomain.BaseDirectory;
-            for (int i = 0; i < 8 && d != null; i++)
+            catch (Exception e)
             {
-                string cand = Path.Combine(d, "protocol", "test_vectors");
-                if (Directory.Exists(cand)) return cand;
-                d = Path.GetDirectoryName(d);
+                _failed++;
+                Console.Error.WriteLine(e);
             }
-            throw new DirectoryNotFoundException("找不到 protocol/test_vectors，请先运行 tools/gen_protocol_vectors.py，或把目录作为第一个参数传入。");
+            Console.WriteLine("C# 协议测试：通过 " + _passed + "，失败 " + _failed);
+            return _failed == 0 ? 0 : 1;
         }
+
+        private static void Golden<T>(string dir, string name, T sample, byte[] key)
+        {
+            byte[] expected = ReadHex(dir, name);
+            byte[] tag = ZenohWire.Sign(sample, key);
+            SetTag(sample, tag);
+            byte[] bytes = ZenohWire.Serialize(sample);
+            Check(name + " 编码与固定 Hex 逐字节一致", bytes.SequenceEqual(expected));
+            T decoded = ZenohWire.Deserialize<T>(expected);
+            Check(name + " 解码后重新编码一致", ZenohWire.Serialize(decoded).SequenceEqual(expected));
+            Check(name + " 认证黄金值", ZenohWire.Verify(decoded, key));
+            byte[] before = ZenohWire.Serialize(decoded);
+            ZenohWire.Sign(decoded, key);
+            ZenohWire.Verify(decoded, key);
+            Check(name + " 认证不改变对象", before.SequenceEqual(ZenohWire.Serialize(decoded)));
+            byte[] changed = (byte[])expected.Clone();
+            changed[changed.Length - 1] ^= 1;
+            Check(name + " 篡改认证拒绝", !ZenohWire.Verify(ZenohWire.Deserialize<T>(changed), key));
+        }
+
+        private static void SetTag<T>(T sample, byte[] tag)
+        {
+            if (sample is HandleFrame h) h.AuthTag = tag;
+            else if (sample is CommandFrame c) c.AuthTag = tag;
+            else if (sample is StateFrame s) s.AuthTag = tag;
+            else if (sample is ForceFrame f) f.AuthTag = tag;
+            else throw new ArgumentException("未知协议类型");
+        }
+
+        private static HandleFrame NewHandle() => new HandleFrame
+        {
+            Version = 1, SessionId = Session, Sequence = 100, MonotonicMs = 123456,
+            Buttons582 = 5, Valid582 = true, Encoder582_0 = 1234, Encoder582_1 = -5678,
+            Joint582_0 = .5f, Joint582_1 = -.25f, Velocity582_0 = 1.5f, Velocity582_1 = -2.5f,
+            Buttons587 = 2, Valid587 = true, Encoder587_0 = -1, Encoder587_1 = 2,
+            Joint587_0 = 1, Joint587_1 = 2, Velocity587_0 = 0, Velocity587_1 = .125f,
+            Injector1Direction = 1, Injector2Direction = -1, Axis4Direction = 0
+        };
+        private static CommandFrame NewCommand() => new CommandFrame
+        {
+            Version = 1, SessionId = Session, Sequence = 101, MonotonicMs = 123457,
+            CommandId = 42, Command = ZenohCommand.PreparePosition, Param1 = -1, Param2 = 2,
+            Value1 = 12.25, Value2 = 125.5, Payload = "准备"
+        };
+        private static StateFrame NewState() => new StateFrame
+        {
+            Version = 1, SessionId = Session, Sequence = 102, AuthState = 2,
+            NonceServer = Enumerable.Range(16, 16).Select(i => (byte)i).ToArray(), EchoMainMonotonicMs = 123456,
+            Flags = 913, Mode = 0, Phase = 1, SelfCheckStatus = 4, AdsState = 2,
+            Cylinder1 = 2000, Cylinder2 = 10, Cylinder3 = 2000, Cylinder4 = 10, CylinderManualMask = 5,
+            Injector1Direction = 1, Injector2Direction = -1, Axis4Direction = 0,
+            Force582F = .25f, Force582N = .01f, Force587F = .5f, Force587N = -.02f, CleanForceN = .3f, AdsActualHz = 100,
+            AxisPos0 = 1, AxisPos1 = 2, AxisPos2 = 3, AxisPos3 = 4, AxisPos4 = 5, AxisPos5 = 6, AxisPos6 = 7,
+            AxisFromLeft0 = 11, AxisFromLeft1 = 12, AxisFromLeft2 = 13, AxisFromLeft3 = 14, AxisFromLeft4 = 15, AxisFromLeft5 = 16, AxisFromLeft6 = 17,
+            HasNetDistance = true, Axis1NetDistanceMm = 12.25, Axis6NetDistanceMm = -3.125,
+            PrepareTaskState = 2, PrepareTaskCommandId = 40, StartTaskState = 1, StartTaskCommandId = 41,
+            Results = new[] { new CommandResultFrame { CommandId = 39, Result = 0 }, new CommandResultFrame { CommandId = 38, Result = 1, Reason = "拒绝" } },
+            EventText = "ready"
+        };
+        private static ForceFrame NewForce() => new ForceFrame
+        {
+            Version = 1, SessionId = Session, Sequence = 103, EchoMainMonotonicMs = 123456,
+            Enable582 = true, Axis582 = 1, Force582N = .5f, Torque582Nm = .01f,
+            Enable587 = false, Axis587 = 0, Force587N = 0, Torque587Nm = 0
+        };
+
+        private static void Reject<T>(string name, byte[] bytes) => CheckThrows(name, () => ZenohWire.Deserialize<T>(bytes));
+        private static void CheckThrows(string name, Action action)
+        {
+            try { action(); Check(name, false); }
+            catch (Exception) { Check(name, true); }
+        }
+        private static void Check(string name, bool valid)
+        {
+            if (valid) _passed++; else _failed++;
+            Console.WriteLine((valid ? "[通过] " : "[失败] ") + name);
+        }
+        private static byte[] ReadHex(string dir, string name) => FrameAuth.FromHex(File.ReadAllText(Path.Combine(dir, name + ".hex")));
+        private static byte[] ReadAuth(string dir, string key) => FrameAuth.FromHex(File.ReadAllLines(Path.Combine(dir, "auth.txt"))
+            .Single(l => l.StartsWith(key + "=")).Substring(key.Length + 1));
+        private static string FindFixtures()
+        {
+            for (string path = AppDomain.CurrentDomain.BaseDirectory; path != null; path = Path.GetDirectoryName(path))
+            {
+                string candidate = Path.Combine(path, "protocol", "fixtures", "zenoh-v1");
+                if (Directory.Exists(candidate)) return candidate;
+            }
+            throw new DirectoryNotFoundException("找不到 protocol/fixtures/zenoh-v1。");
+        }
+        static partial void NetworkSmoke(string[] args, byte[] key);
     }
 }
+

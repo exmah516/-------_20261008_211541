@@ -10,7 +10,7 @@
 
 ## 当前职责
 
-`ADS.exe` 负责 ADS/PLC 通信、介入机器人运动、远程手柄、力反馈、远程网关和定位臂。`VisServer` 与命名管道后端保留，当前随包无本地 UI 客户端；实体手柄 SDK 位于 A 主端。现场 PLC 程序和 ADS 符号本阶段不改。
+`ADS.exe` 负责 ADS/PLC 通信、介入机器人运动、远程手柄、力反馈、Zenoh 网络服务和定位臂。旧 TCP/UDP/JSON、命名管道已移除；实体手柄 SDK 位于 A 主端。现场 PLC 程序和 ADS 符号本阶段不改。
 
 `hik_camera_relay.*` 已整体移至 `影像传输/B数据端/ScreenCut源码/CameraRelay`，由 ScreenCut 加载运行；ADS 工程已移除相关编译和启动入口。
 

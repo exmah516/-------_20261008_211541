@@ -40,8 +40,7 @@ namespace MasterConsole.Services
 
     /// <summary>
     /// 主端与从端（数据端）之间的链路抽象。界面只依赖这个接口：
-    /// 现在由 <see cref="SimulatedRobotLink"/> 实现以便独立开发界面，
-    /// 后续由 UDP/TCP 实现（RemoteRobotLink）替换，界面不用改。
+    /// RemoteRobotLink 使用 Zenoh；SimulatedRobotLink 用于离线界面验证。
     /// 事件可能在非 UI 线程触发，订阅方负责切回 UI 线程。
     /// </summary>
     public interface IRobotLink : IDisposable

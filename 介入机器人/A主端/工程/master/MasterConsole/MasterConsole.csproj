@@ -16,5 +16,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MasterConsole.Protocol\MasterConsole.Protocol.csproj" />
+    <ProjectReference Include="..\VI.Service.Net\VI.Service.Net.csproj" />
   </ItemGroup>
 </Project>

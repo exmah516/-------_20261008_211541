@@ -1,4 +1,4 @@
-﻿TcAdsDll.dll
+TcAdsDll.dll
 concrt140.dll
 msvcp140.dll
 msvcp140_1.dll
@@ -8,3 +8,5 @@ msvcp140_codecvt_ids.dll
 vccorlib140.dll
 vcruntime140.dll
 vcruntime140_1.dll
+zenohc.dll
+zenohd.exe

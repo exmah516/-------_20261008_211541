@@ -1,15 +1,6 @@
 namespace MasterConsole.Protocol
 {
-    /// <summary>帧头（16 字节）。</summary>
-    public struct FrameHeader
-    {
-        public byte Type;
-        public uint Session;
-        public uint Seq;
-        public uint TsMs;
-    }
-
-    /// <summary>单只手柄的一次采样（26 字节）。</summary>
+    /// <summary>单只手柄的一次采样。</summary>
     public struct HandleSample
     {
         public byte Buttons;
@@ -32,7 +23,7 @@ namespace MasterConsole.Protocol
         public sbyte Axis4Dir;
     }
 
-    /// <summary>手柄力输出（10 字节）。</summary>
+    /// <summary>手柄力输出。</summary>
     public struct HapticOut
     {
         public bool Enable;
@@ -51,7 +42,7 @@ namespace MasterConsole.Protocol
         public HapticOut HandleB;
     }
 
-    /// <summary>从→主：整机状态，15 Hz。</summary>
+    /// <summary>界面使用的整机状态，约 30 Hz。</summary>
     public struct StatusFrame
     {
         public uint EchoTsMs;

@@ -9,6 +9,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MasterConsole.Protocol", "M
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MasterConsole.Protocol.Tests", "MasterConsole.Protocol.Tests\MasterConsole.Protocol.Tests.csproj", "{6C1A0B11-3B5E-4C57-9D0B-1F0E7A000003}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VI.Service.Net", "VI.Service.Net\VI.Service.Net.csproj", "{6C1A0B11-3B5E-4C57-9D0B-1F0E7A000004}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{6C1A0B11-3B5E-4C57-9D0B-1F0E7A000003}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6C1A0B11-3B5E-4C57-9D0B-1F0E7A000003}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6C1A0B11-3B5E-4C57-9D0B-1F0E7A000003}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6C1A0B11-3B5E-4C57-9D0B-1F0E7A000004}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6C1A0B11-3B5E-4C57-9D0B-1F0E7A000004}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6C1A0B11-3B5E-4C57-9D0B-1F0E7A000004}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6C1A0B11-3B5E-4C57-9D0B-1F0E7A000004}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

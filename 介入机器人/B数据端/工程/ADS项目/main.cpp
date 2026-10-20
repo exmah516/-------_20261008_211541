@@ -9,9 +9,9 @@
 #include "guidewire_mode.h"
 #include "motion_sync.h"
 #include "plc_io.h"
-#include "remote_gateway.h"
+#include "zenoh_service.h"
 #include "startup_sequence.h"
-#include "vis_server.h"
+#include "control_messages.h"
 
 #include <cmath>
 #include <cstdlib>
@@ -51,8 +51,8 @@ int main()
 	constexpr DWORD serial_axis6_handle = 582;
 	// 主循环允许通信线程最多 300 ms 产出下一帧，避免低频 ADS 请求占用期间误触发连接保持。
 	constexpr DWORD ads_snapshot_wait_timeout_ms = 300;
-	// 状态快照用于命名管道与远程网关；降低推送频率不会改变 100 Hz ADS、运动或实验记录节拍。
-	constexpr std::int64_t vis_publish_rate_hz = 15;
+	// Zenoh 状态约 30 Hz；手柄与力反馈由服务独立保持 100 Hz。
+	constexpr std::int64_t vis_publish_rate_hz = 30;
 	// 轴4为30°/s、传动轮半径7.45 mm且1∶1，轴6线速度=7.45×30×π/180 mm/s。
 	constexpr double axis4_coupled_axis6_speed_mm_s = 3.9008108782;
 	const char* hardcoded_ads_netid = "169.254.119.135.1.1";
@@ -69,8 +69,7 @@ int main()
 	DeliveryTrackingController tracking_controller;
 	HandleNetDistance axis1_net_distance, axis6_net_distance;
 	ExperimentRecorder experiment_recorder;
-	VisServer vis_server;
-	RemoteGateway remote_gateway;
+	ZenohService zenoh_service;
 	HandleFilterState axis1_handle_filter;
 	HandleFilterState axis6_handle_filter;
 	// 首位启动 ADS 100 Hz 后台通信服务与辅助服务，彻底消除主线程直连并发竞争。
@@ -84,12 +83,11 @@ int main()
 	{
 		std::cout << "定位臂低频 ADS 服务启动失败，定位臂 UI 将保持不可用。" << std::endl;
 	}
-	vis_server.start();
-	// 远程网关：仅当存在 remote.token 时启用；命令经同一套 VisCommand 循环处理。
+	// 网络服务只转换并排队，命令继续由原控制循环门控处理。
 	{
-		RemoteGatewayConfig remote_cfg;
+		ZenohServiceConfig remote_cfg;
 		remote_cfg.startup_g_mm = cfg.startup_g_mm;
-		if (remote_gateway.start(remote_cfg))
+		if (zenoh_service.start(remote_cfg))
 		{
 			std::cout << "手柄来源：主端（远程），等待有效采样。" << std::endl;
 		}
@@ -141,7 +139,7 @@ int main()
 	}
 	ForceFeedbackState ff;
 
-	// 力输出统一入口：轴向力与力矩通过远程网关回传主端手柄。
+	// 力输出统一入口：轴向力与力矩通过 Zenoh force Topic 回传主端手柄。
 	auto apply_force_output = [&](double force_582_f, double force_582_n, double force_587_f, double force_587_n)
 	{
 		handle_axis6.setforce_axis(force_582_f, cfg.axial_force_axis, force_582_n);
@@ -768,7 +766,7 @@ int main()
 			<< ", axis2/theta0=" << cal_state.theta0_deg << " deg" << std::endl;
 		return true;
 	};
-	// 远程网关据此判断“开启力反馈前自动零点采集”是否已完成（成功/失败各自计数）。
+	// Zenoh 服务据此判断“开启力反馈前自动零点采集”是否已完成（成功/失败各自计数）。
 	std::uint32_t remote_force_zero_ok_count = 0;
 	std::uint32_t remote_force_zero_fail_count = 0;
 	auto zero_force_sensor = [&](const char* source) -> bool
@@ -4486,7 +4484,6 @@ int main()
 				if (cylinder_manual_mode[index] != CylinderManualMode::Automatic)
 					vs.cylinder_manual_mask |= static_cast<std::uint8_t>(1u << index);
 			}
-			vis_server.push_state(vs);
 			{
 				RemoteExtraState remote_extra;
 				remote_extra.axis1_net_distance_mm = axis1_net_distance.net_mm();
@@ -4502,14 +4499,14 @@ int main()
 				remote_extra.handle_soft_hold = handle_soft_hold_active;
 				remote_extra.ads_soft_hold = ads_soft_hold_active;
 				remote_extra.connection_hold = connection_hold_active;
-				remote_gateway.publish_state(vs, remote_extra);
+				zenoh_service.publish_state(vs, remote_extra);
 			}
 		}
 
 		{
 			VisCommand vcmd;
-			// 保留命名管道与远程网关共用的命令处理，先管道后远程。
-			while (vis_server.poll_command(vcmd) || remote_gateway.poll_command(vcmd))
+			// 有界消费避免命令突发占满运动周期，FIFO 顺序与既有门控保持不变。
+			for (int command_budget = 0; command_budget < 64 && zenoh_service.poll_command(vcmd); ++command_budget)
 			{
 				switch (vcmd.type)
 				{
@@ -5042,6 +5039,7 @@ int main()
 				default:
 					break;
 				}
+				zenoh_service.command_processed();
 			}
 		}
 	}
@@ -5061,8 +5059,7 @@ int main()
 	experiment_recorder.stop_and_wait("program_exit");
 	arm_manual_ads.stop();
 	ads_communication.stop();
-	remote_gateway.stop();
-	vis_server.stop();
+	zenoh_service.stop();
 	handle_axis1.close();
 	handle_axis6.close();
 	return 0;

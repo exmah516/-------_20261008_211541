@@ -1,0 +1,197 @@
+#pragma once
+
+#include <cstdint>
+#include <string>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+
+// 控制域快照与指令；网络线格式在 zenoh_protocol.h 独立定义。
+#pragma pack(push, 1)
+struct VisState
+{
+	double axis_pos[7];
+	double axis_pos_from_left[7];
+	unsigned short cylinder_cmd[4];
+	int guidewire_mode;
+	int axis1_phase;
+	int axis6_phase;
+	int startup_phase;
+	bool control_active;
+	bool estop_hold;
+	bool axis1_fast_return;
+	bool axis6_fast_retract;
+	bool self_check_done;
+	bool ff_enabled;
+	bool cal_zeroed;
+	bool axis1_reverse;
+	bool axis6_reverse;
+	bool startup_waiting;
+	bool startup_completed;
+	double ft_1_v;
+	double fn_1_v;
+	double force_582_f;
+	double force_582_n;
+	double force_587_f;
+	double force_587_n;
+	int loop_count;
+	DWORD tick_ms;
+	double force_582_theory_f;
+	double force_582_theory_n;
+	bool gravity_comp_enabled;
+	// 手动屈曲/间距恢复状态。末尾追加保持既有字段布局不变。
+	int spacing_recovery_phase;
+	double spacing_recovery_moved_mm;
+	double spacing_recovery_remaining_mm;
+	// 主从位移补偿只发布控制状态，不再持有任何磁盘会话状态。
+	bool tracking_compensation_enabled;
+	double axis1_tracking_error_mm;
+	double axis6_tracking_error_mm;
+	double axis1_compensation_gain;
+	double axis6_compensation_gain;
+	// axis6 当前软限位阻断状态。仅来自上位机，不增加 PLC ADS 契约。
+	bool axis6_soft_limit_hold;
+
+	// 统一实验记录与纯净力状态。
+	int recording_state;
+	int recording_error;
+	std::uint64_t recording_elapsed_us;
+	std::uint64_t force_writer_dropped;
+	std::uint64_t motion_writer_dropped;
+	std::uint64_t force_schedule_missed;
+	std::uint64_t motion_schedule_missed;
+	bool force_sample_valid;
+	bool clean_force_valid;
+	double clean_force_n;
+	double clean_handle_torque_nm;
+	// 预留旧版相机状态字段，保持管道布局兼容；当前均为零。
+	int camera_state;
+	int camera_input_format;
+	int camera_width;
+	int camera_height;
+	int camera_fps_numerator;
+	int camera_fps_denominator;
+	bool camera_preview_enabled;
+	bool camera_recording;
+	std::uint64_t camera_recording_elapsed_us;
+	std::uint64_t camera_frame_count;
+	std::uint64_t camera_dropped_frames;
+	int camera_error_code;
+	// 物理 B7 模式选择的有效按下沿事件；counter 变化时 WPF 显示 event_code 对应提示。
+	std::uint32_t physical_button_event_counter;
+	int physical_button_event_code;
+	// ADS 通信诊断。状态码：0=未启动，1=连接中，2=正常，3=软保持，4=重连中，5=PLC重启，6=错误。
+	int ads_state;
+	double ads_actual_hz;
+	std::uint64_t ads_snapshot_age_us;
+	std::uint64_t ads_rtt_us;
+	std::uint64_t ads_failed_cycles;
+	std::uint64_t ads_reconnect_count;
+	std::uint64_t plc_restart_count;
+	bool host_comm_timeout;
+
+	// 定位臂独立低频 ADS 状态，末尾追加以保持既有字段偏移不变。
+	bool arm_manual_enable;
+	bool arm_enable_req[5];
+	bool arm_power_done[5];
+	bool arm_power_busy[5];
+	bool arm_power_active[5];
+	bool arm_power_error[5];
+	std::uint32_t arm_power_error_id[5];
+	bool arm_reset_done[5];
+	bool arm_reset_busy[5];
+	bool arm_reset_active[5];
+	bool arm_reset_error[5];
+	std::uint32_t arm_reset_error_id[5];
+	double arm_act_pos[5];
+	double arm_act_vel[5];
+	bool arm_motion_busy[5];
+	bool arm_motion_done[5];
+	bool arm_motion_error[5];
+	std::uint32_t arm_motion_error_id[5];
+	std::int8_t arm_cmd_dir[5];
+	bool arm_cmd_conflict[5];
+	double arm_jog_velocity[5];
+	double arm_jog_acc[5];
+	double arm_jog_dec[5];
+	double arm_jog_jerk[5];
+
+	// Axis4 手动点动状态来自既有 PLC Notification。
+	bool axis4_manual_busy;
+	bool axis4_manual_done;
+	bool axis4_manual_error;
+	std::uint32_t axis4_manual_error_id;
+	// 力反馈-保持模式状态：0=无保持，1=导管，2=导丝，3=双侧。
+	bool force_feedback_hold_enabled;
+	bool force_feedback_hold_active;
+	int force_feedback_hold_owner;
+	// 电缸选中状态表示手动覆盖，不再由开合阈值推断。
+	std::uint8_t cylinder_manual_mask;
+	bool cylinder_manual_allowed;
+	bool arm_snapshot_valid;
+	bool arm_at_program_zero;
+	int arm_cartesian_status;
+	int arm_cartesian_error;
+	std::uint32_t arm_curve_state;
+	double arm_curve_progress;
+	std::uint32_t arm_home_request_id;
+	int selfcheck_status;
+};
+#pragma pack(pop)
+
+enum class VisCommandType : int
+{
+	None = 0,
+	SetCylinderManualOpen = 1,
+	SetCylinderManualClosed = 2,
+	RequestModeSwitch = 3,
+	ZeroForceSensor = 4,
+	ToggleForceFeedback = 5,
+	SetReverseMode = 6,
+	// 7 为已删除的旧力记录命令，保留数值空洞。
+	SetStartupAxisPos = 8,
+	SetStartupAxisDeg = 9,
+	SetStartupSpeed = 10,
+	ExecuteStartup = 11,
+	SelectDirectControl = 12,
+	SetGravityCompensation = 13,
+	SetSpacingRecovery = 18, // param1: 0=退出，1=进入
+	// 20 为已删除的旧位移记录命令，保留数值空洞。
+	SetTrackingCompensation = 21, // param1: 0=关闭，1=开启
+	SetTrackingCompensationParam = 22, // param1=TrackingParameterField，param2=数值×1000
+	SetAxis1PostReturnLead = 24, // param1=轴1前10 mm比例映射量，单位 mm×1000，范围 [0, 5]
+	StartExperimentRecording = 25, // UTF-8 负载为实验名称
+	StopExperimentRecording = 26,
+	// 命令号 27 已停用，保留编号。
+	SetCleanForceMonitor = 28, // param1: 0=关闭，1=打开
+	SetArmManualEnable = 29, // param1: 0=关闭，1=开启
+	SetArmAxisEnable = 30, // param1: 轴号1..5，param2: 0=断电，1=上电
+	RequestArmAxisReset = 31, // param1: 轴号1..5
+	SetArmAxisJog = 32, // param1: 轴号1..5，param2: -1/0/1
+	SetArmJogParameter = 33, // param1=(轴号-1)*4+参数号，param2=值×1000
+	SetAxis4ManualJog = 34, // param1: -1=后退，0=停止，1=前进（物理语义）
+	SetForceFeedbackHold = 35, // param1: 0=关闭，1=开启；自动换手闭爪后保持200ms
+	SetYValveOpen = 36, // param1: 0=关闭，1=打开
+	SetInjectorManualJog = 37, // param1: 注射器1..2，param2: -1=拉，0=停止，1=推
+	EmergencyRetractDevice = 38, // 极简器械撤出：固定夹爪组合，轴3/5/6退回启动准备完成位
+	SetCylinderManualPosition = 39, // param1: 电缸下标0..3，param2: 位置0..2000
+	ResetCylinderManual = 40, // param1: 电缸下标0..3，撤销覆盖并恢复当前流程位置
+	SetArmCartesianJog = 41, // param1: 1=X,2=Y,3=Z,4=俯仰,5=偏航；param2=带符号速度*1000
+	ReturnArmProgramZero = 42,
+	StopArmCartesian = 43,
+	SetArmCartesianParameter = 44, // 0=升降下端mm，1=归零行程deg，2=前端偏离mm，3=转角deg
+	KeepArmCartesianAlive = 45,
+	SetSelfCheckAxisPos = 46, // param1=轴号，param2=距左限位毫米×100
+	StartSelfCheck = 47,
+	// 命令号 48 已停用，保留编号。
+};
+
+struct VisCommand
+{
+	VisCommandType type = VisCommandType::None;
+	int param1 = 0;
+	int param2 = 0;
+	std::string payload_utf8;
+};
+
