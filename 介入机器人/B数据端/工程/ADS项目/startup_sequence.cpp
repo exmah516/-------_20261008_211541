@@ -254,8 +254,7 @@ namespace startup_sequence
 		if (!ctx.startup->prompted)
 		{
 			std::cout << "请安装器械。" << std::endl;
-			std::cout << "进入启动姿态请按键盘 S 键。" << std::endl;
-			std::cout << "直接继续控制请按键盘 C 键。" << std::endl;
+			std::cout << "请由主端选择准备位置或开始控制。" << std::endl;
 			ctx.startup->prompted = true;
 		}
 	}

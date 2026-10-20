@@ -12,9 +12,11 @@ vs = subprocess.check_output([str(vswhere), '-latest', '-products', '*', '-requi
                              text=True).strip()
 build = Path(tempfile.mkdtemp(prefix='ads-offline-diagnostics-'))
 test = sys.argv[1] if len(sys.argv) > 1 else 'ads_diagnostics_test'
-if test not in ('ads_diagnostics_test', 'remote_recovery_test', 'main_recovery_test', 'handle_net_distance_test', 'net_distance_gateway_test'):
+if test not in ('ads_diagnostics_test', 'remote_recovery_test', 'main_recovery_test', 'handle_net_distance_test', 'net_distance_gateway_test', 'remote_handle_test'):
     raise SystemExit('Unknown offline test')
 extra_source = f'"{project / "plc_io.cpp"}" ' if test == 'ads_diagnostics_test' else ''
+if test == 'remote_handle_test':
+    extra_source = f'"{project / "手柄/手柄.cpp"}" '
 if test == 'handle_net_distance_test':
     source = (project / 'main.cpp').read_text(encoding='utf-8-sig')
     for name, start, end in (
@@ -50,7 +52,7 @@ script.write_text('@echo off\nchcp 65001 >nul\n'
                   f'call "{vs}\\VC\\Auxiliary\\Build\\vcvars64.bat" >nul\n'
                   'if errorlevel 1 exit /b 1\n'
                   f'cl /nologo /std:c++17 /EHsc /utf-8 /Gy /MD /I"{build}" /I"{project}" /I"{project / "ADS/Include"}" '
-                  f'/I"{project / "手柄"}" /I"{project / "手柄/include"}" /I"{project / "protocol/cpp"}" '
+                  f'/I"{project / "手柄"}" /I"{project / "protocol/cpp"}" '
                   f'"{project / ("tools/" + test + ".cpp")}" '
                   f'{extra_source}/Fe:ads_diagnostics_test.exe /link /OPT:REF\n'
                   'if errorlevel 1 exit /b 1\nads_diagnostics_test.exe\nexit /b %errorlevel%\n', encoding='utf-8')

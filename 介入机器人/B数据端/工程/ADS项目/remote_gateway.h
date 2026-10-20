@@ -3,10 +3,10 @@
 // 1) TCP 命令通道（长度前缀 JSON）：HMAC 挑战握手、控制权租约、命令校验与回执。
 // 2) UDP 控制通道：校验 MAC/会话/序号后，把注射器与轴4的“按住”状态转成带租约的点动命令；
 //    帧超时自动归零。同一通道回传 15 Hz 状态帧。
-// 3) 命令一律翻译成既有 VisCommand 推入网关队列，由 main.cpp 的命令循环与本地调试台
+// 3) 命令一律翻译成既有 VisCommand 推入网关队列，由 main.cpp 与命名管道
 //    共用同一套处理逻辑，不绕过任何既有保护。
 // 协议权威定义见 protocol/PROTOCOL.md；帧结构见 protocol/cpp/remote_protocol.h。
-// 注意：手柄采样（ControlFrame.handle）本版本只做校验与统计，尚未接入运动控制。
+// 手柄采样写入 remote_handle_bridge，供主循环读取并回传力反馈。
 #pragma once
 
 #include "vis_server.h"
@@ -71,8 +71,6 @@ public:
 	bool start(const RemoteGatewayConfig& cfg);
 	void stop();
 	bool is_running() const { return running_.load(); }
-	// main.cpp 在确定手柄来源后设置：手柄来自主端时，相关拒绝原因会提示“未收到主端手柄数据”。
-	void set_handles_remote(bool on) { handles_remote_.store(on); }
 
 	// 主循环约 15 Hz 调用：提供最新状态快照。
 	void publish_state(const VisState& state, const RemoteExtraState& extra);
@@ -147,7 +145,6 @@ private:
 	std::atomic<bool> running_{ false };
 	std::atomic<bool> stop_{ false };
 	std::atomic<bool> ff_zeroing_{ false };
-	std::atomic<bool> handles_remote_{ false };
 	std::thread tcp_thread_;
 	std::thread udp_thread_;
 	void* bcrypt_alg_ = nullptr;

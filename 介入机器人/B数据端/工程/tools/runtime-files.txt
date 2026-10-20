@@ -1,5 +1,4 @@
-﻿FLCatheter.dll
-TcAdsDll.dll
+﻿TcAdsDll.dll
 concrt140.dll
 msvcp140.dll
 msvcp140_1.dll

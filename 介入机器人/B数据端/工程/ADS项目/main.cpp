@@ -14,7 +14,6 @@
 #include "vis_server.h"
 
 #include <cmath>
-#include <conio.h>
 #include <cstdlib>
 #include <cstring>
 #include <deque>
@@ -31,7 +30,7 @@
 // 2) 运动同步、导丝模式、启动流程、力反馈与 ADS 读写已拆分到独立模块。
 // 3) 新增调试模式通过独立状态接管，退出后重建原有业务链路基准。
 
-int main(int argc, char* argv[])
+int main()
 {
 	setup_console_utf8();
 #ifdef _DEBUG
@@ -52,64 +51,11 @@ int main(int argc, char* argv[])
 	constexpr DWORD serial_axis6_handle = 582;
 	// 主循环允许通信线程最多 300 ms 产出下一帧，避免低频 ADS 请求占用期间误触发连接保持。
 	constexpr DWORD ads_snapshot_wait_timeout_ms = 300;
-	// WPF 状态只用于显示；降低推送频率不会改变 100 Hz ADS、运动或实验记录节拍。
+	// 状态快照用于命名管道与远程网关；降低推送频率不会改变 100 Hz ADS、运动或实验记录节拍。
 	constexpr std::int64_t vis_publish_rate_hz = 15;
 	// 轴4为30°/s、传动轮半径7.45 mm且1∶1，轴6线速度=7.45×30×π/180 mm/s。
 	constexpr double axis4_coupled_axis6_speed_mm_s = 3.9008108782;
 	const char* hardcoded_ads_netid = "169.254.119.135.1.1";
-
-	// 工具模式：不进入运动环前先查看按键位掩码。
-	if (argc > 1 && (std::string(argv[1]) == "--buttons" || std::string(argv[1]) == "--btn"))
-	{
-		DWORD test_serial = serial_axis1_handle;
-		if (argc > 2)
-		{
-			test_serial = static_cast<DWORD>(std::strtoul(argv[2], nullptr, 10));
-		}
-
-		Handle test_handle(test_serial);
-		if (!test_handle.init())
-		{
-			std::cout << "手柄初始化失败，序列号: " << test_serial << std::endl;
-			return 0;
-		}
-
-		std::cout << "=== 按键测试模式 ===" << std::endl;
-		std::cout << "序列号: " << test_serial << std::endl;
-		std::cout << "请按下按键查看位掩码。" << std::endl;
-		std::cout << "按 ESC 或 q 退出。" << std::endl;
-
-		unsigned char last_btn = 0xFF;
-		while (true)
-		{
-			test_handle.poll();
-			const unsigned char cur_btn = test_handle.buttons2;
-
-			if (cur_btn != last_btn)
-			{
-				std::cout << "按键: 0x" << std::hex << static_cast<int>(cur_btn) << std::dec << " | 位: ";
-				for (int i = 0; i < 8; ++i)
-				{
-					std::cout << ((cur_btn >> i) & 1);
-				}
-				std::cout << std::endl;
-				last_btn = cur_btn;
-			}
-
-			if (_kbhit())
-			{
-				const int ch = _getch();
-				if (ch == 27 || ch == 'q')
-				{
-					break;
-				}
-			}
-			Sleep(10);
-		}
-
-		test_handle.close();
-		return 0;
-	}
 
 	ControlConfig cfg;
 	const CylinderPreset cyl;
@@ -139,43 +85,19 @@ int main(int argc, char* argv[])
 		std::cout << "定位臂低频 ADS 服务启动失败，定位臂 UI 将保持不可用。" << std::endl;
 	}
 	vis_server.start();
-	// 手柄来源：网关启用时，手柄实体在主端，采样经网关写入数据桥；
-	// 加参数 --local-handles 可强制使用本机 SDK 手柄（单机调试用）。
-	bool remote_handles_active = false;
+	// 远程网关：仅当存在 remote.token 时启用；命令经同一套 VisCommand 循环处理。
 	{
-		// 远程网关：仅当存在 remote.token 时启用；命令经同一套 VisCommand 循环处理。
 		RemoteGatewayConfig remote_cfg;
 		remote_cfg.startup_g_mm = cfg.startup_g_mm;
-		const bool gateway_ok = remote_gateway.start(remote_cfg);
-		bool force_local_handles = false;
-		for (int arg_index = 1; arg_index < argc; ++arg_index)
+		if (remote_gateway.start(remote_cfg))
 		{
-			if (std::string(argv[arg_index]) == "--local-handles") force_local_handles = true;
-		}
-		if (gateway_ok && !force_local_handles)
-		{
-			Handle::use_remote(true);
-			remote_handles_active = true;
-			remote_gateway.set_handles_remote(true);
-			std::cout << "手柄来源：主端（远程）。本机不再访问手柄 SDK；如需使用本机手柄请加参数 --local-handles。" << std::endl;
-		}
-		else if (gateway_ok)
-		{
-			std::cout << "手柄来源：本机（--local-handles）。远程网关仍可使用，但主端手柄输入不会被采用。" << std::endl;
+			std::cout << "手柄来源：主端（远程），等待有效采样。" << std::endl;
 		}
 	}
 
 	bool axis1_handle_ready = handle_axis1.init();
-	if (!axis1_handle_ready && !remote_handles_active)
-	{
-		std::cout << "手柄初始化未就绪，序列号: " << serial_axis1_handle << "，将在后台持续重试。" << std::endl;
-	}
 	const bool axis6_handle_ready_init = handle_axis6.init();
 	bool axis6_handle_ready = axis6_handle_ready_init;
-	if (!axis6_handle_ready && !remote_handles_active)
-	{
-		std::cout << "手柄初始化未就绪，序列号: " << serial_axis6_handle << "，将在后台持续重试。" << std::endl;
-	}
 
 	bool handle_startup_locked = false;
 	// 远程手柄只出现一只时先等一小段时间再锁定单手柄模式，避免两只手柄的采样先后到达被误判。
@@ -219,7 +141,7 @@ int main(int argc, char* argv[])
 	}
 	ForceFeedbackState ff;
 
-	// 力输出统一入口：轴向力按配置的 SDK force axis 下发，力矩仍走 torque 参数。
+	// 力输出统一入口：轴向力与力矩通过远程网关回传主端手柄。
 	auto apply_force_output = [&](double force_582_f, double force_582_n, double force_587_f, double force_587_n)
 	{
 		handle_axis6.setforce_axis(force_582_f, cfg.axial_force_axis, force_582_n);
@@ -565,7 +487,7 @@ int main(int argc, char* argv[])
 	bool y_valve_open = false;
 	int injector_ui_direction[2] = {};
 	ULONGLONG injector_ui_jog_deadline_ms[2] = {};
-	// 轴4点动与注射器点动共用 500 ms 租约：UI（本地调试台或远程网关）必须持续重发方向，
+	// 轴4点动与注射器点动共用 500 ms 租约：命令来源必须持续重发方向，
 	// 超过租约未续期即自动归零，避免通信中断后动作被锁存。
 	ULONGLONG axis4_ui_jog_deadline_ms = 0;
 	constexpr ULONGLONG manual_jog_lease_ms = 500;
@@ -808,7 +730,7 @@ int main(int argc, char* argv[])
 
 	startup_smoothing_bypass = false;
 
-	std::cout << "力反馈：关闭（按 F 键切换）。" << std::endl;
+	std::cout << "力反馈：关闭，可由主端切换。" << std::endl;
 
 	auto zero_force_sensor_impl = [&](const char* source) -> bool
 	{
@@ -1126,7 +1048,7 @@ int main(int argc, char* argv[])
 			if (axis1_handle_ready || axis6_handle_ready)
 			{
 				bool allow_lock = true;
-				if (remote_handles_active && !(axis1_handle_ready && axis6_handle_ready))
+				if (!(axis1_handle_ready && axis6_handle_ready))
 				{
 					if (remote_single_handle_since_ms == 0) remote_single_handle_since_ms = loop_now_ms;
 					allow_lock = (loop_now_ms - remote_single_handle_since_ms) >= remote_single_handle_grace_ms;
@@ -1732,141 +1654,7 @@ int main(int argc, char* argv[])
 			std::cout << "屈曲恢复已由急停或 ADS 故障终止。" << std::endl;
 		}
 
-		// 4) 键盘侧通道：选择直接控制 / 启动准备 / 力反馈开关。
-		if (_kbhit())
-		{
-			const int ch = _getch();
-			if (ch == 'c' || ch == 'C')
-			{
-				if ((!startup.completed && startup.phase == StartupPhase::WaitForEnter) || ads_resume_required)
-				{
-					if (estop_hold_active)
-					{
-						std::cout << "直接控制启动已忽略：处于 PLC 急停状态。" << std::endl;
-					}
-					else if (ads_soft_hold_active || handle_soft_hold_active || !initial_sync_done || return_ads_fault_hold)
-					{
-						std::cout << "直接控制启动已忽略：ADS 当前处于软保持或重连状态。" << std::endl;
-					}
-					else if (!has_self_check_flag || !self_check_done)
-					{
-						std::cout << "直接控制启动已忽略：PLC 自检尚未完成。" << std::endl;
-					}
-					else if (!restore_startup_v_limit())
-					{
-						std::cout << "直接控制启动失败：无法恢复启动期速度限制参数。" << std::endl;
-					}
-					else if (!consume_startup_loading_ready())
-					{
-						std::cout << "直接控制启动失败：无法清除 PLC 装卸位就绪标志。" << std::endl;
-					}
-					else if (sync_all(20))
-					{
-						clear_cylinder_manual_overrides();
-						startup.recovery_mode = false;
-						startup.phase = StartupPhase::Done;
-						startup.completed = true;
-						startup.prompted = false;
-						control_active = true;
-						ads_resume_required = false;
-						plc_restart_recovery_latched = false;
-						std::cout << "已进入直接控制。" << std::endl;
-					}
-					else
-					{
-						std::cout << "直接控制启动失败：ADS 重同步失败。" << std::endl;
-					}
-				}
-			}
-			else if (ch == 's' || ch == 'S')
-			{
-				std::cout << "已取消键盘启动准备，请在界面输入目标后点击“开始控制”。" << std::endl;
-			}
-			else if (ch == '\r')
-			{
-				std::cout << "请在界面输入目标后点击“开始控制”。" << std::endl;
-			}
-			else if (ch == 'f' || ch == 'F')
-			{
-				ff.enabled = !ff.enabled;
-				ff.reset();
-				std::cout << "力反馈：" << (ff.enabled ? "开启" : "关闭") << std::endl;
-				if (!ff.enabled)
-				{
-					clear_force_output();
-				}
-			}
-			else if (ch == 'z' || ch == 'Z')
-			{
-				zero_force_sensor("");
-			}
-			else if (single_handle_mode && ch == '1')
-			{
-				if (planned_return.active())
-				{
-					std::cout << "单手柄模式切换已忽略：当前计划换手尚未完成。" << std::endl;
-				}
-				else
-				{
-					single_handle_requested_mode = GuidewireMode::None;
-					std::cout << "单手柄模式：已切换到导管语义。" << std::endl;
-				}
-			}
-			else if (single_handle_mode && ch == '2')
-			{
-				if (planned_return.active())
-				{
-					std::cout << "单手柄模式切换已忽略：当前计划换手尚未完成。" << std::endl;
-				}
-				else
-				{
-					single_handle_requested_mode = GuidewireMode::Independent;
-					std::cout << "单手柄模式：已切换到导丝语义。" << std::endl;
-				}
-			}
-			else if (ch == 'q' || ch == 'Q')
-			{
-				if (!planned_return.active())
-				{
-					cylinder_manual_mode[0] = cylinder_manual_mode[0] == CylinderManualMode::Open
-						? CylinderManualMode::Automatic : CylinderManualMode::Open;
-					std::cout << "电缸1 手动开覆盖：" << (cylinder_manual_mode[0] == CylinderManualMode::Open ? "开启" : "关闭") << std::endl;
-				}
-			}
-			else if (ch == 'w' || ch == 'W')
-			{
-				if (!planned_return.active())
-				{
-					cylinder_manual_mode[1] = cylinder_manual_mode[1] == CylinderManualMode::Open
-						? CylinderManualMode::Automatic : CylinderManualMode::Open;
-					std::cout << "电缸2 手动开覆盖：" << (cylinder_manual_mode[1] == CylinderManualMode::Open ? "开启" : "关闭") << std::endl;
-				}
-			}
-			else if (ch == 'e' || ch == 'E')
-			{
-				if (!planned_return.active())
-				{
-					cylinder_manual_mode[2] = cylinder_manual_mode[2] == CylinderManualMode::Open
-						? CylinderManualMode::Automatic : CylinderManualMode::Open;
-					std::cout << "电缸3 手动开覆盖：" << (cylinder_manual_mode[2] == CylinderManualMode::Open ? "开启" : "关闭") << std::endl;
-				}
-			}
-			else if (ch == 'r' || ch == 'R')
-			{
-				if (!planned_return.active())
-				{
-					cylinder_manual_mode[3] = cylinder_manual_mode[3] == CylinderManualMode::Open
-						? CylinderManualMode::Automatic : CylinderManualMode::Open;
-					std::cout << "电缸4 手动开覆盖：" << (cylinder_manual_mode[3] == CylinderManualMode::Open ? "开启" : "关闭") << std::endl;
-				}
-			}
-			else if (ch == 0 || ch == 224)
-			{
-				_getch();
-			}
-		}
-
-		// 5) 单手柄调试模式切换。
+		// 5) 单手柄模式切换。
 		if (single_handle_mode && requested_guidewire_mode != requested_guidewire_mode_prev)
 		{
 			if (requested_guidewire_mode == GuidewireMode::None)
@@ -4720,7 +4508,7 @@ int main(int argc, char* argv[])
 
 		{
 			VisCommand vcmd;
-			// 本地调试台（命名管道）与远程网关共用同一套命令处理，先本地后远程。
+			// 保留命名管道与远程网关共用的命令处理，先管道后远程。
 			while (vis_server.poll_command(vcmd) || remote_gateway.poll_command(vcmd))
 			{
 				switch (vcmd.type)

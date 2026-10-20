@@ -5,7 +5,7 @@ const cp = require('child_process');
 // 抽取生产分支，用内存替身验证运动与通信，不加载设备DLL。
 const project = path.resolve(__dirname, '..');
 const selected = process.argv[2] || 'all';
-if (!['all', 'dual', 'ads'].includes(selected)) throw Error('Usage: node run_offline_tests.cjs [all|dual|ads] [report-directory]');
+if (!['all', 'dual', 'ads', 'handle'].includes(selected)) throw Error('Usage: node run_offline_tests.cjs [all|dual|ads|handle] [report-directory]');
 const report = process.argv[3] && path.resolve(process.argv[3]);
 const build = fs.mkdtempSync(path.join(os.tmpdir(), 'handoff-offline-'));
 if (report) fs.mkdirSync(report, {recursive:true});
@@ -31,7 +31,7 @@ function run(name, sources, flags = '') {
     if (r.error) throw r.error;
     if (r.status !== 0) { console.log('Artifacts: ' + build); process.exit(r.status || 1); }
 }
-if (selected !== 'ads') {
+if (selected === 'all' || selected === 'dual') {
     const source = read('main.cpp'), header = read('control_types.h'), sync = read('motion_sync.cpp');
     const parts = {
         axis4_speed: between(source,'\tconstexpr double axis4_coupled_axis6_speed_mm_s =','\n'),
@@ -60,14 +60,17 @@ if (selected !== 'ads') {
     run('dual_control_test',['tools/dual_control_test.cpp']);
     if (report && fs.existsSync(path.join(build,'trajectories.csv'))) fs.copyFileSync(path.join(build,'trajectories.csv'),path.join(report,'trajectories.csv'));
 }
-if (selected !== 'dual') {
+if (selected === 'all' || selected === 'ads') {
     const entries = read('tools/ads_symbol_sizes.tsv').split('\n').filter(l=>l && !l.startsWith('#')).map(l=>{
         const [name,size] = l.split('\t');
         if (!name || !/^\d+$/.test(size)) throw Error('Invalid symbol size: '+l);
         return '{"'+name+'", '+size+'},';
     });
     fs.writeFileSync(path.join(build,'ads_symbol_sizes.inc'),entries.join('\n'),'utf8');
-    const includes = ['','ADS/Include','手柄','手柄/include','protocol/cpp'].map(p=>'/I"'+path.join(project,p)+'"').join(' ');
+    const includes = ['','ADS/Include','手柄','protocol/cpp'].map(p=>'/I"'+path.join(project,p)+'"').join(' ');
     run('ads_diagnostics_test',['tools/ads_diagnostics_test.cpp','plc_io.cpp'], '/Gy /MD '+includes);
+}
+if (selected === 'all' || selected === 'handle') {
+    run('remote_handle_test', ['tools/remote_handle_test.cpp', '手柄/手柄.cpp']);
 }
 console.log('Offline test artifacts: '+build);
