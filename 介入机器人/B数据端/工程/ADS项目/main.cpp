@@ -231,7 +231,7 @@ int main()
 	double axis6_follow_cmd_abs = 0.0;
 	ULONGLONG axis4_axis6_coupling_last_ms = 0;
 	bool axis4_axis6_coupling_active_prev = false;
-	// 普通导管递送在 axis1 计划回退完成后，前 10 mm 手柄输入的比例映射状态。
+	// 单/双手柄导管递送在轴1计划回退完成后，前10 mm名义输入的先行状态。
 	bool axis1_delivery_mapping_active = false;
 	double axis1_delivery_mapping_progress_mm = 0.0;
 	double axis1_delivery_mapping_applied_extra_mm = 0.0;
@@ -828,7 +828,7 @@ int main()
 	auto apply_mode_selection = [&](ModeSelection selection)
 	{
 		clear_axis1_delivery_mapping();
-		if (selection == ModeSelection::CatheterDelivery)
+		if (single_handle_mode && selection == ModeSelection::CatheterDelivery)
 		{
 			// 每次回到普通导管正向递送段都重新启用前10 mm映射。
 			arm_axis1_delivery_mapping();
@@ -1488,7 +1488,8 @@ int main()
 			spacing_recovery.active() ||
 			spacing_recovery.requested ||
 
-			planned_return.active() ||
+			(planned_return.active() &&
+				(planned_return.mode != PlannedReturnMode::Dual || planned_return.contains_axis(0))) ||
 			axis6_soft_limit_hold)
 		{
 			clear_axis1_delivery_mapping();
@@ -2260,7 +2261,8 @@ int main()
 				planned_return.mode = mode;
 				planned_return.rebase_scope = rebase_scope;
 				planned_return.phase = PlannedReturnPhase::ClampSettle;
-				clear_axis1_delivery_mapping();
+				// 双手柄仅轴6换手时保留轴1先行进度，待恢复Follow继续。
+				if (mode != PlannedReturnMode::Dual || axis1_active) clear_axis1_delivery_mapping();
 				planned_return.phase_t0_ms = 0;
 				planned_return.hold_axis3_rel = plc_act_pos[2];
 				planned_return.hold_axis5_rel = plc_act_pos[4];
@@ -2813,7 +2815,9 @@ int main()
 						}
 						else
 						{
-							if (planned_return.mode == PlannedReturnMode::CatheterDelivery)
+							if (planned_return.mode == PlannedReturnMode::CatheterDelivery ||
+								(planned_return.mode == PlannedReturnMode::Dual &&
+									planned_return.contains_axis(0) && !axis1_reverse_pressed))
 							{
 								// 回退完成后的附加映射只在后续正常导管前推中生效。
 								arm_axis1_delivery_mapping();
@@ -3484,9 +3488,22 @@ int main()
 				const double a5_left_cmd = cmd5_start - plc_leftlimit[4];
 				const double abs6_soft = plc_leftlimit[5] + cfg.axis6_soft_limit_from_left_mm;
 				const double g_start = (cmd6_start - plc_leftlimit[5]) - a5_left_cmd;
+				// g约束始终使用轴3/5的名义增量；轴1先行另占自身窗口余量。
+				const double mapping_gain = axis1_delivery_mapping_active && !reverse &&
+					cfg.axis1_post_return_mapping_span_mm > 1e-6
+					? clamp_double(cfg.axis1_post_return_lead_mm, 0.0, cfg.axis1_post_return_lead_limit_mm) /
+						cfg.axis1_post_return_mapping_span_mm : 0.0;
+				const double mapping_remaining_mm = mapping_gain > 0.0
+					? (std::max)(0.0, cfg.axis1_post_return_mapping_span_mm - axis1_delivery_mapping_progress_mm) : 0.0;
 				double d1 = inc1;
 				if (d1 > 0.0) d1 = (std::min)(d1, (std::max)(hi1 - cmd1_start, 0.0));
-				else d1 = (std::max)(d1, (std::min)(lo1 - cmd1_start, 0.0));
+				else
+				{
+					const double forward_room_mm = (std::max)(cmd1_start - lo1, 0.0);
+					const double extra_room_mm = (std::min)(mapping_remaining_mm,
+						forward_room_mm / (1.0 + mapping_gain)) * mapping_gain;
+					d1 = (std::max)(d1, -(forward_room_mm - extra_room_mm));
+				}
 				double d6 = inc6 > 0.0
 					? (std::min)(inc6, (std::max)(abs6_soft - cmd6_start, 0.0)) : inc6;
 				const double d1_before_gap = d1;
@@ -3509,7 +3526,16 @@ int main()
 					if (d6 < 0.0) d6 *= scale;
 					if (d1 > 0.0) d1 *= scale;
 				}
-				const double cmd1 = cmd1_start + d1;
+				const double mapping_progress_mm = (std::min)((std::max)(-d1, 0.0), mapping_remaining_mm);
+				const double mapping_extra_mm = mapping_progress_mm * mapping_gain;
+				axis1_delivery_mapping_progress_mm += mapping_progress_mm;
+				axis1_delivery_mapping_applied_extra_mm += mapping_extra_mm;
+				if (axis1_delivery_mapping_progress_mm >= cfg.axis1_post_return_mapping_span_mm - 1e-6)
+					axis1_delivery_mapping_active = false;
+				// 把先行差额吸收到镜像基准，清除映射或切换撤出时轴3/5不会补走。
+				axis3_base_rel += mapping_extra_mm;
+				axis5_base_rel += mapping_extra_mm;
+				const double cmd1 = cmd1_start + d1 - mapping_extra_mm;
 				const double cmd6 = cmd6_start + d6;
 				const double g_now = g_start + d6 - d1;
 
@@ -3758,6 +3784,8 @@ int main()
 						axis1_cmd_abs = mapped_cmd_abs;
 						axis1_delivery_mapping_progress_mm = progress_after_mm;
 						axis1_delivery_mapping_applied_extra_mm += mapping_extra_applied_mm;
+						axis3_base_rel += mapping_extra_applied_mm;
+						axis5_base_rel += mapping_extra_applied_mm;
 						if (progress_after_mm >= mapping_span_mm - 1e-6)
 						{
 							axis1_delivery_mapping_active = false;
@@ -3791,8 +3819,8 @@ int main()
 						(axis1_rot_filtered - axis1_crawl.rot_ref) * cfg.axis_rot_scale_deg;
 					axis2_hold_rel = pos[1];
 
-					// 轴3/5镜像跟随名义目标（扣除轴1已累计的先行附加量），使轴1相对后方各轴产生真正先行效果
-					apply_axis1_mirror_from_abs(axis1_cmd_abs + axis1_delivery_mapping_applied_extra_mm, false);
+					// 先行差额已吸收到镜像基准，轴3/5只跟随名义行程。
+					apply_axis1_mirror_from_abs(axis1_cmd_abs, false);
 					{
 						// 非轴4联动时，导管模式保持axis6基准位；联动时保留爬行状态机目标。
 						// 前进沿用既有输出；后退必须保留 run_axis6_crawl_state/计划回退

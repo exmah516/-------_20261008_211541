@@ -73,11 +73,12 @@ namespace MasterConsole.Services
         public event EventHandler<StatusFrame> StatusReceived;
         public event EventHandler<LogMessage> LogReceived;
 
-        public Task ConnectAsync()
+        public async Task ConnectAsync()
         {
+            ZenohSession session;
             lock (_lock)
             {
-                if (_zenoh != null) return Task.CompletedTask;
+                if (_zenoh != null) return;
                 if (_cfg.Token == null || _cfg.Token.Length < 16) throw new InvalidOperationException("连接认证密钥缺失或长度不足。");
                 string endpoint = string.IsNullOrWhiteSpace(_cfg.Endpoint) ? "tcp/" + _cfg.Host + ":7447" : _cfg.Endpoint;
                 _initializing = true;
@@ -112,11 +113,21 @@ namespace MasterConsole.Services
                 CancellationToken token = _cts.Token;
                 _handleThread = new Thread(() => HandleLoop(token)) { IsBackground = true, Name = "Zenoh-Handle-100Hz" };
                 _handleThread.Start();
+                session = _zenoh;
             }
             SendCommand(ZenohCommand.Hello, 0, 0, 0, 0, "", _nonceClient, null, null, 0);
             Log("info", "已打开 Zenoh 会话，等待 ADS 状态帧。");
             ConnectionChanged?.Invoke(this, EventArgs.Empty);
-            return Task.CompletedTask;
+            // 界面随后立即申请控制权，必须先等认证后的状态帧建立连接。
+            long started = _clock.ElapsedMilliseconds;
+            while (!IsConnected)
+            {
+                if (_zenoh != session || !session.IsAvailable)
+                    throw new InvalidOperationException("等待 ADS 状态时 Zenoh 会话已断开。");
+                if (_clock.ElapsedMilliseconds - started >= 10000)
+                    throw new TimeoutException("10 秒内未收到通过认证的 ADS 状态帧，请检查数据端程序及两端认证密钥。");
+                await Task.Delay(10).ConfigureAwait(false);
+            }
         }
 
         public void Disconnect() => Shutdown("链路已断开。", "warn");

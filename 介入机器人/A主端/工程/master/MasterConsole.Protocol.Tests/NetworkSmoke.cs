@@ -39,9 +39,19 @@ namespace MasterConsole.Protocol.Tests
                     cachedPublisher.Dispose(); cachedPublisher.Dispose();
                     Check("相同 Topic 复用与 Publisher 幂等释放", !cachedPublisher.IsAvailable);
                     link.LogReceived += (sender, log) => Console.WriteLine("[链路] " + log.Text);
-                    link.ConnectAsync().GetAwaiter().GetResult();
-                    Check("原生 Zenoh-C 与真实主端认证", Wait(() => link.IsConnected, 10000));
-                    Check("获取控制权", Result(link.AcquireControlAsync(), 7000).Ok);
+                    process.StandardInput.WriteLine("pause"); process.StandardInput.Flush();
+                    Thread.Sleep(700); // 等缓存状态过期，确保 ConnectAsync 后状态帧尚未到达。
+                    var acquire = Task.Run(async () =>
+                    {
+                        await link.ConnectAsync();
+                        return await link.AcquireControlAsync();
+                    });
+                    Thread.Sleep(100);
+                    process.StandardInput.WriteLine("resume"); process.StandardInput.Flush();
+                    var acquired = Result(acquire, 16000);
+                    Check("连接后立即申请控制权会等待首个有效状态帧", acquired.Ok);
+                    if (!acquired.Ok) return;
+                    Check("原生 Zenoh-C 与真实主端认证", link.IsConnected);
                     Check("有控制权", Wait(() => link.HasControl, 3000));
                     Check("准备位置专用状态", Result(link.PreparePositionAsync(12, 125), 7000).Ok);
                     Check("开始控制专用状态", Result(link.StartControlAsync(), 7000).Ok);

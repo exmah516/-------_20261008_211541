@@ -123,9 +123,9 @@ struct ControlConfig
 	double axis3_delivery_stop_from_left_mm = 20.0;
 	double axis3_delivery_release_hysteresis_mm = 2.0;
 	double guidewire_entry_axis6_from_left_max_mm = 667.0;
-	// 普通导管正向递送中，axis1 每次计划回退后前 10 mm 手柄输入的附加映射量。
+	// 单/双手柄导管正向递送中，axis1 每次计划回退后前 10 mm 名义输入额外前进 2 mm。
 	// 0 表示关闭；UI 与内部均限制在 [0, 5] mm。
-	double axis1_post_return_lead_mm = 0.0;
+	double axis1_post_return_lead_mm = 2.0;
 	double axis1_post_return_lead_limit_mm = 5.0;
 	double axis1_post_return_mapping_span_mm = 10.0;
 	// axis6 距自身左限位的上位机内部软限位。达到预测越限条件后仅锁止上位机链路，

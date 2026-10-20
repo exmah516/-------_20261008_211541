@@ -35,13 +35,20 @@ struct Crawl {
     double min_abs() const { return start_abs; }
     double max_abs() const { return end_abs; }
 };
-struct Transaction { bool running=false; bool active() const { return running; } };
+struct Transaction {
+    bool running=false, axis1=false;
+    PlannedReturnMode mode=PlannedReturnMode::Dual;
+    bool active() const { return running; }
+    bool contains_axis(int axis) const { return axis==0 && axis1; }
+};
 struct Plant { double a1=28, a5=615, a6=628, a3=0; };
 #include "handoff_type.inc"
 struct FollowSession {
     Plant command;
     double base1, base3, base5;
     DualHandoffRequest pending;
+    bool mapping_active=false;
+    double mapping_progress=0, mapping_extra=0;
     std::array<double,7> velocity{};
     explicit FollowSession(Plant p):command(p),base1(p.a1),base3(p.a3),base5(p.a5) {}
 };
@@ -56,12 +63,19 @@ static void require(bool ok, const char* name) {
     if (!ok) { std::cerr << "FAIL " << name << std::endl; std::exit(1); }
 }
 static bool close(double a, double b) { return std::abs(a-b)<1e-7; }
+static double clamp_double(double x,double lo,double hi) { return std::clamp(x,lo,hi); }
 static Outcome tick(Plant p, double raw1, double raw6, bool reverse_input=false,
                     int axis4=0, bool window_active=true, FollowSession* session=nullptr) {
     Config cfg;
     auto gate=[&](double d) { return std::abs(d)>=cfg.linear_increment_noise_deadband_mm ? d : 0.0; };
     const double axis1_linear_increment_mm=gate(raw1), axis6_linear_increment_mm=gate(raw6);
     const bool axis1_reverse_pressed=reverse_input;
+    bool axis1_delivery_mapping_active=session && session->mapping_active;
+    double axis1_delivery_mapping_progress_mm=session?session->mapping_progress:0;
+    double axis1_delivery_mapping_applied_extra_mm=session?session->mapping_extra:0;
+#include "mapping_helpers.inc"
+    // 与生产循环相同：撤出清除映射，镜像基准保留已执行的差额。
+    if(reverse_input) clear_axis1_delivery_mapping();
     GuidewireMode guidewire_mode=GuidewireMode::None;
     const bool axis4_forward_request=axis4<0, axis4_reverse_request=axis4>0;
     bool axis4_axis6_coupling_active_prev=true;
@@ -77,30 +91,39 @@ static Outcome tick(Plant p, double raw1, double raw6, bool reverse_input=false,
     Crawl axis1_crawl{session?session->base1:p.a1,motion_sync::axis1_window_left_abs(ctx),motion_sync::axis1_window_right_abs(ctx)};
     axis1_crawl.window_active=window_active;
     double axis1_follow_cmd_abs=session?session->command.a1:p.a1, axis6_follow_cmd_abs=session?session->command.a6:p.a6;
-    const double axis1_abs=p.a1, axis5_abs=p.a5, axis6_abs=p.a6, axis5_base_rel=session?session->base5:p.a5;
+    const double axis1_abs=p.a1, axis5_abs=p.a5, axis6_abs=p.a6;
+    double axis3_base_rel=session?session->base3:p.a3,axis5_base_rel=session?session->base5:p.a5;
     double pos[7]={p.a1,0,p.a3,0,p.a5,p.a6,0}, axis2_hold_rel=0;
     const double axis1_rot_filtered=0;
     const bool axis3_delivery_stop_active=false;
     auto is_within_range=[](double x,double lo,double hi,double tol) { return x>=lo-tol && x<=hi+tol; };
     auto capture_axis1_follow_baseline=[]() {};
     auto apply_axis1_mirror_from_abs=[&](double x,bool) {
-        pos[4]=(session?session->base5:p.a5)+(x-axis1_crawl.base_rel);
-        pos[2]=(session?session->base3:p.a3)+(x-axis1_crawl.base_rel);
+        pos[4]=axis5_base_rel+(x-axis1_crawl.base_rel);
+        pos[2]=axis3_base_rel+(x-axis1_crawl.base_rel);
     };
     auto compute_axis7_cmd_rel=[]() { return 0.0; };
     struct { int cyl1_open=0, cyl2_clamp=1800, cyl3_open=0, cyl4_clamp=1800; } cyl;
     int cylinder1_cmd=0,cylinder2_cmd=0,cylinder3_cmd=0,cylinder4_cmd=0;
     Transaction planned_return;
     Outcome out{p,p};
-    auto begin_planned_return=[&](PlannedReturnMode,PlannedReturnRebaseScope,
+    auto begin_planned_return=[&](PlannedReturnMode mode,PlannedReturnRebaseScope,
                                 bool a1,double t1,bool a6,double t6) {
+        const bool axis1_active=a1;
+#include "mapping_begin.inc"
         out.transaction=true; out.leg1=a1; out.leg6=a6; out.target1=t1; out.target6=t6;
         return true;
     };
     auto apply_planned_return_outputs=[]() {};
 #include "motion.inc"
     out.follow={pos[0],pos[4],pos[5],pos[2]};
-    if (session) session->command=out.follow;
+    if (session) {
+        session->command=out.follow;
+        session->base3=axis3_base_rel; session->base5=axis5_base_rel;
+        session->mapping_active=axis1_delivery_mapping_active;
+        session->mapping_progress=axis1_delivery_mapping_progress_mm;
+        session->mapping_extra=axis1_delivery_mapping_applied_extra_mm;
+    }
     // 事务触发拍保持实际位置，理想PLC只完成重定位，不能把候选位移计入递送量。
     if (out.transaction) {
         if (out.leg1) out.after.a1=out.target1;
@@ -536,7 +559,169 @@ static void test_pending_guards() {
     require(!dual_handoff.active(),"pause clears pending handoff");
     require(!axis4_paused(),"axis4 pause clears after pending request cancellation");
 }
+static void test_post_return_lead() {
+    Config cfg;
+    require(close(cfg.axis1_post_return_lead_mm,2),"默认先行量为2 mm");
+    Plant p{30,100,102,90}; FollowSession s(p); s.mapping_active=true;
+    for(int i=0;i<100;++i) {
+        const auto r=tick(p,-0.1,0,false,0,true,&s);
+        require(!r.transaction,"前10 mm不额外创建回退任务");
+        p=r.follow;
+    }
+    require(close(p.a1,18)&&close(p.a5,90)&&close(p.a3,80)&&close(p.a6,102),
+            "名义10 mm使轴1前进12 mm，轴3/5前进10 mm，轴6保持");
+    require(!s.mapping_active&&close(s.mapping_extra,2),"累计先行2 mm后关闭本段映射");
+    auto r=tick(p,0,0,false,0,true,&s);
+    require(close(r.follow.a1,p.a1)&&close(r.follow.a5,p.a5),"停手不自动补走");
+    r=tick(p,-1,0,false,0,true,&s); p=r.follow;
+    require(close(p.a1,17)&&close(p.a5,89),"10 mm之后恢复一比一");
+    r=tick(p,1,0,true,0,true,&s);
+    require(close(r.follow.a1,18)&&close(r.follow.a5,90),"切换撤出时镜像轴没有2 mm跳变");
+
+    p={30,100,102,90}; s=FollowSession(p); s.mapping_active=true;
+    r=tick(p,-12,0,false,0,true,&s);
+    require(close(r.follow.a1,16)&&close(r.follow.a5,88)&&close(s.mapping_extra,2),
+            "单拍跨过10 mm只增加2 mm");
+    p={6,100,102,90}; s=FollowSession(p); s.mapping_active=true;
+    r=tick(p,-4,0,false,0,true,&s);
+    require(close(r.follow.a1,5)&&close(r.follow.a5,100-1.0/1.2),"先行与名义位移共同受轴1窗口约束");
+    require(s.pending.axis1&&!r.transaction,"先行触边仍等待实际到位");
+    const Plant end=s.command;
+    r=tick(p,-4,0,false,0,true,&s);
+    require(close(r.follow.a1,end.a1)&&close(r.follow.a5,end.a5),"等待到位期间冻结先行及镜像目标");
+    p=end; s.velocity[0]=0.51;
+    require(!tick(p,0,0,false,0,true,&s).transaction,"先行后速度超过0.5不换手");
+    s.velocity[0]=0.5;
+    require(tick(p,0,0,false,0,true,&s).transaction,"先行后实际到位且速度0.5允许换手");
+
+    p={30,100,102,90}; s=FollowSession(p); s.mapping_active=true;
+    r=tick(p,-5,0,false,0,true,&s); p=r.follow;
+    r=tick(p,0,-0.1,false,0,true,&s);
+    require(close(s.mapping_progress,5)&&close(s.mapping_extra,1),"只动导丝不会消耗先行进度");
+    p=r.follow;
+    r=tick(p,0,0,true,0,true,&s);
+    require(close(r.follow.a1,p.a1)&&close(r.follow.a5,p.a5)&&!s.mapping_active,
+            "中途换向停手不会让镜像轴补走");
+
+    // 扫过输入、窗口和间距边界，检验名义位移与额外位移分离后的约束。
+    for(double a1:{5.,5.1,6.,18.,30.})
+    for(double gap:{0.,1.,1.1,15.,32.9,33.,36.})
+    for(double d1:{-30.,-3.,-0.1,0.,0.1,3.})
+    for(double d6:{-3.,0.,3.}) {
+        Plant start{a1,100,100+gap,90}; FollowSession f(start); f.mapping_active=true;
+        auto out=tick(start,d1,d6,false,0,true,&f);
+        const double nominal=out.follow.a5-start.a5,actual=out.follow.a1-start.a1;
+        const double g=out.follow.a6-out.follow.a5;
+        require(close(actual,nominal-std::min(std::max(-nominal,0.0),10.0)*0.2),"只有轴1获得先行差额");
+        require(out.follow.a1>=5-1e-7&&out.follow.a1<=30+1e-7,"先行不越过轴1窗口");
+        require(g>=std::min(1.,gap)-1e-7&&g<=std::max(33.,gap)+1e-7,"导丝间距按轴5名义目标约束");
+        require(nominal-actual>=-1e-7&&nominal-actual<=2+1e-7,"先行量不超过2 mm");
+        if(d1==0) require(close(actual,0),"导管手柄静止不产生先行");
+    }
+    std::cout<<"PASS dual-handle 2mm lead, mirror continuity, gap limits and handoff speed gate\n";
+}
+
+static void test_lead_lifecycle() {
+    Config cfg;
+    bool axis1_delivery_mapping_active=false;
+    double axis1_delivery_mapping_progress_mm=0,axis1_delivery_mapping_applied_extra_mm=0;
+#include "mapping_helpers.inc"
+    GuidewireMode guidewire_mode=GuidewireMode::None;
+    bool axis1_reverse_pressed=false,control_active=true,connection_hold_active=false;
+    bool ads_soft_hold_active=false,return_ads_fault_hold=false,estop_hold_active=false;
+    bool startup_sequence_active=false,emergency_retract_active=false,axis6_soft_limit_hold=false;
+    SpacingRecoveryState spacing_recovery;
+    Transaction planned_return;
+    auto guard=[&]() {
+#include "mapping_guard.inc"
+    };
+    auto complete=[&]() {
+#include "mapping_complete.inc"
+    };
+    planned_return.axis1=true;
+    complete();
+    require(axis1_delivery_mapping_active,"双手柄轴1正向回退完成启用先行");
+    axis1_delivery_mapping_progress_mm=5; axis1_delivery_mapping_applied_extra_mm=1;
+    planned_return.axis1=false; planned_return.running=true;
+    guard(); complete();
+    require(axis1_delivery_mapping_active&&close(axis1_delivery_mapping_progress_mm,5),
+            "仅轴6换手不清除或重新启用轴1先行");
+    planned_return.axis1=true;
+    guard();
+    require(!axis1_delivery_mapping_active,"轴1开始新回退清除旧先行");
+    axis1_reverse_pressed=true; complete();
+    require(!axis1_delivery_mapping_active,"双手柄撤出换手不启用先行");
+    axis1_reverse_pressed=false; planned_return.running=false; complete();
+    for(bool* flag:{&connection_hold_active,&ads_soft_hold_active,&return_ads_fault_hold,
+        &estop_hold_active,&startup_sequence_active,&emergency_retract_active,
+        &axis6_soft_limit_hold,&spacing_recovery.requested}) {
+        arm_axis1_delivery_mapping(); *flag=true; guard();
+        require(!axis1_delivery_mapping_active,"保持与恢复接管清除先行");
+        *flag=false;
+    }
+    arm_axis1_delivery_mapping(); control_active=false; guard();
+    require(!axis1_delivery_mapping_active,"暂停清除先行");
+}
+
+static void test_lead_across_handoffs() {
+    for(bool reverse:{false,true})
+    for(auto input:{std::array<double,2>{0.1,0}, {0.1,0.1}, {0,0.1}, {0.1,0.2}}) {
+        Plant p{30,100,106,90}; FollowSession s(p);
+        s.mapping_active=!reverse;
+        int count=0; double travel=0;
+        for(int i=0;i<2000;++i) {
+            const Plant before=p;
+            const auto r=tick(p,(reverse?1:-1)*input[0],(reverse?1:-1)*input[1],reverse,0,true,&s);
+            require(s.mapping_extra<=2+1e-7,"跨多次换手的每段先行不超过2 mm");
+            if(r.transaction) {
+                ++count;
+                Config cfg;
+                Transaction planned_return; planned_return.axis1=r.leg1;
+                bool axis1_reverse_pressed=reverse;
+                auto& axis1_delivery_mapping_active=s.mapping_active;
+                auto& axis1_delivery_mapping_progress_mm=s.mapping_progress;
+                auto& axis1_delivery_mapping_applied_extra_mm=s.mapping_extra;
+#include "mapping_helpers.inc"
+                const double prior_progress=s.mapping_progress;
+                p=r.after;
+                s.command=p; s.base1=p.a1; s.base3=p.a3; s.base5=p.a5;
+                s.pending.reset();
+#include "mapping_complete.inc"
+                if(!r.leg1) require(close(s.mapping_progress,prior_progress),"轴6独立换手后保留先行进度");
+                const auto stopped=tick(p,0,0,reverse,0,true,&s);
+                require(!stopped.transaction&&close(stopped.follow.a1,p.a1)&&close(stopped.follow.a5,p.a5),
+                        "回退重建基准后停手不会补走或重复换手");
+            } else {
+                p=r.follow;
+                travel+=std::abs(p.a1-before.a1)+std::abs(p.a6-before.a6);
+            }
+        }
+        require(count>0&&count<70&&travel>150,"先行下多次换手仍持续递送且不振荡");
+    }
+}
+
+static void test_single_mapping_mirror() {
+    Config cfg;
+    bool axis1_delivery_mapping_active=false;
+    double axis1_delivery_mapping_progress_mm=0,axis1_delivery_mapping_applied_extra_mm=0;
+#include "mapping_helpers.inc"
+    arm_axis1_delivery_mapping();
+    bool axis1_reverse_pressed=false;
+    double axis1_nominal_forward_mm=5,axis1_cmd_abs=25;
+    double axis3_base_rel=90,axis5_base_rel=100;
+    auto constrain_axis1_follow_cmd_abs=[](double x){return std::clamp(x,5.0,30.0);};
+#include "single_mapping.inc"
+    require(close(axis1_cmd_abs,24)&&close(axis5_base_rel+axis1_cmd_abs-30,95),
+            "保留的单手柄分支也仅让轴1先行");
+    clear_axis1_delivery_mapping();
+    require(close(axis5_base_rel+axis1_cmd_abs-30,95),"单手柄清除先行进度不会让镜像目标跳变");
+}
+
 int main() {
+    test_lead_across_handoffs();
+    test_single_mapping_mirror();
+    test_post_return_lead();
+    test_lead_lifecycle();
     test_pending_guards();
     test_handoff_lag();
     test_passive_targets();
