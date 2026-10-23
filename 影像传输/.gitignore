@@ -1,0 +1,7 @@
+依赖/.packages/
+依赖/*.download
+依赖/*.zip
+依赖/runtime/*.exe
+A主端/运行/
+B数据端/ScreenCut/runtime/
+验证记录/

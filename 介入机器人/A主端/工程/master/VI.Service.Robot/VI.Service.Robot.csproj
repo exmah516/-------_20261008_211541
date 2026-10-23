@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <UseWPF>true</UseWPF>
+    <LangVersion>10.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>VI.Service.Robot</AssemblyName>
+    <RootNamespace>MasterConsole</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MasterConsole.Protocol\MasterConsole.Protocol.csproj" />
+    <ProjectReference Include="..\VI.Service.Net\VI.Service.Net.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\FLCatheter.dll" Link="FLCatheter.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\Runtime\VC142\*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

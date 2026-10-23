@@ -12,6 +12,7 @@ namespace MasterConsole.Protocol.Tests
         private static int _passed;
         private static int _failed;
 
+        [STAThread]
         private static int Main(string[] args)
         {
             try
@@ -51,6 +52,7 @@ namespace MasterConsole.Protocol.Tests
                 wrongKey[0] ^= 1;
                 Check("错误密钥拒绝", !ZenohWire.Verify(ZenohWire.Deserialize<HandleFrame>(frameBytes), wrongKey));
                 Check("空密钥拒绝", !ZenohWire.Verify(ZenohWire.Deserialize<HandleFrame>(frameBytes), new byte[0]));
+                RobotServiceTests();
                 if (args.Contains("--network")) NetworkSmoke(args, key);
             }
             catch (Exception e)

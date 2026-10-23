@@ -1,53 +1,25 @@
 <Window x:Class="MasterConsole.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:ctl="clr-namespace:MasterConsole.Controls"
-        Title="影像传输 · 主端"
-        Width="640" Height="520" MinWidth="320" MinHeight="360"
-        WindowStartupLocation="Manual">
-    <Window.Resources>
-        <Style x:Key="CompactButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Padding" Value="8,3"/>
-            <Setter Property="MinHeight" Value="28"/>
-        </Style>
-    </Window.Resources>
-    <Grid Margin="12">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-
-        <Border Grid.Row="0" Style="{StaticResource CardBorder}" Padding="14,8" Margin="0,0,0,10">
-            <DockPanel>
-                <TextBlock Text="影像传输 · 主端" Style="{StaticResource WindowTitleText}" VerticalAlignment="Center"/>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Content="DSA影像" Tag="dsa" Click="DisplaySelect_Click" Style="{StaticResource PrimaryButton}" Margin="4,0,0,0"/>
-                    <Button Content="监控1" Tag="camera1" Click="DisplaySelect_Click" Style="{StaticResource CompactButton}" Margin="4,0,0,0"/>
-                    <Button Content="监控2" Tag="camera2" Click="DisplaySelect_Click" Style="{StaticResource CompactButton}" Margin="4,0,0,0"/>
-                    <Button Content="快发" Click="DsaFast_Click" Style="{StaticResource CompactButton}" Margin="14,0,0,0"/>
-                    <Button Content="慢发" Click="DsaSlow_Click" Style="{StaticResource CompactButton}" Margin="4,0,0,0"/>
-                </StackPanel>
-            </DockPanel>
-        </Border>
-
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="3*"/>
-                <ColumnDefinition Width="8"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <Grid.RowDefinitions>
-                <RowDefinition x:Name="DisplayTopRow" Height="3*"/>
-                <RowDefinition x:Name="DisplayBottomRow" Height="2*"/>
-            </Grid.RowDefinitions>
-
-            <Grid x:Name="DsaViews" Grid.Column="0" Grid.Row="0" Grid.RowSpan="2">
-                <ctl:DsaImageView x:Name="DsaImageView" Caption="DSA画面1"/>
-                <ctl:DsaImageView x:Name="DsaImageView1" Caption="DSA画面2" Visibility="Collapsed"/>
-                <ctl:DsaImageView x:Name="EcgImageView" Caption="心电影像" Visibility="Collapsed"/>
-            </Grid>
-            <ctl:HikCameraView x:Name="HikCamera1" Tag="1" Grid.Column="2" Grid.Row="0"/>
-            <ctl:HikCameraView x:Name="HikCamera2" Tag="2" Grid.Column="2" Grid.Row="1"/>
-        </Grid>
+        xmlns:wv="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="影像传输 · 主端" Width="640" Height="520" MinWidth="320" MinHeight="360" WindowStartupLocation="Manual">
+  <Window.Resources>
+    <Style x:Key="CompactButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+      <Setter Property="Padding" Value="8,3"/><Setter Property="MinHeight" Value="28"/>
+    </Style>
+  </Window.Resources>
+  <Grid Margin="12">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+    <Border Style="{StaticResource CardBorder}" Padding="10,6" Margin="0,0,0,8">
+      <WrapPanel>
+        <Button Content="DSA影像" Tag="dsa" Click="DisplaySelect_Click" Style="{StaticResource CompactButton}" Margin="0,0,4,0"/>
+        <Button Content="监控1" Tag="camera1" Click="DisplaySelect_Click" Style="{StaticResource CompactButton}" Margin="0,0,4,0"/>
+        <Button Content="监控2" Tag="camera2" Click="DisplaySelect_Click" Style="{StaticResource CompactButton}"/>
+      </WrapPanel>
+    </Border>
+    <Grid Grid.Row="1" Background="#111821">
+      <wv:WebView2 x:Name="VideoSurface" DefaultBackgroundColor="#111821"/>
+      <TextBlock x:Name="StartupStatus" Text="播放器启动中…" Foreground="White" TextWrapping="Wrap" Margin="12"/>
     </Grid>
+  </Grid>
 </Window>

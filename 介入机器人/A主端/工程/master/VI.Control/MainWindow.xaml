@@ -1,0 +1,27 @@
+<Window x:Class="VI.Control.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="血管介入机器人 · VI.Control" Width="1000" Height="900" MinWidth="600" MinHeight="560"
+    WindowStartupLocation="Manual">
+    <Grid Margin="20">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <StackPanel Margin="0,0,0,18">
+            <TextBlock Text="VI.Control" FontSize="26" FontWeight="SemiBold" Foreground="{StaticResource AccentDeepBrush}"/>
+            <TextBlock Text="血管介入机器人 · 主端" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,3,0,0"/>
+            <Border x:Name="SimulationBanner" Background="#FFF4D6" BorderBrush="#E9C46A" BorderThickness="1" CornerRadius="6" Padding="10,7" Margin="0,12,0,0">
+                <TextBlock x:Name="SimulationNotice" TextWrapping="Wrap" Foreground="#7C4A03" AutomationProperties.LiveSetting="Polite"/>
+            </Border>
+        </StackPanel>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl x:Name="ModulePanels" ItemsSource="{Binding Panels}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Expander Header="{Binding Metadata.Title}" IsExpanded="True" Margin="0,0,0,14" Collapsed="Panel_Collapsed">
+                            <ContentPresenter Content="{Binding Content}" Margin="0,12,0,0"/>
+                        </Expander>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
+</Window>

@@ -1,16 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- 协议对拍自检：读取 protocol/test_vectors 下的向量，与 C# 编码结果逐字节比对。
+  <!-- 协议对拍自检：读取 protocol/fixtures/zenoh-v1 下的向量，与 C# 编码结果逐字节比对。
        运行方式：在 VS 中运行本项目，退出码 0 表示全部通过。 -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net472</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <PlatformTarget>x64</PlatformTarget>
-    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <UseWPF>true</UseWPF>
     <LangVersion>9.0</LangVersion>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\MasterConsole.Protocol\MasterConsole.Protocol.csproj" />
     <ProjectReference Include="..\VI.Service.Net\VI.Service.Net.csproj" />
-    <ProjectReference Include="..\MasterConsole\MasterConsole.csproj" />
+    <ProjectReference Include="..\VI.Service.Robot\VI.Service.Robot.csproj" />
   </ItemGroup>
 </Project>

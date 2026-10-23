@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <PlatformTarget>x64</PlatformTarget>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Robotics.HostFramework" Version="[0.1.0-dev]" />
+    <PackageReference Include="Robotics.HostFramework.Contracts" Version="[0.1.0-dev]" />
+    <ProjectReference Include="..\VI.Control\VI.Control.csproj" />
+    <ProjectReference Include="..\VI.Module.Intervention\VI.Module.Intervention.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\VI.Module.PositioningArm\VI.Module.PositioningArm.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\VI.Control\MainWindow.xaml" Link="Fixtures\MainWindow.xaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="CopyFeatureModules" AfterTargets="Build">
+    <ItemGroup>
+      <FeatureModule Include="$(OutputPath)..\VI.Module.Intervention\VI.Module.Intervention.dll" />
+      <FeatureModule Include="$(OutputPath)..\VI.Module.PositioningArm\VI.Module.PositioningArm.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(FeatureModule)" DestinationFolder="$(TargetDir)Modules\Features" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

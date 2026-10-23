@@ -1,5 +1,5 @@
 包目录：D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\A主端
-当前工程：`工程/master/MasterConsole.sln`
+当前工程：`工程/master/VI.Control.slnx`，入口为 .NET 8 WPF x64 程序 `VI.Control`。
 
-运行文件由 Release 构建输出到 `工程/master/MasterConsole/bin/Release/net472`。
-介入主端只携带手柄库、协议库和 VC++ 运行库；DSA、VTK、海康和 DSA 截屏接收已拆到其他两个 A主端。
+Release 运行文件输出到 `工程/build/Release/bin/VI.Control`。部署时复制完整输出目录，并安装 .NET 8 x64 Windows Desktop Runtime；保留 `Modules/Features` 下的业务模块及所有原生运行库。
+介入主端包含界面、手柄和远程控制；DSA 影像、VTK 模型与海康监控由独立影像/造影工程负责。

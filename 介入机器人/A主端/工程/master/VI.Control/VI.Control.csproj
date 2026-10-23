@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <PlatformTarget>x64</PlatformTarget>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>VI.Control</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Robotics.HostFramework" Version="[0.1.0-dev]" />
+    <ProjectReference Include="..\VI.Service.Robot\VI.Service.Robot.csproj" />
+    <ProjectReference Include="..\VI.Module.Intervention\VI.Module.Intervention.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\VI.Module.PositioningArm\VI.Module.PositioningArm.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <Target Name="CopyFeatureModules" AfterTargets="Build">
+    <ItemGroup>
+      <FeatureModule Include="$(OutputPath)..\VI.Module.Intervention\VI.Module.Intervention.dll" />
+      <FeatureModule Include="$(OutputPath)..\VI.Module.PositioningArm\VI.Module.PositioningArm.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(FeatureModule)" DestinationFolder="$(TargetDir)Modules\Features" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

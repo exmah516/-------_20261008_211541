@@ -11,7 +11,7 @@
 | `vi/ads/state/v1` | ADS → 主端 | 约 30 Hz |
 | `vi/ads/force/v1` | ADS → 主端 | 100 Hz |
 
-路由器由数据端启动或复用，默认监听 `tcp/192.168.60.1:7447`；仅关闭本进程启动的路由器。主端仅打开 client session。两端 x64，Zenoh-C 1.10.1；C++ 头文件 SDK 同版本；C# 使用 net472 + P/Invoke，MessagePack 3.1.12；C++ msgpack-cxx 9.0.0。
+路由器由数据端启动或复用，默认监听 `tcp/192.168.60.1:7447`；仅关闭本进程启动的路由器。主端仅打开 client session。两端 x64，Zenoh-C 1.10.1；C++ 头文件 SDK 同版本；C# 使用 net8.0 + P/Invoke，MessagePack 3.1.12；C++ msgpack-cxx 9.0.0。
 
 ## 线格式
 
@@ -166,7 +166,7 @@ MonotonicMs 来自发送方单调时钟。ADS 原样 Echo 最近有效主端时�
 
 ADS 命令接收 FIFO 为 256 项，满时丢弃最旧并记录诊断；本地记录入队时刻，消费时超过 2000 ms 拒绝。接收回调不运行控制逻辑，高频手柄走独立最新值路径。控制循环按 FIFO 顺序执行原有安全校验。主端仅在 publisher 可用时发送，不缓存、不补发。
 
-IsConnected = Zenoh Session 可用，并且最近通过协议/认证/session/序号校验的 state 接收间隔 ≤500 ms。该值不代表 PLC 已就绪。原控制权租约与手柄失联保持继续保留，不新增软件急停。Flags bit12 为 CleanForceValid；该位为 0 时线上 CleanForceN 为 0，主端本地域将其还原为无效值。
+IsConnected = Zenoh Session 可用，并且最近通过协议/认证/session/序号校验的 state 接收间隔 <2000 ms。该值不代表 PLC 已就绪。原控制权租约与手柄失联保持继续保留，不新增软件急停。Flags bit12 为 CleanForceValid；该位为 0 时线上 CleanForceN 为 0，主端本地域将其还原为无效值。
 
 ## 验证入口
 

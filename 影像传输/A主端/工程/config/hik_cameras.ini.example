@@ -1,18 +1,14 @@
-; 复制为同目录的 hik_cameras.ini 后填写私有凭据；密码不会写入日志。
+; 复制为 hik_cameras.ini；这里的 IP 是数据端媒体服务，不是摄像头。
+; 摄像头凭据在 B 数据端 config/hik_cameras.ini 中配置。
 [camera1]
-name=海康 1
+name=监控 1
 ip=192.168.60.1
-port=18000
-username=admin
-password=
-channel=1
-stream=0
+webrtcPort=8889
+streamPath=stream_cam1
 
 [camera2]
-name=海康 2
+name=监控 2
 ip=192.168.60.1
-port=18001
-username=admin
-password=
-channel=1
-stream=0
+webrtcPort=8889
+streamPath=stream_cam2
+; 旧 port/username/password/channel/stream 项可保留，主端不再用它们登录海康 SDK。

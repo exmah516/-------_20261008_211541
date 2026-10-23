@@ -17,6 +17,9 @@ namespace MasterConsole.Protocol.Tests
             string simulator = Option(args, "--simulator");
             string router = Option(args, "--router");
             string endpoint = Option(args, "--endpoint", "tcp/127.0.0.1:17447");
+            if (!Uri.TryCreate(endpoint.Replace("tcp/", "tcp://"), UriKind.Absolute, out var endpointUri) ||
+                !endpointUri.IsLoopback || endpointUri.Scheme != "tcp")
+                throw new ArgumentException("离线通信测试只允许本机回环地址。");
             string tokenFile = Path.Combine(Path.GetTempPath(), "vi-zenoh-" + Guid.NewGuid().ToString("N") + ".token");
             byte[] token = Encoding.ASCII.GetBytes("zenoh-offline-integration-token-32");
             File.WriteAllBytes(tokenFile, token);
@@ -75,7 +78,7 @@ namespace MasterConsole.Protocol.Tests
                     Check("四个 Topic 均有流量", handleCount >= 100 && forceCount >= 100 && stateCount >= 20 && commandCount >= 5);
                     Check("单调 Echo RTT 与有效触觉帧", !double.IsNaN(link.GetStats().RttMs) && link.GetStats().HapticAgeMs < 500);
                     process.StandardInput.WriteLine("pause"); process.StandardInput.Flush();
-                    Check("有效状态超过 500ms 断联", Wait(() => !link.IsConnected, 1500));
+                    Check("有效状态超过 2s 断联", Wait(() => !link.IsConnected, 2500));
                     process.StandardInput.WriteLine("resume"); process.StandardInput.Flush();
                     Check("短暂中断自动恢复", Wait(() => link.IsConnected, 4000));
                     process.StandardInput.WriteLine("pause"); process.StandardInput.Flush();

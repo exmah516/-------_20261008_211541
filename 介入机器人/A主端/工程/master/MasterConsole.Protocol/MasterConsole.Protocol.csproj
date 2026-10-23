@@ -2,7 +2,7 @@
   <!-- 主从远程协议 v1 的 C# 实现（纯编解码 + 认证，不含网络收发）。
        权威定义：protocol/PROTOCOL.md。 -->
   <PropertyGroup>
-    <TargetFramework>net472</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <LangVersion>9.0</LangVersion>
     <RootNamespace>MasterConsole.Protocol</RootNamespace>
     <AssemblyName>MasterConsole.Protocol</AssemblyName>

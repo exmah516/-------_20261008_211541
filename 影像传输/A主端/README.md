@@ -1,14 +1,10 @@
 # 影像传输 A主端
 
-工程：工程/ImagingMaster/ImagingMaster.sln
+WPF net472/x64 + WebView2，常驻播放 DSA、监控 1、监控 2 三路 WebRTC。按钮只调整主画面，视频保持比例。
 
-当前职责：
+- 工程：`工程/ImagingMaster/ImagingMaster.sln`
+- 编译：`编译并启动主端.cmd`，完整部署包生成在 `运行`。
+- 部署配置：`运行/config/dsa_screencut.ini` 和 `运行/config/hik_cameras.ini`。
+- 运行机先安装 Microsoft Edge WebView2 Evergreen Runtime；整个运行包一并复制。
 
-- 接收 DSA JPEG 影像（UDP 36661、36663）；
-- 显示两路海康威视监控；
-- 支持 DSA 画面、监控1、监控2 的主画面切换；
-- 支持 DSA 影像快发/慢发命令。
-
-运行本目录的 编译并启动主端.cmd。现场设备地址在工程/config/hik_cameras.ini 和 dsa_screencut.ini 中配置。
-
-海康转发与截图发送均由 `影像传输/B数据端/ScreenCut` 承担。当前两路相机入口为数据端 `192.168.60.1:18000/18001`，快发命令目标为 `.60.1`；先启动影像 B，再启动本主端。
+旧 JPEG 接收器和海康 SDK 播放器已移除。端口、启动顺序和验证步骤见上级 `README.md`。

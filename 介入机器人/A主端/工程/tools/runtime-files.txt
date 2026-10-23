@@ -1,4 +1,13 @@
 FLCatheter.dll
+VI.Control.exe
+VI.Control.dll
+VI.Control.deps.json
+VI.Control.runtimeconfig.json
+VI.Service.Robot.dll
+Robotics.HostFramework.dll
+Robotics.HostFramework.Contracts.dll
+Modules/Features/VI.Module.Intervention.dll
+Modules/Features/VI.Module.PositioningArm.dll
 MasterConsole.Protocol.dll
 concrt140.dll
 msvcp140.dll

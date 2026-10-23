@@ -4,3 +4,9 @@
 ADS项目/x64/
 config/remote.token
 config/hik_cameras.ini
+.tools/
+.nuget-packages/
+.nuget-clean/
+.dotnet-home/
+build/
+!global.json

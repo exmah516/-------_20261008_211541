@@ -7,8 +7,8 @@ namespace MasterConsole.Protocol
     {
         /// <summary>主端 3 s 未收到触觉帧即把手柄力输出清零。</summary>
         public const int HapticTimeoutMs = 3000;
-        /// <summary>主端 3 s 未收到状态帧即视为数据过期。</summary>
-        public const int StatusTimeoutMs = 3000;
+        /// <summary>主端 2 s 未收到有效状态帧即视为数据过期。</summary>
+        public const int StatusTimeoutMs = 2000;
     }
 
     /// <summary>StatusFrame.flags 位定义。</summary>

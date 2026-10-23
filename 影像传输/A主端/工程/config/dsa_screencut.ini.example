@@ -1,12 +1,5 @@
-; 复制为 dsa_screencut.ini。以下是占位地址，现场只需改成真实 IP。
-; DSA 电脑点“持续传图”：两幅图均发往主端 36661；快发控制回到该电脑 36662。
+; 复制为 dsa_screencut.ini；IP 指向数据端媒体服务。
 screenCutIp=192.168.60.1
-; 另一台截图/心电电脑点“持续传图2”：发往主端 36663；控制回到该电脑 36664。
-; 没有另一台电脑可以留空；同一电脑运行两实例时填写同一个 IP。
-ecgScreenCutIp=192.168.50.4
-; 主端监听所有本机网卡；ScreenCut 界面的“主端IP”填写主端实际地址（部署示例 192.168.50.1）。
-listenPort0=36661
-listenPort1=36663
-commandPort0=36662
-commandPort1=36664
-maxJpegBytes=67108864
+webrtcPort=8889
+streamPath=stream_dsa
+; 旧 listenPort*/commandPort*/maxJpegBytes/ecgScreenCutIp 项可保留，但不再使用。

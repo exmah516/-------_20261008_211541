@@ -1,5 +1,5 @@
 ﻿[CmdletBinding()]
-param([switch]$SkipNetwork)
+param([switch]$SkipNetwork, [string]$DotnetPath = '')
 
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
@@ -39,15 +39,16 @@ Copy-Item -LiteralPath (Join-Path $sdk 'bin\zenohc.dll') -Destination $output -F
 if ($LASTEXITCODE -ne 0) { throw 'C++ 服务边界测试失败。' }
 
 $master = Join-Path $package '介入机器人\A主端\工程\master'
+if (!$DotnetPath) { $DotnetPath = & (Join-Path $master '../tools/Get-ViDotnet.ps1') }
 $tests = Join-Path $master 'MasterConsole.Protocol.Tests\MasterConsole.Protocol.Tests.csproj'
-& dotnet build $tests -v:minimal
+& $DotnetPath build $tests -v:minimal -p:Platform=x64 -m:1
 if ($LASTEXITCODE -ne 0) { throw 'C# 测试工程编译失败。' }
-$testExe = Join-Path $master 'MasterConsole.Protocol.Tests\bin\Debug\net472\MasterConsole.Protocol.Tests.exe'
+$testExe = Join-Path $master '../build/Debug/bin/MasterConsole.Protocol.Tests/MasterConsole.Protocol.Tests.exe'
 if ($SkipNetwork) {
     & $testExe $fixtures
 } else {
     & $testExe $fixtures --network --simulator (Join-Path $output 'simulated_ads.exe') --router (Join-Path $package 'zenoh\zenohd.exe')
 }
 if ($LASTEXITCODE -ne 0) { throw 'C# 协议或原生跨语言通信测试失败。' }
-Write-Host 'Zenoh 离线验证全部通过。'
+Write-Host 'Zenoh 本地验证全部通过。'
 
