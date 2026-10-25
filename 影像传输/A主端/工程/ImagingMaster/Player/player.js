@@ -45,12 +45,13 @@
         s.error = "";
         s.cover.title = "";
         s.receiver = event.receiver;
-        // 浏览器仍需处理包重排；目标为最小延迟，并不承诺物理上的零缓冲。
-        try { if ("jitterBufferTarget" in s.receiver) s.receiver.jitterBufferTarget = 0; } catch (_) { }
-        try { if ("playoutDelayHint" in s.receiver) s.receiver.playoutDelayHint = 0; } catch (_) { }
+        // 接收缓冲目标为 1 秒，用更多等待时间吸收弱网抖动。
+        try { if ("jitterBufferTarget" in s.receiver) s.receiver.jitterBufferTarget = 1000; } catch (_) { }
+        try { if ("playoutDelayHint" in s.receiver) s.receiver.playoutDelayHint = 1.0; } catch (_) { }
         s.lastDecoded = performance.now();
         s.decodedFrames = 0;
         s.previousCount = s.previousDelay = 0;
+        s.previousBytes = s.previousTimestamp = s.previousFrames = 0;
         s.stats = {};
         s.video.srcObject = new MediaStream([event.track]);
         s.video.play().catch(error => { s.error = String(error); });
@@ -79,10 +80,14 @@
         const localCandidate = report.get(pair?.localCandidateId);
         const remoteCandidate = report.get(pair?.remoteCandidateId);
         const decodedFrames = r.framesDecoded || 0;
+        const intervalMs = r.timestamp - (s.previousTimestamp || r.timestamp);
         if (decodedFrames > s.decodedFrames) s.lastDecoded = performance.now();
         s.decodedFrames = decodedFrames;
         s.stats = {
           framesDecoded: decodedFrames,
+          fps: intervalMs > 0 ? 1000 * Math.max(0, decodedFrames - s.previousFrames) / intervalMs : 0,
+          bitrateKbps: intervalMs > 0 ? 8 * Math.max(0, (r.bytesReceived || 0) - s.previousBytes) / intervalMs : 0,
+          rttMs: pair?.currentRoundTripTime === undefined ? null : pair.currentRoundTripTime * 1000,
           packetsLost: r.packetsLost || 0,
           nackCount: r.nackCount || 0,
           codec: codec?.mimeType || "",
@@ -93,6 +98,9 @@
         };
         s.previousCount = r.jitterBufferEmittedCount || 0;
         s.previousDelay = r.jitterBufferDelay || 0;
+        s.previousBytes = r.bytesReceived || 0;
+        s.previousTimestamp = r.timestamp;
+        s.previousFrames = decodedFrames;
       });
     } catch (_) { /* 已关闭的连接下一轮会恢复。 */ }
     finally {

@@ -38,6 +38,10 @@ try {
         $oldIni = Join-Path $PSScriptRoot '../A主端/工程/config/hik_cameras.ini'
         if (!(Test-Path -LiteralPath $oldIni)) { $oldIni = Join-Path $PSScriptRoot 'config/hik_cameras.ini.example' }
         Copy-Item -LiteralPath $oldIni -Destination $cameraIni
+        # 首次迁移凭据时选择子码流；不继承旧 SDK 的高码率主码流选择。
+        $cameraText = [IO.File]::ReadAllText($cameraIni,[Text.Encoding]::UTF8)
+        $cameraText = [regex]::Replace($cameraText, '(?m)^(stream\s*=\s*)0\s*$', '${1}1')
+        [IO.File]::WriteAllText($cameraIni,$cameraText,[Text.UTF8Encoding]::new($false))
     }
     $settings = [Xml.XmlWriterSettings]::new(); $settings.Encoding = [Text.UTF8Encoding]::new($false); $settings.Indent = $true
     $writer = [Xml.XmlWriter]::Create($deployedConfig,$settings)

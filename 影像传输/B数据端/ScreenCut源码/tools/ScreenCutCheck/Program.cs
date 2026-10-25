@@ -18,6 +18,8 @@ using ScreenCut;
 internal static class Program
 {
     private static int _checks, _exitCode;
+    private static bool _bandwidthOnly;
+    private static bool _legacyBandwidth;
     private static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
     private static readonly string Work = Path.Combine(Path.GetTempPath(), "VI.Imaging.Check-" + Guid.NewGuid().ToString("N"));
     private static readonly List<Process> Children = new List<Process>();
@@ -32,15 +34,18 @@ internal static class Program
         throw new Exception("Not rejected: " + message);
     }
     [STAThread]
-    public static int Main()
+    public static int Main(string[] args)
     {
+        if (args.Contains("--logging")) return LoggingCheck.Run();
+        _legacyBandwidth = args.Contains("--legacy-bandwidth");
+        _bandwidthOnly = _legacyBandwidth || args.Contains("--bandwidth");
         Directory.CreateDirectory(Work);
         var app = new Application();
         var view = new WebView2();
         var window = new Window { Title = "影像 WebRTC 回环验证（自动关闭）", Width = 900, Height = 620, Content = view };
         window.Loaded += async (s, e) => {
             try { await RunAsync(view); Console.WriteLine("ALL " + _checks + " CHECKS PASSED"); }
-            catch (Exception ex) { _exitCode = 1; Console.Error.WriteLine("FAIL " + ex); }
+            catch (Exception ex) { _exitCode = 1; Console.WriteLine("FAIL " + ex); }
             finally {
                 foreach (var p in Children) Stop(p);
                 view.Dispose(); window.Close();
@@ -55,6 +60,10 @@ internal static class Program
             ["MasterIp"] = "127.0.0.1", ["RelayListenIp"] = "127.0.0.1",
             ["WebRtcPort"] = "38889", ["WebRtcMediaPort"] = "38189", ["LocalRtspPort"] = "38554", ["LocalApiPort"] = "39997"
         };
+        if (_legacyBandwidth) {
+            values["VideoWidth"] = "1280"; values["VideoHeight"] = "720";
+            values["VideoFps"] = "30"; values["VideoBitrateKbps"] = "2500";
+        }
         for (int i = 1; i <= 2; i++) {
             values["Camera" + i + "Ip"] = "127.0.0.1";
             values["Camera" + i + "LocalIp"] = "127.0.0." + (i + 1);
@@ -97,11 +106,15 @@ internal static class Program
     {
         var settings = TestSettings();
         Reject(() => StreamingSettings.Load(new NameValueCollection { ["MasterIp"] = "0.0.0.0" }), "invalid IP rejected");
-        Reject(() => StreamingSettings.Load(new NameValueCollection { ["VideoBitrateKbps"] = "9999" }), "bitrate outside 2–3Mbps rejected");
+        Reject(() => StreamingSettings.Load(new NameValueCollection { ["VideoBitrateKbps"] = "9999" }), "bitrate outside 128–3000 kbps rejected");
+        Reject(() => StreamingSettings.Load(new NameValueCollection { ["VideoWidth"] = "961" }), "odd H.264 size rejected");
+        Reject(() => StreamingSettings.Load(new NameValueCollection { ["VideoFps"] = "0" }), "invalid frame rate rejected");
+        var defaults = StreamingSettings.Load(new NameValueCollection());
+        Check(defaults.VideoWidth == 960 && defaults.VideoHeight == 540 && defaults.VideoFps == 25 && defaults.BitrateKbps == 512, "default DSA fits shared 2 Mbps budget");
         Reject(() => StreamingSettings.Load(new NameValueCollection { ["WebRtcMediaPort"] = "8889" }), "ICE TCP and signaling port conflict rejected");
         Reject(() => StreamingSettings.ValidateRegion(int.MaxValue, 0, int.MaxValue, 10, new Rectangle(0, 0, 1920, 1080)), "overflowing crop rejected");
         Check(StreamingSettings.ValidateRegion(-100, 0, 100, 100, new Rectangle(-100, 0, 2020, 1080)).X == -100, "negative multi-monitor coordinates retained");
-        Check(settings.FfmpegArguments(new Rectangle(0,0,640,480)).Contains("-bf 0") && settings.FfmpegArguments(new Rectangle()).Contains("-g 30"), "H.264 zero B-frame/GOP30 settings");
+        Check(defaults.FfmpegArguments(new Rectangle(0,0,640,480)).Contains("-bf 0") && defaults.FfmpegArguments(new Rectangle()).Contains("-g 25"), "H.264 zero B-frame and one-second GOP settings");
         Check(!StreamingHost.Redact("rtsp://camera:p%40ss@host/test").Contains("p%40ss"), "RTSP credentials redacted");
         string privateIni = Path.Combine(Work, "camera-source.ini");
         File.WriteAllText(privateIni, "[camera1]\nusername=camera\npassword=a=b@c#d\nstream=1\nchannel=1\n", Encoding.UTF8);
@@ -144,8 +157,13 @@ paths:
         var cameras = Spawn("mediamtx.exe", "\"" + cameraConfig + "\"");
         await Task.Delay(1000);
         Check(!cameras.HasExited, "RTSP camera simulator started");
-        var cam1 = Spawn("ffmpeg.exe", settings.FfmpegArguments(new Rectangle(), true).Replace("127.0.0.1:38554/stream_dsa", "127.0.0.1:38555/Streaming/Channels/101"));
-        var cam2 = Spawn("ffmpeg.exe", settings.FfmpegArguments(new Rectangle(), true).Replace("127.0.0.1:38554/stream_dsa", "127.0.0.1:38555/Streaming/Channels/201"));
+        // 模拟相机已在设备侧设为低码率；基线仅 DSA 仍用原来的 2500 kbps。
+        var cameraSettings = TestSettings();
+        cameraSettings.VideoWidth = 640; cameraSettings.VideoHeight = 360; cameraSettings.BitrateKbps = 128; cameraSettings.VideoFps = 15;
+        string cameraArgs = cameraSettings.FfmpegArguments(new Rectangle(), true);
+        var cam1 = Spawn("ffmpeg.exe", cameraArgs.Replace("127.0.0.1:38554/stream_dsa", "127.0.0.1:38555/Streaming/Channels/101"));
+        var cam2 = Spawn("ffmpeg.exe", cameraArgs.Replace("127.0.0.1:38554/stream_dsa", "127.0.0.1:38555/Streaming/Channels/201"));
+        if (_bandwidthOnly) { await BandwidthAsync(view, settings); return; }
         using (var host = new StreamingHost(settings))
         using (var player = new WebRtcPlayer(view))
         {
@@ -154,7 +172,9 @@ paths:
             await player.InitializeAsync(Endpoints(), Path.Combine(Work, "WebView2"));
             await UntilAsync(async () => Streams(await Snapshot(player)).All(s => N(s, "framesDecoded") > 20 && !(bool)s["stale"]), "three H.264 WebRTC streams decoded (camera RTSP authentication + source binding)");
             var before = Streams(await Snapshot(player));
-            Check(before.All(s => N(s, "width") == 1280 && N(s, "height") == 720 && (string)s["objectFit"] == "contain"), "all video preserves aspect ratio");
+            Check(N(before[0], "width") == 960 && N(before[0], "height") == 540 &&
+                before.Skip(1).All(s => N(s, "width") == 640 && N(s, "height") == 360) &&
+                before.All(s => (string)s["objectFit"] == "contain"), "all video preserves aspect ratio");
             Check(before.All(s => (string)s["codec"] == "video/H264"), "all negotiated video codecs H.264");
             await player.SelectAsync("camera1"); await Task.Delay(1200);
             await player.SelectAsync("camera2"); await Task.Delay(1200);
@@ -207,9 +227,9 @@ paths:
                 Check((string)weakAfter["protocol"] == "udp", "weak-network test cannot bypass packet injection using TCP");
                 Console.WriteLine("WEAK_NETWORK " + Json.Serialize(weakAfter) + " dropped=" + proxy.Dropped + " forwarded=" + proxy.Forwarded);
                 proxy.Paused = true;
-                await UntilAsync(async () => (bool)Streams(await Snapshot(player))[0]["stale"], "4.5-second media interruption hides old video", 10);
+                await UntilAsync(async () => (bool)Streams(await Snapshot(player))[0]["stale"], "short media interruption hides old video", 10);
                 var interrupted = Streams(await Snapshot(player))[0];
-                Check(N(interrupted,"generation") == N(weakAfter,"generation"), "4.5-second media interruption hides old video without destroying the connection");
+                Check(N(interrupted,"generation") == N(weakAfter,"generation"), "short media interruption hides old video without destroying the connection");
                 proxy.Paused = false;
                 await UntilAsync(async () => {
                     var recovered = Streams(await Snapshot(player))[0];
@@ -241,6 +261,85 @@ paths:
             Stop(tcpEncoder); Stop(tcpMedia);
         }
         Check(!Children.Any(p => !p.HasExited), "owned test processes stopped");
+    }
+    private static async Task BandwidthAsync(WebView2 view, StreamingSettings settings)
+    {
+        using (var source1 = new BoundRtspSource(settings.Cameras[0], Console.WriteLine))
+        using (var source2 = new BoundRtspSource(settings.Cameras[1], Console.WriteLine))
+        using (var player = new WebRtcPlayer(view))
+        {
+            var budget = new SharedBottleneck(2000000);
+            string config = Path.Combine(Work, "bandwidth.yml");
+            File.WriteAllText(config, settings.MediaMtxConfig(new[] {source1.Port, source2.Port})
+                .Replace("webrtcLocalTCPAddress: 127.0.0.1:38189", "webrtcLocalTCPAddress: ''")
+                .Replace("webrtcAdditionalHosts: [127.0.0.1]", "webrtcAdditionalHosts: [127.0.0.2]"), new UTF8Encoding(false));
+            using (var proxy = new WeakUdpProxy(settings.MediaPort, budget))
+            {
+                var media = Spawn("mediamtx.exe", "\"" + config + "\""); await Task.Delay(1000);
+                var encoder = Spawn("ffmpeg.exe", settings.FfmpegArguments(new Rectangle(), true));
+                await player.InitializeAsync(Endpoints(), Path.Combine(Work, "WebView2-bandwidth"));
+                await Task.Delay(10000);
+                var before = Streams(await Snapshot(player));
+                var previous = before;
+                var counts = new int[3];
+                var presented = new int[3];
+                var buffers = new List<double>();
+                int staleSamples = 0; bool stable = true;
+                long overflowBefore = budget.Overflow, bytesBefore = budget.AcceptedBytes;
+                var watch = Stopwatch.StartNew();
+                // 100 Hz、双向各 200 字节探针与三路视频争用同一限速队列。
+                // 只模拟控制流量，不连接 ADS/PLC，不代表真实机器人联调。
+                var probe = Task.Run(async () => {
+                    int sent = 0, lost = 0; var queued = new List<int>();
+                    var clock = Stopwatch.StartNew();
+                    while (clock.ElapsedMilliseconds < 30000) {
+                        while (sent / 2 <= clock.ElapsedMilliseconds / 10) {
+                          for (int direction = 0; direction < 2; direction++) {
+                            int delay = budget.Reserve(200); sent++;
+                            if (delay < 0) lost++; else queued.Add(delay);
+                          }
+                        }
+                        long next = sent / 2 * 10;
+                        await Task.Delay((int)Math.Max(1, next - clock.ElapsedMilliseconds));
+                    }
+                    queued.Sort();
+                    return new { sent, lost, queueP95Ms = queued.Count == 0 ? 0 : queued[(int)((queued.Count - 1) * .95)] };
+                });
+                for (int i = 0; i < 30; i++) {
+                    await Task.Delay(1000); var current = Streams(await Snapshot(player));
+                    for (int j = 0; j < 3; j++) {
+                        bool same = N(current[j], "generation") == N(previous[j], "generation");
+                        stable &= same;
+                        counts[j] += same ? Math.Max(0, N(current[j], "framesDecoded") - N(previous[j], "framesDecoded")) : 0;
+                        presented[j] += same ? Math.Max(0, N(current[j], "presented") - N(previous[j], "presented")) : 0;
+                        if (current[j].ContainsKey("jitterBufferMs")) buffers.Add(Convert.ToDouble(current[j]["jitterBufferMs"]));
+                        if ((bool)current[j]["stale"]) staleSamples++;
+                    }
+                    previous = current;
+                }
+                var probes = await probe;
+                double seconds = watch.Elapsed.TotalSeconds;
+                var fps = counts.Select(n => Math.Round(n / seconds, 2)).ToArray();
+                var displayFps = presented.Select(n => Math.Round(n / seconds, 2)).ToArray();
+                buffers.Sort();
+                double bufferP95 = buffers.Count == 0 ? 0 : buffers[(int)((buffers.Count - 1) * .95)];
+                double admittedKbps = (budget.AcceptedBytes - bytesBefore) * .008 / seconds;
+                string report = Json.Serialize(new { dsaKbps = settings.BitrateKbps, cameraKbps = 128,
+                    limitKbps = 2000, fps, displayFps, jitterBufferP95Ms = Math.Round(bufferP95, 2), stable, staleSamples, probes,
+                    overflow = budget.Overflow - overflowBefore,
+                    admittedKbps = Math.Round(admittedKbps, 2),
+                    streams = previous });
+                Console.WriteLine("BANDWIDTH_2MBPS " + report);
+                string output = Environment.GetEnvironmentVariable("IMAGING_TEST_OUTPUT");
+                if (!string.IsNullOrEmpty(output)) File.WriteAllText(Path.Combine(output, "bandwidth-" + settings.BitrateKbps + ".json"), report, Encoding.UTF8);
+                Check(fps[0] >= 18 && fps[1] >= 10 && fps[2] >= 10 && stable && staleSamples == 0, "2 Mbps shared link sustains three videos without reconnecting");
+                Check(previous.All(s => s.ContainsKey("protocol") && (string)s["protocol"] == "udp"), "all three streams traverse shared UDP bottleneck");
+                Check(probes.lost == 0 && probes.queueP95Ms < 100, "100 Hz bidirectional probe retains bandwidth and queue headroom");
+                Check(admittedKbps < 1800 && displayFps[0] >= 12 && displayFps.Skip(1).All(f => f >= 8) && bufferP95 < 1300,
+                    "rendered video stays live with bandwidth margin and bounded receiver buffering");
+                Stop(encoder); Stop(media);
+            }
+        }
     }
     private static async Task BoundSocketCheckAsync()
     {
@@ -276,7 +375,7 @@ paths:
                 if(!await Task.Run(()=>probe.WaitForExit(1000))) { probe.Kill();throw new TimeoutException("ffprobe timeout"); }
             }
             string data=await text;
-            Check(data.Contains("codec_name=h264") && data.Contains("has_b_frames=0") && data.Contains("width=1280") && data.Contains("height=720") && data.Contains("r_frame_rate=30/1"), "ffprobe validates real desktop H.264, 720p30, no B-frames");
+            Check(data.Contains("codec_name=h264") && data.Contains("has_b_frames=0") && data.Contains("width=960") && data.Contains("height=540") && data.Contains("r_frame_rate=25/1"), "ffprobe validates real desktop H.264, 540p25, no B-frames");
         }
     }
 }

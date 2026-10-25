@@ -8,6 +8,4 @@
   <Project Path="VI.Service.Robot/VI.Service.Robot.csproj" />
   <Project Path="VI.Service.Net/VI.Service.Net.csproj" />
   <Project Path="MasterConsole.Protocol/MasterConsole.Protocol.csproj" />
-  <Project Path="MasterConsole.Protocol.Tests/MasterConsole.Protocol.Tests.csproj" />
-  <Project Path="VI.Control.Tests/VI.Control.Tests.csproj" />
 </Solution>

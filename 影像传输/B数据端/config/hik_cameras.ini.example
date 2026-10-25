@@ -1,13 +1,14 @@
 ; 复制到运行包 config/hik_cameras.ini；密码只保存在本机，不会写入日志。
 ; 设备 IP、RTSP 端口、网口地址仍在 ScreenCut.exe.config 中。
+; stream=1 选择子码流；还需在相机自身设置 H.264 / 128 kbps CBR / 15fps。
 [camera1]
 username=admin
 password=
 channel=1
-stream=0
+stream=1
 
 [camera2]
 username=admin
 password=
 channel=1
-stream=0
+stream=1

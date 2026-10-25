@@ -22,7 +22,7 @@ namespace ScreenCut
     public sealed class StreamingSettings
     {
         public string MasterIp, ListenIp;
-        public int WebRtcPort, MediaPort, RtspPort, ApiPort, VideoWidth, VideoHeight, BitrateKbps;
+        public int WebRtcPort, MediaPort, RtspPort, ApiPort, VideoWidth, VideoHeight, VideoFps, BitrateKbps;
         public readonly CameraSettings[] Cameras = new CameraSettings[2];
 
         public static StreamingSettings Load(NameValueCollection values = null, string cameraIniPath = null)
@@ -43,12 +43,13 @@ namespace ScreenCut
                 MediaPort = Number("WebRtcMediaPort", 8189, 1024, 65535),
                 RtspPort = Number("LocalRtspPort", 8554, 1024, 65535),
                 ApiPort = Number("LocalApiPort", 9997, 1024, 65535),
-                VideoWidth = Number("VideoWidth", 1280, 720, 1920),
-                VideoHeight = Number("VideoHeight", 720, 720, 1080),
-                BitrateKbps = Number("VideoBitrateKbps", 2500, 2000, 3000)
+                VideoWidth = Number("VideoWidth", 960, 320, 1920),
+                VideoHeight = Number("VideoHeight", 540, 180, 1080),
+                VideoFps = Number("VideoFps", 25, 10, 30),
+                BitrateKbps = Number("VideoBitrateKbps", 512, 128, 3000)
             };
-            if (!((s.VideoWidth == 1280 && s.VideoHeight == 720) || (s.VideoWidth == 1920 && s.VideoHeight == 1080)))
-                throw new ConfigurationErrorsException("视频尺寸只支持 1280×720 或 1920×1080。");
+            if ((s.VideoWidth & 1) != 0 || (s.VideoHeight & 1) != 0)
+                throw new ConfigurationErrorsException("H.264 视频宽高必须为偶数。");
             if (new System.Collections.Generic.HashSet<int> { s.WebRtcPort, s.MediaPort, s.RtspPort, s.ApiPort }.Count != 4)
                 throw new ConfigurationErrorsException("四个 TCP 服务端口不可相同。");
             for (int i = 0; i < 2; i++)
@@ -62,7 +63,7 @@ namespace ScreenCut
                     LocalIp = Ipv4(Get(p + "LocalIp", i == 0 ? "192.168.1.96" : "192.168.1.97")),
                     Username = Get(p + "Username", "admin"), Password = Get(p + "Password", ""),
                     RtspPort = Number(p + "RtspPort", 554, 1, 65535),
-                    Channel = Number(p + "RtspChannel", 101, 101, 99999)
+                    Channel = Number(p + "RtspChannel", 102, 101, 99999)
                 };
                 if (readCameraIni) ReadCameraCredentials(s.Cameras[i], i + 1, cameraIniPath);
             }
@@ -130,15 +131,15 @@ namespace ScreenCut
 
         public string FfmpegArguments(Rectangle region, bool testPattern = false)
         {
-            string input = testPattern ? "-re -f lavfi -i testsrc2=size=1280x720:rate=30 " :
-                "-f gdigrab -framerate 30 -draw_mouse 0 -offset_x " + region.X + " -offset_y " + region.Y +
+            string input = testPattern ? "-re -f lavfi -i testsrc2=size=" + VideoWidth + "x" + VideoHeight + ":rate=" + VideoFps + " " :
+                "-f gdigrab -framerate " + VideoFps + " -draw_mouse 0 -offset_x " + region.X + " -offset_y " + region.Y +
                 " -video_size " + region.Width + "x" + region.Height + " -i desktop ";
             return "-hide_banner -loglevel warning -nostats -nostdin " + input +
                 "-an -vf \"scale=" + VideoWidth + ":" + VideoHeight + ":force_original_aspect_ratio=decrease:force_divisible_by=2," +
                 "pad=" + VideoWidth + ":" + VideoHeight + ":(ow-iw)/2:(oh-ih)/2,format=yuv420p\" " +
-                "-c:v libx264 -preset ultrafast -tune zerolatency -profile:v baseline -level:v 4.0 " +
+                "-c:v libx264 -preset veryfast -tune zerolatency -threads 2 -profile:v baseline -level:v 4.0 " +
                 "-b:v " + BitrateKbps + "k -minrate " + BitrateKbps + "k -maxrate " + BitrateKbps + "k -bufsize " + (BitrateKbps / 10) + "k " +
-                "-g 30 -keyint_min 30 -bf 0 -x264-params \"nal-hrd=cbr:force-cfr=1:scenecut=0\" " +
+                "-g " + VideoFps + " -keyint_min " + VideoFps + " -bf 0 -x264-params \"nal-hrd=cbr:force-cfr=1:scenecut=0\" " +
                 "-flush_packets 1 -muxdelay 0 -rtsp_transport tcp -f rtsp rtsp://127.0.0.1:" + RtspPort + "/stream_dsa";
         }
 

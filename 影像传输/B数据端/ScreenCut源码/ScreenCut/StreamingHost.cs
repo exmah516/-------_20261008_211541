@@ -15,7 +15,7 @@ namespace ScreenCut
     public sealed class StreamingHost : IDisposable
     {
         private readonly StreamingSettings _settings;
-        private readonly object _gate = new object(), _logGate = new object();
+        private readonly object _gate = new object();
         private readonly CancellationTokenSource _stop = new CancellationTokenSource();
         private readonly BoundRtspSource[] _sources = new BoundRtspSource[2];
         private readonly string _work;
@@ -23,7 +23,7 @@ namespace ScreenCut
         private Rectangle? _region;
         private bool _testPattern, _started, _disposed;
         public event Action<string> Status;
-        public string LogPath { get; }
+        public string LogPath => StreamingLog.LogPath;
 
         public StreamingHost(StreamingSettings settings)
         {
@@ -35,8 +35,6 @@ namespace ScreenCut
             acl.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User, FileSystemRights.FullControl,
                 InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
             Directory.CreateDirectory(_work, acl);
-            Directory.CreateDirectory(Path.Combine(root, "logs"));
-            LogPath = Path.Combine(root, "logs", "streaming.log");
         }
 
         public async Task StartAsync()
@@ -95,7 +93,7 @@ namespace ScreenCut
                 _region = region; _testPattern = testPattern;
                 _encoder = StartChild("ffmpeg.exe", _settings.FfmpegArguments(region, testPattern));
             }
-            Log("DSA H.264 已启动：" + _settings.VideoWidth + "×" + _settings.VideoHeight + "，30fps，" + _settings.BitrateKbps + "kbps");
+            Log("DSA H.264 已启动：" + _settings.VideoWidth + "×" + _settings.VideoHeight + "，" + _settings.VideoFps + "fps，" + _settings.BitrateKbps + "kbps");
         }
         public void StopDsa() { lock (_gate) { _region = null; StopChild(ref _encoder); } }
 
@@ -140,8 +138,8 @@ namespace ScreenCut
                 UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = _work,
                 RedirectStandardError = true, RedirectStandardOutput = true
             } };
-            p.ErrorDataReceived += (s, e) => { if (e.Data != null) Log(e.Data); };
-            p.OutputDataReceived += (s, e) => { if (e.Data != null) Log(e.Data); };
+            p.ErrorDataReceived += (s, e) => { if (e.Data != null) Log("[" + filename + "] " + e.Data); };
+            p.OutputDataReceived += (s, e) => { if (e.Data != null) Log("[" + filename + "] " + e.Data); };
             if (!p.Start()) throw new IOException("无法启动 " + filename);
             p.BeginErrorReadLine(); p.BeginOutputReadLine();
             return p;
@@ -149,17 +147,7 @@ namespace ScreenCut
         public static string Redact(string line) => Regex.Replace(line, @"rtsp://[^\s/]*@", "rtsp://***@", RegexOptions.IgnoreCase);
         private void Log(string text)
         {
-            text = Redact(text);
-            lock (_logGate)
-            {
-                try
-                {
-                    if (File.Exists(LogPath) && new FileInfo(LogPath).Length > 2 * 1024 * 1024)
-                        File.WriteAllText(LogPath, "", Encoding.UTF8);
-                    File.AppendAllText(LogPath, DateTime.Now.ToString("HH:mm:ss ") + text + Environment.NewLine, Encoding.UTF8);
-                }
-                catch (IOException) { }
-            }
+            text = StreamingLog.Write(text);
             Status?.Invoke(text);
         }
         private static void StopChild(ref Process process)
