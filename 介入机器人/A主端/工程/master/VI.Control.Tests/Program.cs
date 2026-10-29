@@ -99,6 +99,37 @@ internal static class Program
         Check(holdVm.CanOperate, "fresh authorized fake state unlocks hold controls");
         Check(holdVm.Force582F == "0.120 N" && holdVm.Force582N == "25.000 N·mm" && holdVm.Force587F == "0.300 N" && holdVm.Force587N == "-9.000 N·mm", "all four readouts preserve force and torque units");
         var holdIntervention = (UserControl)Activator.CreateInstance(intervention.GetType(), holdVm)!;
+        var windowProgress = (ProgressBar)holdIntervention.FindName("Axis6WindowProgress")!;
+        foreach (var (position, expectedPercent, near) in new[] { (117f, 50.0, false), (102f, 3.125, true), (132f, 96.875, true), (101f, 0.0, true), (133f, 100.0, true) })
+        {
+            recordingLink.PublishWindow(position, 101, 133);
+            Pump();
+            Check(holdVm.Axis6WindowAvailable && Math.Abs(windowProgress.Value - expectedPercent) < 0.001 &&
+                holdVm.Axis6WindowNearBoundary == near, "window position and both boundary warnings use live read-only feedback");
+            Check(holdVm.Axis6WindowWarning == (near ? "接近导丝机构窗口位置，将要触发机构快退" : ""), "window warning has exactly the requested wording");
+            Check(holdVm.CanOperate && recordingLink.StopArmCount == 0 && recordingLink.DisconnectCount == 0,
+                "window warning does not stop motion or change operation availability");
+        }
+        recordingLink.PublishWindow(627, 611, 643);
+        Pump();
+        Check(holdVm.Axis6WindowPositionText == "16.0 / 32.0 mm" && holdVm.Axis6WindowPercent == 50,
+            "moving axis5 window keeps axis6 relative position unchanged");
+        recordingLink.PublishWindow(627, 0, 0);
+        Pump();
+        Check(!holdVm.Axis6WindowAvailable && holdVm.Axis6WindowWarning == "", "unavailable window does not show a false boundary warning");
+        recordingLink.PublishWindow(float.NaN, 611, 643);
+        Pump();
+        Check(!holdVm.Axis6WindowAvailable && windowProgress.Value == 0, "nonfinite position cannot reach the progress control");
+        recordingLink.PublishWindow(627, 611, 643);
+        recordingLink.StatusAgeMs = ProtocolConstants.StatusTimeoutMs;
+        Pump();
+        Check(!holdVm.Axis6WindowAvailable && holdVm.Axis6WindowWarning == "", "expired telemetry clears the position warning");
+        recordingLink.StatusAgeMs = 0;
+        recordingLink.SetConnected(false, false);
+        Pump();
+        Check(!holdVm.Axis6WindowAvailable && windowProgress.Value == 0, "disconnect clears the position display");
+        recordingLink.SetConnected(true, true);
+        Pump();
         var injector = (Button)holdIntervention.FindName("Injector1Push")!;
         Invoke(holdIntervention, "HoldButton_Down", injector, MouseArgs(injector));
         Invoke(holdIntervention, "HoldButton_Up", injector, new RoutedEventArgs(UIElement.PreviewMouseLeftButtonUpEvent));
@@ -139,6 +170,13 @@ internal static class Program
         closeRegion.RegisterPanel(new("intervention", "介入控制", 10), () => holdIntervention);
         closeRegion.RegisterPanel(new("positioning-arm", "定位臂控制", 20), () => holdArm);
         var closeWindow = new MainWindow(closeRegion, holdVm, selection);
+        recordingLink.PublishWindow(102, 101, 133);
+        Pump();
+        var compactSize = new Size(600, 560);
+        ((FrameworkElement)closeWindow.Content).Measure(compactSize);
+        ((FrameworkElement)closeWindow.Content).Arrange(new Rect(new Point(), compactSize));
+        closeWindow.UpdateLayout();
+        SaveScreenshot(closeWindow, compactSize, 1, Path.Combine(outputDirectory, "vi-control-window-warning-600x560.png"));
         ((FrameworkElement)closeWindow.Content).Measure(new Size(1000, 900));
         ((FrameworkElement)closeWindow.Content).Arrange(new Rect(0, 0, 1000, 900));
         closeWindow.UpdateLayout();
@@ -259,6 +297,18 @@ public class RecordingRobotLink : DispatchProxy
     public int StopArmCount { get; private set; }
     public int DisconnectCount { get; private set; }
     public CommandResult AcquireResult { get; set; } = CommandResult.Done();
+    public double StatusAgeMs { get; set; }
+
+    public void PublishWindow(float position, float start, float end)
+    {
+        _events.TryGetValue("StatusReceived", out Delegate? handler);
+        ((EventHandler<StatusFrame>?)handler)?.Invoke(this, new StatusFrame
+        {
+            Flags = StatusFlags.LeaseHeld | StatusFlags.AdsHealthy | StatusFlags.ControlActive,
+            AxisPos = new float[7], AxisFromLeft = new[] { 0f, 0f, 0f, 0f, 0f, position, 0f },
+            Axis6WindowStartFromLeftMm = start, Axis6WindowEndFromLeftMm = end
+        });
+    }
 
     public void SetConnected(bool connected, bool control)
     {
@@ -294,7 +344,7 @@ public class RecordingRobotLink : DispatchProxy
         if (name == "get_Name") return "Test link";
         if (name == "get_IsConnected") return _connected;
         if (name == "get_HasControl") return _control;
-        if (name == "GetStats") return new LinkStats { StatusAgeMs = 0 };
+        if (name == "GetStats") return new LinkStats { StatusAgeMs = StatusAgeMs };
         if (name == "ConnectAsync") { SetConnected(true, false); return Task.CompletedTask; }
         if (name == "Disconnect") { DisconnectCount++; SetConnected(false, false); return null; }
         if (name == "AcquireControlAsync") return Task.FromResult(AcquireResult);

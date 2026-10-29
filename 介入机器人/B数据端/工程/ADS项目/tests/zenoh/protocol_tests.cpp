@@ -104,6 +104,7 @@ namespace
         f.has_net_distance = true; f.axis1_net_distance_mm = 12.25; f.axis6_net_distance_mm = -3.125;
         f.prepare_task_state = 2; f.prepare_task_command_id = 40; f.start_task_state = 1; f.start_task_command_id = 41;
         f.results = { {39, 0, ""}, {38, 1, u8"拒绝"} }; f.event_text = "ready";
+        f.axis6_window_start_from_left_mm = 16; f.axis6_window_end_from_left_mm = 48;
         return f;
     }
     vi_protocol::ForceFrame new_force()

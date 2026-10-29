@@ -407,14 +407,14 @@ static void test_constraints() {
         require(close(r.follow.a5-p.a5,x),"axis5 mirrors accepted catheter displacement");
         require(g>=std::min(1.,gap)-1e-7 && g<=std::max(33.,gap)+1e-7,"joint gap bound and outside recovery");
         require(r.follow.a1>=std::min(5.,a1)-1e-7 && r.follow.a1<=std::max(30.,a1)+1e-7,"axis1 bounds without extensions");
-        require(r.follow.a6<=std::max(p.a6,670.)+1e-7,"absolute axis6 soft limit");
+        require(r.follow.a6<=std::max(p.a6,660.)+1e-7,"absolute axis6 soft limit");
         if (r.leg1) require(rev?r.target1<p.a1:r.target1>p.a1,"axis1 handoff cannot oppose global mode");
         if (r.leg6 && !rev && r.target6<p.a6-1e-7)
-            require((d1<0 && g>28.) || close(r.target6,670.),"delivery far-to-near is passive relief or absolute soft limit");
+            require((d1<0 && g>28.) || close(r.target6,660.),"delivery far-to-near is passive relief or absolute soft limit");
         if (r.leg6 && rev && r.target6>p.a6+1e-7)
             require(d1>0 && g<6.,"retraction near-to-far is only passive catheter relief");
         if (d1==0) require(!r.leg1,"stationary catheter cannot be pulled into wire handoff");
-        if (r.leg6) require(r.target6<=670.0+1e-7,"handoff target soft limit");
+        if (r.leg6) require(r.target6<=660.0+1e-7,"handoff target soft limit");
         ++n;
     }
     std::cout << "PASS " << n << " boundary/input combinations\n";
@@ -531,10 +531,10 @@ static void test_axis4_direction_independence() {
         require(returns==2,"按住轴4点动在快速换端和重建基准后继续下一轮");
     }
     for(bool reverse:{false,true}) {
-        auto r=tick({18,650,670},0,0,reverse,1);
-        require(!r.transaction&&r.follow.a6<=670,"轴4后退不能突破轴6软限位去触发窗口换手");
+        auto r=tick({18,650,660},0,0,reverse,1);
+        require(!r.transaction&&r.follow.a6<=660,"轴4后退不能突破轴6软限位去触发窗口换手");
         r=tick({18,650,651},0,0,reverse,-1);
-        require(r.leg6&&r.target6<=670,"轴4前进快速换端目标仍受软限位约束");
+        require(r.leg6&&r.target6<=660,"轴4前进快速换端目标仍受软限位约束");
     }
     std::cout<<"PASS axis4 independent direction, merged targets, lag/speed gates, repeated handoffs and soft limits\n";
 }
@@ -612,7 +612,11 @@ static void test_pending_guards() {
     require(axis4_paused(),"pending handoff pauses axis4 together with axis6 target");
     cancel_if_needed();
     require(cancel_calls==0 && dual_handoff.active(),"ordinary follow retains pending handoff");
-    for(bool* flag:{&connection_hold_active,&estop_hold_active,&return_ads_fault_hold,
+    connection_hold_active=true;
+    cancel_if_needed();
+    require(cancel_calls==0&&dual_handoff.active(),"transient connection hold preserves handoff ownership");
+    connection_hold_active=false;
+    for(bool* flag:{&estop_hold_active,&return_ads_fault_hold,
                    &startup_sequence_active,&emergency_retract_active,&axis6_soft_limit_hold,
                    &spacing_recovery.requested}) {
         dual_handoff.axis6=true; *flag=true;
@@ -621,6 +625,13 @@ static void test_pending_guards() {
         require(cancel_calls==before+1 && !dual_handoff.active(),"takeover clears pending handoff");
         *flag=false;
     }
+    planned_return.running=true;
+    spacing_recovery.requested=true;
+    const int before=cancel_calls;
+    cancel_if_needed();
+    require(cancel_calls==before && planned_return.active(),"recovery request preserves an executing return until normal handoff");
+    planned_return.running=false;
+    spacing_recovery.requested=false;
     dual_handoff.axis1=true; control_active=false;
     cancel_if_needed();
     require(!dual_handoff.active(),"pause clears pending handoff");

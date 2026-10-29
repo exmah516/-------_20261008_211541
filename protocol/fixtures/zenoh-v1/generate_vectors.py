@@ -57,7 +57,7 @@ samples = {
     "state": [1, sid, 102, 2, ns, 123456, 913, 0, 1, 4, 2, 2000, 10, 2000, 10, 5, 1, -1, 0,
               f(.25), f(.01), f(.5), f(-.02), f(.3), f(100),
               *map(f, [1, 2, 3, 4, 5, 6, 7]), *map(f, [11, 12, 13, 14, 15, 16, 17]),
-              True, 12.25, -3.125, 2, 40, 1, 41, [[39, 0, ""], [38, 1, "拒绝"]], "ready", b""],
+              True, 12.25, -3.125, 2, 40, 1, 41, [[39, 0, ""], [38, 1, "拒绝"]], "ready", f(16), f(48), b""],
     "force": [1, sid, 103, 123456, True, 1, f(.5), f(.01), False, 0, f(0), f(0), b""],
 }
 for name, value in samples.items():
@@ -115,6 +115,12 @@ write("invalid_state_result_id", bad)
 bad = samples["state"].copy()
 bad[42] = 4
 write("invalid_state_task", bad)
+bad = samples["state"].copy()
+bad[48] = f(float("nan"))
+write("invalid_state_window_nan", bad)
+bad = samples["state"].copy()
+bad[49] = 48.0
+write("invalid_state_window_float64", bad)
 bad = samples["force"].copy()
 bad[6] = f(float("-inf"))
 write("invalid_force_inf", bad)

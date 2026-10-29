@@ -816,7 +816,8 @@ void ZenohService::consume_command_locked(const vi_protocol::CommandFrame& recei
         { add_result_locked(frame.command_id, 1, "PLC is not ready for prepare-position."); return; }
         const int p1 = static_cast<int>(std::llround(catheter * 100.0));
         const int p3 = static_cast<int>(std::llround(wire * 100.0));
-        if (p3 + 500 + static_cast<int>(std::llround(config_.startup_g_mm * 100.0)) > 67000)
+        if (p3 + 500 + static_cast<int>(std::llround(config_.startup_g_mm * 100.0)) >
+            static_cast<int>(std::llround(config_.axis6_soft_limit_from_left_mm * 100.0)))
         { add_result_locked(frame.command_id, 1, "Prepare-position exceeds the axis6 travel limit."); return; }
         enqueue(VisCommandType::SetSelfCheckAxisPos, 1, p1, false);
         enqueue(VisCommandType::SetSelfCheckAxisPos, 3, p3, false);
@@ -875,9 +876,11 @@ void ZenohService::consume_command_locked(const vi_protocol::CommandFrame& recei
         {
             if (!state_.cylinder_manual_allowed)
             {
-                auto reason = control_unavailable_reason();
-                if (reason.empty()) reason = state_.control_active
-                    ? u8"自动换手、准备或限位流程正在接管电缸" : u8"尚未开始手柄控制";
+                std::string reason;
+                if (state_.ads_state != 2) reason = u8"ADS 尚未处于运行态";
+                else if (state_.estop_hold) reason = u8"PLC 保持请求尚未解除，请查看数据端 PLC 故障提示";
+                else if (state_.host_comm_timeout) reason = u8"PLC 通信恢复握手尚未完成";
+                else reason = u8"PLC 状态尚未就绪或自动换手、准备或限位流程正在接管电缸";
                 add_result_locked(frame.command_id, 1, reason); return;
             }
             enqueue(VisCommandType::SetCylinderManualPosition, index, (index == 0 || index == 2) ? 2000 : 10, false);
@@ -1056,6 +1059,10 @@ void ZenohService::publish_state_frame()
         frame.prepare_task_state = prepare_task_state_; frame.prepare_task_command_id = prepare_task_command_id_;
         frame.start_task_state = start_task_state_; frame.start_task_command_id = start_task_command_id_;
         frame.results = results_; frame.event_text.clear();
+        frame.axis6_window_start_from_left_mm = std::isfinite(static_cast<float>(state_.axis6_window_start_from_left_mm))
+            ? static_cast<float>(state_.axis6_window_start_from_left_mm) : 0.0f;
+        frame.axis6_window_end_from_left_mm = std::isfinite(static_cast<float>(state_.axis6_window_end_from_left_mm))
+            ? static_cast<float>(state_.axis6_window_end_from_left_mm) : 0.0f;
         authed = authenticated_ && frame.auth_state == 2; key = session_key_;
     }
     if (authed)

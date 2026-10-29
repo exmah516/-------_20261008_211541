@@ -129,7 +129,9 @@ namespace MasterConsole.Protocol
         [Key(45)] public int StartTaskCommandId { get; set; }
         [Key(46)] public CommandResultFrame[] Results { get; set; } = new CommandResultFrame[0];
         [Key(47)] public string EventText { get; set; } = "";
-        [Key(48)] public byte[] AuthTag { get; set; } = new byte[0];
+        [Key(48)] public float Axis6WindowStartFromLeftMm { get; set; }
+        [Key(49)] public float Axis6WindowEndFromLeftMm { get; set; }
+        [Key(50)] public byte[] AuthTag { get; set; } = new byte[0];
     }
 
     [MessagePackObject]

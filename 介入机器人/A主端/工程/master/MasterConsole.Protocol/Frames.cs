@@ -67,6 +67,9 @@ namespace MasterConsole.Protocol
         public bool HasNetDistance;
         public double Axis1NetDistanceMm, Axis6NetDistanceMm;
 
+        /// <summary>轴6窗口的距左限位边界，仅供显示，零宽度表示当前不可用。</summary>
+        public float Axis6WindowStartFromLeftMm, Axis6WindowEndFromLeftMm;
+
         public bool Has(StatusFlags f) => (Flags & f) != 0;
     }
 }

@@ -130,6 +130,7 @@ namespace
 	{
 		return std::equal(lhs.cylinder, lhs.cylinder + 4, rhs.cylinder) &&
 			lhs.cylinder_valid == rhs.cylinder_valid &&
+			lhs.cylinder_write_mask == rhs.cylinder_write_mask &&
 			lhs.cylinder5_press_req == rhs.cylinder5_press_req &&
 			lhs.axis4_forward_req == rhs.axis4_forward_req &&
 			lhs.axis4_reverse_req == rhs.axis4_reverse_req &&
@@ -1686,10 +1687,11 @@ bool AdsCommunicationService::write_output_cycle(bool& planned_return_processed)
 	{
 		if (output.cylinder_valid)
 		{
-			append(fast_write_handles_[kWriteCylinder1], sizeof(output.cylinder[0]), &output.cylinder[0]);
-			append(fast_write_handles_[kWriteCylinder2], sizeof(output.cylinder[1]), &output.cylinder[1]);
-			append(fast_write_handles_[kWriteCylinder3], sizeof(output.cylinder[2]), &output.cylinder[2]);
-			append(fast_write_handles_[kWriteCylinder4], sizeof(output.cylinder[3]), &output.cylinder[3]);
+			for (int index = 0; index < 4; ++index)
+			{
+				if ((output.cylinder_write_mask & (1u << index)) != 0)
+					append(fast_write_handles_[kWriteCylinder1 + index], sizeof(output.cylinder[index]), &output.cylinder[index]);
+			}
 		}
 		append(fast_write_handles_[kWriteCylinder5Press], sizeof(output.cylinder5_press_req), &output.cylinder5_press_req);
 		append(fast_write_handles_[kWriteAxis4Forward], sizeof(output.axis4_forward_req), &output.axis4_forward_req);

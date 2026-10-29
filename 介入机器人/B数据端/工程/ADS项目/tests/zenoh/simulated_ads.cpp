@@ -86,6 +86,8 @@ int wmain(int argc, wchar_t** argv)
         state.cylinder_manual_allowed = true; state.arm_snapshot_valid = true;
         state.clean_force_valid = true; state.clean_force_n = .3;
         state.force_582_f = .25; state.force_582_n = .01; state.force_587_f = .5; state.force_587_n = .02;
+        state.axis_pos[5] = state.axis_pos_from_left[5] = 627;
+        state.axis6_window_start_from_left_mm = 611; state.axis6_window_end_from_left_mm = 643;
         RemoteExtraState extra;
         extra.initial_sync_done = true;
         while (!stopped)

@@ -69,7 +69,7 @@ namespace MasterConsole.Protocol
             string schema;
             if (typeof(T) == typeof(HandleFrame)) schema = "bqqqbBiiffffbBiiffffsssx";
             else if (typeof(T) == typeof(CommandFrame)) schema = "bqqqibiiddtxxxx";
-            else if (typeof(T) == typeof(StateFrame)) schema = "bqqbxquiiii" + "hhhhbsss" + "ffffffffffffffffffff" + "Bdd" + "bibi" + "rtx";
+            else if (typeof(T) == typeof(StateFrame)) schema = "bqqbxquiiii" + "hhhhbsss" + "ffffffffffffffffffff" + "Bdd" + "bibi" + "rtffx";
             else if (typeof(T) == typeof(ForceFrame)) schema = "bqqqBsffBsffx";
             else throw Invalid("仅支持四个介入机器人协议数组");
             var reader = new MessagePackReader(new ReadOnlySequence<byte>(bytes));

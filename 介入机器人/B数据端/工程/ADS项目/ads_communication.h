@@ -65,6 +65,8 @@ struct AdsOutputCommand
 	bool axis6_fast_retract = false;
 	unsigned short cylinder[4] = {};
 	bool cylinder_valid = false;
+	// 独立手动操作只写选中的电缸，正常自动流程仍一次写四个。
+	std::uint8_t cylinder_write_mask = 0x0f;
 	bool cylinder5_press_req = false;
 	bool axis4_forward_req = false;
 	bool axis4_reverse_req = false;

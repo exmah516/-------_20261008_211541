@@ -87,6 +87,7 @@ int main()
 	{
 		ZenohServiceConfig remote_cfg;
 		remote_cfg.startup_g_mm = cfg.startup_g_mm;
+		remote_cfg.axis6_soft_limit_from_left_mm = cfg.axis6_soft_limit_from_left_mm;
 		if (zenoh_service.start(remote_cfg))
 		{
 			std::cout << "手柄来源：主端（远程），等待有效采样。" << std::endl;
@@ -632,9 +633,7 @@ int main()
 		axis1_fast_return = false;
 		axis6_fast_retract = false;
 	};
-	// 自动换手不能穿越暂停、自检重建或 ADS 故障继续保留。
-	// Req清除成功只表示命令已送达；必须继续等待PLC Busy/Error清零和后续新鲜快照，
-	// 才能重建基准并把协调器恢复为Follow，避免本地先于PLC伪装完成。
+	// 仅在明确接管或 PLC 故障时取消；短暂通信保持由原回退协调器继续确认和交接。
 	auto cancel_active_return_motion = [&](bool clear_plc_requests) -> bool
 	{
 		dual_handoff.reset();
@@ -647,7 +646,7 @@ int main()
 			(interrupted_phase == PlannedReturnPhase::AwaitHandoffApplied ||
 				interrupted_phase == PlannedReturnPhase::PostHandoffClampSettle) &&
 			planned_return.handoff_generation != 0 &&
-			ads_communication.applied_output_generation() >=
+			ads_communication.applied_motion_output_generation() >=
 			planned_return.handoff_generation;
 		if (handoff_clear_already_applied)
 		{
@@ -800,9 +799,12 @@ int main()
 		CylinderManualMode::Automatic
 	};
 	unsigned short cylinder_manual_position[4] = {};
+	unsigned short cylinder_manual_restore[4] = {};
+	std::uint8_t cylinder_manual_written_mask = 0;
 	// 手动电缸只用于调试。自动运动开始接管时必须撤销全部覆盖，避免末尾写入压住换手状态机命令。
 	auto clear_cylinder_manual_overrides = [&]()
 	{
+		cylinder_manual_written_mask = 0;
 		for (int cylinder_index = 0; cylinder_index < 4; ++cylinder_index)
 		{
 			if (cylinder_manual_mode[cylinder_index] != CylinderManualMode::Automatic)
@@ -810,6 +812,25 @@ int main()
 				cylinder_manual_mode[cylinder_index] = CylinderManualMode::Automatic;
 			}
 		}
+	};
+	auto prepare_cylinder_manual_override = [&](int index, bool capture_plc, unsigned short automatic_value) -> bool
+	{
+		const auto bit = static_cast<std::uint8_t>(1u << index);
+		if ((cylinder_manual_written_mask & bit) != 0) return true;
+		unsigned short original = automatic_value;
+		if (capture_plc)
+		{
+			const char* symbols[] = { AdsSymbol::cylinder1_value, AdsSymbol::cylinder2_value,
+				AdsSymbol::cylinder3_value, AdsSymbol::cylinder4_value };
+			if (!ads_communication.read(symbols[index], sizeof(original), &original, 100) || original > 2000)
+			{
+				std::cout << "电缸位置请求已拒绝：无法读取有效原位置。" << std::endl;
+				return false;
+			}
+		}
+		cylinder_manual_restore[index] = original;
+		cylinder_manual_written_mask |= bit;
+		return true;
 	};
 	bool vis_reverse_override_active = false;
 	bool vis_reverse_override_value = false;
@@ -1007,10 +1028,9 @@ int main()
 			axis6_net_distance.set_following(false);
 			ads_communication.request_coordinate_refresh();
 			ads_communication.request_watchdog_recovery();
-			spacing_recovery.reset();
+			if (spacing_recovery.phase != SpacingRecoveryPhase::ExitSync) spacing_recovery.reset();
 			tracking_controller.disable_compensation();
-			(void)cancel_active_return_motion(true);
-			std::cout << "ADS 重连：已取消中断的回退、屈曲恢复和 PI 瞬态，保留稳定模式与方向。" << std::endl;
+			std::cout << "ADS 重连：保留原回退任务与方向，按 PLC 当前状态继续确认和交接。" << std::endl;
 		}
 		// 运动控制只依赖位置快照；力数据质量单独由 force_valid 传给力反馈和记录器。
 		const bool ads_motion_cycle_valid = has_new_ads_snapshot && ads_snapshot.position_valid &&
@@ -1232,6 +1252,11 @@ int main()
 				last_ads_diagnostic_log_ms = loop_now_ms;
 			}
 		}
+		else if (ads_soft_hold_active && planned_return.active())
+		{
+			// 有效快照恢复后先完成原回退；不能重建 Follow 基准或重新提交运动。
+			ads_soft_hold_active = false;
+		}
 		else if ((ads_soft_hold_active || handle_rebase_requested || (connection_hold_active_prev && initial_sync_done)) &&
 			!planned_return.active())
 		{
@@ -1280,16 +1305,12 @@ int main()
 		if (connection_hold_enter_edge)
 		{
 			clear_cylinder_manual_overrides();
-			if (planned_return.active())
-			{
-				(void)cancel_active_return_motion(true);
-			}
 			tracking_controller.disable_compensation();
-			spacing_recovery.reset();
+			if (spacing_recovery.phase != SpacingRecoveryPhase::ExitSync) spacing_recovery.reset();
 			clear_force_output();
-			std::cout << "连接保持激活：已中断回退与瞬态任务，保持最后参考位并清零力反馈。" << std::endl;
+			std::cout << "连接保持激活：保留回退任务，等待有效快照与手柄采样，清零力反馈。" << std::endl;
 		}
-		if (connection_hold_exit_edge)
+		if (connection_hold_exit_edge && !planned_return.active())
 		{
 			load_pos_from_actual();
 			axis1_fast_return = false;
@@ -1386,7 +1407,7 @@ int main()
 		axis1_fast_return = false; // 每周期先清零，仅在快退状态机阶段置 TRUE
 		axis6_fast_retract = false; // 每周期先清零，仅在快退状态机阶段置 TRUE
 		// 预测目标造成的阻断只覆盖当前危险动作；下一拍重新读取位置和手柄输入。
-		// 实际已经越过 670 mm 时保留冻结，直到实际位置回到安全侧。
+		// 实际越限的保持仍由原有分支处理，不把预测目标拒绝锁存成永久故障。
 		if (axis6_soft_limit_hold &&
 			axis6_soft_limit_reason != Axis6SoftLimitReason::ActualPosition)
 		{
@@ -1494,11 +1515,11 @@ int main()
 		{
 			clear_axis1_delivery_mapping();
 		}
-		// 统一回退任务不能穿越急停、通信保持或其它接管状态。
+		// 恢复键只登记请求，当前换手完成后才接管；不能丢弃PLC仍在执行的回退交接。
 		if ((planned_return.active() || dual_handoff.active()) &&
-			(!control_active || connection_hold_active ||
+			(!control_active ||
 			estop_hold_active || return_ads_fault_hold ||
-			spacing_recovery.active() || spacing_recovery.requested ||
+			spacing_recovery.active() || (spacing_recovery.requested && !planned_return.active()) ||
 			startup_sequence_active || emergency_retract_active || axis6_soft_limit_hold))
 		{
 			(void)cancel_active_return_motion(true);
@@ -1803,10 +1824,10 @@ int main()
 		}
 		if (ads_self_check_valid) last_self_check_done = self_check_done;
 
-		if (handle_reinit_req && !last_handle_reinit_req)
+		// 正在回退时由原交接阶段重建基准，重同步请求不能取消 PLC 中的回退。
+		if (handle_reinit_req && !last_handle_reinit_req && !planned_return.active())
 		{
 			spacing_recovery.reset();
-			(void)cancel_active_return_motion(true);
 			const bool coordinates_refreshed = ads_communication.refresh_coordinates();
 			if (!coordinates_refreshed) ads_communication.request_coordinate_refresh();
 			if (coordinates_refreshed && !estop_hold_active &&
@@ -1822,6 +1843,7 @@ int main()
 		const bool motion_startup_active = startup.is_active();
 		startup_smoothing_bypass = motion_startup_active || emergency_retract_active;
 		if (!control_active && !return_ads_fault_hold && !motion_startup_active &&
+			!planned_return.active() && !spacing_recovery.active() &&
 			ads_motion_cycle_valid && initial_sync_done && !connection_hold_active &&
 			!handle_soft_hold_active && self_check_done &&
 			!estop_hold_active && !ads_soft_hold_active && startup.completed)
@@ -1872,7 +1894,7 @@ int main()
 		}
 
 		// 9) 根据当前顶层模式构建一帧 refer 和一组气缸指令。
-		if (!ads_soft_hold_active && !return_ads_fault_hold && !estop_hold_active &&
+		if (!ads_soft_hold_active && !handle_soft_hold_active && !return_ads_fault_hold && !estop_hold_active &&
 			(control_active || motion_startup_active || emergency_retract_active) && read_plc_state())
 		{
 			load_pos_from_actual();
@@ -2098,6 +2120,16 @@ int main()
 						planned_return.execution_t0_ms = now_ms;
 					}
 				}
+				// 重连可能错过 Busy 边沿；本次请求后的 Done 和实际到位可直接确认已完成。
+				if (!leg.acknowledged && events.done_true_sequence > leg.request_event_sequence &&
+					events.done && !events.busy && !events.error && ads_motion_cycle_valid &&
+					std::abs(plc_act_pos[leg.axis_index] + plc_init_pos[leg.axis_index] - leg.target_abs) <= cfg.crawl_arrive_tol_mm)
+				{
+					leg.acknowledged = true;
+					leg.started = true;
+					leg.done = true;
+					leg.ack_event_sequence = events.done_true_sequence;
+				}
 
 				if (events.error_true_sequence > leg.request_event_sequence)
 				{
@@ -2245,8 +2277,7 @@ int main()
 				}
 				std::cout << "。已停止上位机运动控制，并异步清Req、等待PLC受控停稳。"
 					<< std::endl;
-				// 即使本次故障来自清Req失败，也必须保留任务并继续按250 ms重试；
-				// 不能先把本地状态伪装成Follow。
+				// 真实 PLC 运动或握手故障仍走原有取消路径。
 				(void)cancel_active_return_motion(true);
 			};
 
@@ -2435,6 +2466,16 @@ int main()
 				{
 					refresh_planned_return_leg(planned_return.legs[leg_index]);
 				}
+				if (planned_return.phase == PlannedReturnPhase::SubmitRequest &&
+					planned_return.ads_command_purpose == PlannedReturnAdsCommandPurpose::Commit &&
+					planned_return_all_acknowledged() && planned_return_has_error() == nullptr)
+				{
+					// PLC 已确认各腿时不再依赖写入回执，避免 ADS 短暂丢包误取消已启动的动作。
+					clear_planned_return_ads_command_tracking();
+					planned_return.request_prepared = false;
+					planned_return.commit_guard_generation = 0;
+					planned_return.phase = PlannedReturnPhase::AwaitDone;
+				}
 				apply_planned_return_outputs();
 
 				if (planned_return.phase == PlannedReturnPhase::ClampSettle)
@@ -2443,7 +2484,7 @@ int main()
 						false, planned_return.clamp_stage);
 					if (planned_return.clamp_output_generation != 0 &&
 						!planned_return.clamp_output_applied &&
-						ads_communication.applied_output_generation() >=
+						ads_communication.applied_motion_output_generation() >=
 						planned_return.clamp_output_generation)
 					{
 						planned_return.clamp_output_applied = true;
@@ -2561,7 +2602,7 @@ int main()
 							}
 						}
 						else if (planned_return.commit_guard_generation == 0 ||
-							ads_communication.applied_output_generation() <
+							ads_communication.applied_motion_output_generation() <
 							planned_return.commit_guard_generation)
 						{
 							// 必须先确认包含快退旁路和冻结参考的输出代次已经写入，
@@ -2758,11 +2799,8 @@ int main()
 				{
 					if (ads_motion_cycle_valid && ads_snapshot_sequence > planned_return.done_snapshot_sequence)
 					{
-						if (!rebase_planned_return())
-						{
-							fail_planned_return("计划回退完成后的非阻塞基准重建失败", nullptr, true);
-						}
-						else
+						// 同步暂未成功时留在本阶段，下一份有效快照继续尝试。
+						if (rebase_planned_return())
 						{
 							axis1_fast_return = false;
 							axis6_fast_retract = false;
@@ -2773,7 +2811,7 @@ int main()
 				else if (planned_return.phase == PlannedReturnPhase::AwaitHandoffApplied)
 				{
 					if (planned_return.handoff_generation != 0 &&
-						ads_communication.applied_output_generation() >=
+						ads_communication.applied_motion_output_generation() >=
 						planned_return.handoff_generation)
 					{
 						// handoff generation对应的同一Sum Write同时携带各腿Req=FALSE，
@@ -2800,7 +2838,7 @@ int main()
 					else if (!planned_return.release_applied)
 					{
 						if (planned_return.release_output_generation != 0 &&
-							ads_communication.applied_output_generation() >=
+							ads_communication.applied_motion_output_generation() >=
 							planned_return.release_output_generation)
 						{
 							planned_return.release_applied = true;
@@ -2811,11 +2849,7 @@ int main()
 						planned_return_settle_wait_ms(true, planned_return.restore_stage) &&
 						ads_motion_cycle_valid)
 					{
-						if (!rebase_planned_return())
-						{
-							fail_planned_return("回退后夹爪稳定完成后的基准重建失败", nullptr, true);
-						}
-						else
+						if (rebase_planned_return())
 						{
 							if (planned_return.mode == PlannedReturnMode::CatheterDelivery ||
 								(planned_return.mode == PlannedReturnMode::Dual &&
@@ -2973,7 +3007,8 @@ int main()
 					((spacing_recovery.axis3_cmd_rel + plc_init_pos[2]) - plc_leftlimit[2]);
 				const double axis5_remaining = cfg.spacing_recovery_axis5_max_from_left_mm -
 					((spacing_recovery.axis5_cmd_rel + plc_init_pos[4]) - plc_leftlimit[4]);
-				const double axis6_remaining = cfg.spacing_recovery_axis6_max_from_left_mm -
+				const double axis6_remaining = (std::min)(cfg.spacing_recovery_axis6_max_from_left_mm,
+					cfg.axis6_soft_limit_from_left_mm) -
 					((spacing_recovery.axis6_cmd_rel + plc_init_pos[5]) - plc_leftlimit[5]);
 				if (axis5_remaining < remaining) remaining = axis5_remaining;
 				if (axis6_remaining < remaining) remaining = axis6_remaining;
@@ -2989,7 +3024,7 @@ int main()
 				std::cout << "屈曲恢复：正在停止并重建跟随基准。" << std::endl;
 			}
 
-			if (spacing_recovery.requested && !spacing_recovery.active())
+			if (spacing_recovery.requested && !spacing_recovery.active() && !planned_return.active())
 			{
 				const double axis5_from_left_mm = axis5_abs - plc_leftlimit[4];
 				const double axis6_from_left_mm = axis6_abs - plc_leftlimit[5];
@@ -4024,15 +4059,16 @@ int main()
 			(spacing_recovery_targets_settled ||
 				spacing_recovery_exit_elapsed_ms >= cfg.spacing_recovery_exit_timeout_ms);
 		if (spacing_recovery.phase == SpacingRecoveryPhase::ExitSync && spacing_recovery_exit_ready &&
+			ads_motion_cycle_valid && !ads_soft_hold_active && !handle_soft_hold_active &&
 			!estop_hold_active && !return_ads_fault_hold)
 		{
-			if (!spacing_recovery_targets_settled)
-			{
-				std::cout << "屈曲恢复退出等待超时，将按轴3/5/6当前实际位置重同步。" << std::endl;
-			}
 			const double recovered_mm = spacing_recovery.moved_mm;
 			if (sync_all(20))
 			{
+				if (!spacing_recovery_targets_settled)
+				{
+					std::cout << "屈曲恢复退出等待超时，已按轴3/5/6当前实际位置重同步。" << std::endl;
+				}
 				const ModeSelection restore_selection =
 					static_cast<ModeSelection>(spacing_recovery.restore_mode_selection);
 				vis_reverse_override_active = spacing_recovery.restore_vis_reverse_override_active;
@@ -4055,14 +4091,7 @@ int main()
 				std::cout << "屈曲恢复已退出并完成重同步，本次共同移动 "
 					<< recovered_mm << " mm。" << std::endl;
 			}
-			else
-			{
-				spacing_recovery.reset();
-				return_ads_fault_hold = true;
-				control_active = false;
-				clear_force_output();
-				std::cout << "屈曲恢复退出重同步失败，已停止上位机运动控制。" << std::endl;
-			}
+			// 单次失败保留 ExitSync，下一份有效快照重试，不设置永久故障标志。
 		}
 
 		const bool axis4_manual_error_now = ads_events.axis4_manual_error;
@@ -4077,18 +4106,27 @@ int main()
 
 		// 10) 构建本拍离散输出；与 refer 一起交给 100 Hz 通信线程。
 		bool cylinder5_req = emergency_retract_active || y_valve_open;
-		const bool cylinder_manual_allowed = ads_motion_cycle_valid && !connection_hold_active &&
-			control_active && !estop_hold_active && !return_ads_fault_hold &&
+		// 电缸独立于手柄采样和主控制锁存；PLC 自动流程仍保有夹爪控制权。
+		const bool cylinder_plc_ready = has_new_ads_snapshot && ads_snapshot.position_valid &&
+			ads_stats.state == AdsConnectionState::Running &&
+			!ads_snapshot.host_comm_timeout && !ads_events.host_comm_timeout &&
+			!estop_hold_active && !ads_snapshot.estop_hold_req && !ads_events.estop_hold_req;
+		const bool cylinder_manual_allowed = cylinder_plc_ready &&
+			!startup.is_active() && !selfcheck_start_pending && ads_events.selfcheck_status != 2 &&
 			!motion_startup_active && !emergency_retract_active &&
 			!spacing_recovery.active() && !spacing_recovery.requested &&
-			!axis6_soft_limit_hold && !planned_return.active();
+			!axis6_soft_limit_hold && !planned_return.active() && !dual_handoff.active() &&
+			!ads_events.axis1_return_busy && !ads_events.axis6_return_busy;
 		if (!cylinder_manual_allowed)
 		{
 			// 被安全条件或自动流程接管后不保留待执行的手动目标。
 			clear_cylinder_manual_overrides();
 		}
-		const bool cylinder_output_enabled = !connection_hold_active &&
+		const bool automatic_cylinder_output_enabled = !connection_hold_active &&
 			!estop_hold_active && (control_active || motion_startup_active || emergency_retract_active);
+		const std::uint8_t cylinder_write_mask = automatic_cylinder_output_enabled
+			? 0x0f : (cylinder_manual_allowed ? cylinder_manual_written_mask : 0);
+		const bool cylinder_output_enabled = cylinder_write_mask != 0;
 		if (cylinder_output_enabled)
 		{
 			if (!emergency_retract_active && !spacing_recovery.active() && !axis6_soft_limit_hold)
@@ -4100,6 +4138,9 @@ int main()
 					if (mode == CylinderManualMode::Open) command = open_value;
 					else if (mode == CylinderManualMode::Closed) command = closed_value;
 					else if (mode == CylinderManualMode::Position) command = cylinder_manual_position[index];
+					else if (!automatic_cylinder_output_enabled &&
+						(cylinder_manual_written_mask & (1u << index)) != 0)
+						command = cylinder_manual_restore[index];
 				};
 				apply_cylinder_manual_mode(0, cylinder1_cmd, cyl.cyl1_open, cyl.cyl1_clamp);
 				apply_cylinder_manual_mode(1, cylinder2_cmd, cyl.cyl2_open, cyl.cyl2_clamp);
@@ -4280,7 +4321,8 @@ int main()
 		ads_output.cylinder[2] = cylinder3_cmd;
 		ads_output.cylinder[3] = cylinder4_cmd;
 		ads_output.cylinder_valid = cylinder_output_enabled;
-		ads_output.cylinder5_press_req = cylinder_output_enabled && cylinder5_req;
+		ads_output.cylinder_write_mask = cylinder_write_mask;
+		ads_output.cylinder5_press_req = automatic_cylinder_output_enabled && cylinder5_req;
 		const bool axis4_paused_by_axis6 =
 			planned_return.active() || dual_handoff.active() || axis6_soft_limit_hold;
 		ads_output.axis4_forward_req =
@@ -4410,6 +4452,16 @@ int main()
 			{
 				vs.axis_pos[i] = plc_act_pos[i];
 				vs.axis_pos_from_left[i] = plc_act_pos_from_left[i];
+			}
+			// 只读发布当前窗口；不修改爬行状态、运动目标或换手条件。
+			if (ads_motion_cycle_valid && initial_sync_done)
+			{
+				double window_start_abs = axis6_locked_window_start_abs;
+				double window_end_abs = axis6_locked_window_end_abs;
+				if (!single_handle_mode || guidewire_mode != GuidewireMode::Independent || !axis6_window_locked)
+					motion_sync::calculate_axis6_window_from_axis5(ctx, window_start_abs, window_end_abs);
+				vs.axis6_window_start_from_left_mm = window_start_abs - plc_leftlimit[5];
+				vs.axis6_window_end_from_left_mm = window_end_abs - plc_leftlimit[5];
 			}
 			vs.cylinder_cmd[0] = cylinder1_cmd;
 			vs.cylinder_cmd[1] = cylinder2_cmd;
@@ -4571,7 +4623,7 @@ int main()
 					const double a6 = pending_selfcheck_target[5];
 					const bool valid = pending_selfcheck_axes == ((1u << 1) | (1u << 3) | (1u << 5) | (1u << 6)) &&
 						a1 >= 5.0 && a1 <= 96.0 && a3 >= 10.0 && a3 <= 650.0 &&
-						a5 >= 10.0 && a5 <= 670.0 && a6 >= 10.0 && a6 <= 670.0 &&
+						a5 >= 10.0 && a5 <= 670.0 && a6 >= 10.0 && a6 <= cfg.axis6_soft_limit_from_left_mm &&
 					a1 <= a3 &&
 					std::abs(a5 - (a3 + 5.0)) < 1e-6 &&
 					std::abs(a6 - (a3 + 5.0 + cfg.startup_g_mm)) < 1e-6;
@@ -4610,9 +4662,9 @@ int main()
 					if (vcmd.param1 < 0 || vcmd.param1 >= 4) break;
 					if (vcmd.type == VisCommandType::ResetCylinderManual)
 					{
-						// 恢复命令不依赖输入框，也不锁存旧输出；下一拍按当前流程重新生成目标。
+						// 正常控制恢复当前流程值；独立操作恢复首次覆盖前读取的 PLC 值。
 						cylinder_manual_mode[vcmd.param1] = CylinderManualMode::Automatic;
-						std::cout << "电缸" << vcmd.param1 + 1 << "：已恢复当前流程位置。" << std::endl;
+						std::cout << "电缸" << vcmd.param1 + 1 << "：已恢复原位置。" << std::endl;
 					}
 					else if (vcmd.param2 < 0 || vcmd.param2 > 2000)
 					{
@@ -4620,6 +4672,8 @@ int main()
 					}
 					else if (cylinder_manual_allowed)
 					{
+						const unsigned short current[] = { cylinder1_cmd, cylinder2_cmd, cylinder3_cmd, cylinder4_cmd };
+						if (!prepare_cylinder_manual_override(vcmd.param1, !automatic_cylinder_output_enabled, current[vcmd.param1])) break;
 						cylinder_manual_position[vcmd.param1] = static_cast<unsigned short>(vcmd.param2);
 						cylinder_manual_mode[vcmd.param1] = CylinderManualMode::Position;
 						std::cout << "电缸" << vcmd.param1 + 1 << "：手动目标 "
@@ -4635,22 +4689,18 @@ int main()
 				case VisCommandType::SetCylinderManualClosed:
 				{
 					const bool valid_cylinder_index = vcmd.param1 >= 0 && vcmd.param1 < 4;
-					const bool automatic_cylinder_sequence_active =
-						motion_startup_active ||
-						emergency_retract_active ||
-						axis6_soft_limit_hold ||
-						planned_return.active();
-					if (!spacing_recovery.active() && !spacing_recovery.requested &&
-						valid_cylinder_index && !automatic_cylinder_sequence_active)
+					if (valid_cylinder_index && cylinder_manual_allowed)
 					{
+						const unsigned short current[] = { cylinder1_cmd, cylinder2_cmd, cylinder3_cmd, cylinder4_cmd };
+						if (!prepare_cylinder_manual_override(vcmd.param1, !automatic_cylinder_output_enabled, current[vcmd.param1])) break;
 						cylinder_manual_mode[vcmd.param1] =
 							vcmd.type == VisCommandType::SetCylinderManualOpen
 							? CylinderManualMode::Open
 							: CylinderManualMode::Closed;
 					}
-					else if (valid_cylinder_index && automatic_cylinder_sequence_active)
+					else if (valid_cylinder_index)
 					{
-						std::cout << "UI：自动换手、启动准备或 axis6 软限位正在接管，已忽略电缸手动覆盖请求。" << std::endl;
+						std::cout << "UI：PLC 未就绪或自动流程正在接管，已忽略电缸手动覆盖请求。" << std::endl;
 					}
 					break;
 				}
@@ -4957,7 +5007,7 @@ int main()
 					if (pending_startup.axis1_from_left_mm < 5.0 || pending_startup.axis1_from_left_mm > 95.0) valid = false;
 					if (pending_startup.axis3_from_left_mm < 10.0 || pending_startup.axis3_from_left_mm > 650.0) valid = false;
 					if (pending_startup.axis5_from_left_mm < 10.0 || pending_startup.axis5_from_left_mm > 670.0) valid = false;
-					if (pending_startup.axis6_from_left_mm < 10.0 || pending_startup.axis6_from_left_mm > 670.0) valid = false;
+					if (pending_startup.axis6_from_left_mm < 10.0 || pending_startup.axis6_from_left_mm > cfg.axis6_soft_limit_from_left_mm) valid = false;
 					if (pending_startup.axis2_deg < -360.0 || pending_startup.axis2_deg > 360.0) valid = false;
 					if (pending_startup.axis7_deg < -360.0 || pending_startup.axis7_deg > 360.0) valid = false;
 					if (pending_startup.axis6_from_left_mm < pending_startup.axis5_from_left_mm) valid = false;
@@ -4991,6 +5041,7 @@ int main()
 				}
 				case VisCommandType::SelectDirectControl:
 					{
+						if (control_active || planned_return.active() || spacing_recovery.active()) break;
 						// 自检完成后点击“开始控制”：不再走到准备位置，直接在当前位置开始手柄控制。
 						pending_selfcheck_axes = 0;
 						if (!startup.is_active() &&
@@ -5001,7 +5052,6 @@ int main()
 						{
 							clear_cylinder_manual_overrides();
 							spacing_recovery.reset();
-							(void)cancel_active_return_motion(true);
 							if (!restore_startup_v_limit())
 							{
 								std::cout << "开始控制失败：无法恢复启动期速度限制参数。" << std::endl;
@@ -5062,16 +5112,9 @@ int main()
 						std::cout << "UI：ADS 软保持或重连期间已忽略屈曲恢复请求。" << std::endl;
 						break;
 					}
-					const bool automatic_return_active = planned_return.active();
-					if (vcmd.param1 != 0 && automatic_return_active)
-					{
-						std::cout << "UI：屈曲恢复已忽略，请等待当前换手完成。"
-							<< std::endl;
-						break;
-					}
 					if (vcmd.param1 != 0)
 					{
-						(void)cancel_active_return_motion(true);
+						// 与物理按键一致：当前换手自然完成后，在请求仍有效时进入恢复。
 						pending_mode_selection = ModeSelection::None;
 					}
 					spacing_recovery.requested = (vcmd.param1 != 0);

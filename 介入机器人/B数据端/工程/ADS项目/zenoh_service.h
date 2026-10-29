@@ -21,6 +21,7 @@ struct ZenohServiceConfig
     std::string router_path;
     bool start_router = true;
     double startup_g_mm = 13.0;
+    double axis6_soft_limit_from_left_mm = 660.0;
 };
 
 struct RemoteExtraState

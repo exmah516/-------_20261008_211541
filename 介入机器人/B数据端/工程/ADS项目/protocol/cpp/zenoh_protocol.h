@@ -15,7 +15,7 @@ namespace vi_protocol
     constexpr std::size_t kHandleFields = 24;
     constexpr std::size_t kCommandFields = 15;
     constexpr std::size_t kCommandResultFields = 3;
-    constexpr std::size_t kStateFields = 49;
+    constexpr std::size_t kStateFields = 51;
     constexpr std::size_t kForceFields = 13;
     constexpr std::size_t kMaxResults = 32;
 
@@ -95,6 +95,7 @@ namespace vi_protocol
         std::uint8_t prepare_task_state{}; std::int32_t prepare_task_command_id{};
         std::uint8_t start_task_state{}; std::int32_t start_task_command_id{};
         std::vector<CommandResult> results; std::string event_text;
+        float axis6_window_start_from_left_mm{}, axis6_window_end_from_left_mm{};
         std::vector<std::uint8_t> auth_tag;
         MSGPACK_DEFINE(version, session_id, sequence, auth_state, nonce_server, echo_main_monotonic_ms,
             flags, mode, phase, self_check_status, ads_state, cylinder1, cylinder2, cylinder3,
@@ -105,7 +106,7 @@ namespace vi_protocol
             axis_from_left4, axis_from_left5, axis_from_left6, has_net_distance,
             axis1_net_distance_mm, axis6_net_distance_mm, prepare_task_state,
             prepare_task_command_id, start_task_state, start_task_command_id, results,
-            event_text, auth_tag);
+            event_text, axis6_window_start_from_left_mm, axis6_window_end_from_left_mm, auth_tag);
     };
 
     struct ForceFrame

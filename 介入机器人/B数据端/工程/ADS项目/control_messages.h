@@ -137,6 +137,9 @@ struct VisState
 	double arm_curve_progress;
 	std::uint32_t arm_home_request_id;
 	int selfcheck_status;
+	// 仅用于主端显示的轴6实际窗口，使用与axis_pos_from_left相同的坐标系。
+	double axis6_window_start_from_left_mm;
+	double axis6_window_end_from_left_mm;
 };
 #pragma pack(pop)
 

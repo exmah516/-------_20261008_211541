@@ -68,7 +68,7 @@
 | 13 | byte[] | Proof |
 | 14 | byte[] | AuthTag |
 
-## StateFrame（49 项）
+## StateFrame（51 项）
 
 | 索引 | 类型 | 字段 |
 |---|---|---|
@@ -120,7 +120,9 @@
 | 45 | int | StartTaskCommandId |
 | 46 | CommandResultFrame[] | Results |
 | 47 | string | EventText |
-| 48 | byte[] | AuthTag |
+| 48 | float32 | Axis6WindowStartFromLeftMm（距左限位，仅显示） |
+| 49 | float32 | Axis6WindowEndFromLeftMm（距左限位，仅显示） |
+| 50 | byte[] | AuthTag |
 
 ## ForceFrame（13 项）
 

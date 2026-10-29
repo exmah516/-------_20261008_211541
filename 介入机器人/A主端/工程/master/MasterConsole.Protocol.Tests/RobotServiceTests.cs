@@ -52,8 +52,10 @@ namespace MasterConsole.Protocol.Tests
                 }
 
                 int deliveredStates = 0;
-                link.StatusReceived += (_, _) => deliveredStates++;
+                StatusFrame receivedState = default;
+                link.StatusReceived += (_, state) => { deliveredStates++; receivedState = state; };
                 link.OnState(State(1));
+                Check("窗口边界只读映射到主端状态", receivedState.Axis6WindowStartFromLeftMm == 16 && receivedState.Axis6WindowEndFromLeftMm == 48);
                 link.OnForce(Force(1));
                 link.SetInjector(1, 1);
                 link.SetInjector(2, -1);

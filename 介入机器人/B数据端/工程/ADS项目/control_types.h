@@ -130,7 +130,7 @@ struct ControlConfig
 	double axis1_post_return_mapping_span_mm = 10.0;
 	// axis6 距自身左限位的上位机内部软限位。达到预测越限条件后仅锁止上位机链路，
 	// 不改变 PLC/NC 内已有的硬限位与安全逻辑。
-	double axis6_soft_limit_from_left_mm = 670.0;
+	double axis6_soft_limit_from_left_mm = 660.0;
 
 	// 手动间距恢复：582 手柄仅驱动轴3/5/6向远离左限位方向等位移移动。
 	double spacing_recovery_speed_limit_mm_s = 40.0;

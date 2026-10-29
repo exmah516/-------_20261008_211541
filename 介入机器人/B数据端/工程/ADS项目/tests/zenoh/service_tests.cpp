@@ -152,6 +152,27 @@ struct ZenohServiceTestAccess
         assert(service.start_task_state_ == 1 && service.start_task_command_id_ == 102);
         state.control_active = true; service.publish_state(state, extra);
         assert(service.start_task_state_ == 2 && result(service, 102, 0));
+        send(service, command(service, vi_protocol::Command::StartControl, 3, 103));
+        assert(!service.poll_command(control) && result(service, 103, 0));
+    }
+
+    static void prepare_axis6_limit()
+    {
+        for (double gap : { 13.0, 16.0, 17.0 })
+        {
+            ZenohService service; initialize(service);
+            service.config_.startup_g_mm = gap;
+            auto frame = command(service, vi_protocol::Command::PreparePosition, 1, 104);
+            frame.value1 = 10.0; frame.value2 = 639.0; send(service, frame);
+            VisCommand control; int count = 0;
+            while (service.poll_command(control))
+            {
+                if (control.type == VisCommandType::SetSelfCheckAxisPos && control.param1 == 6)
+                    assert(control.param2 <= 66000);
+                service.command_processed(); ++count;
+            }
+            assert(gap <= 16.0 ? count == 5 : (count == 0 && result(service, 104, 1)));
+        }
     }
 
     static void challenge_cannot_revoke()
@@ -246,13 +267,46 @@ struct ZenohServiceTestAccess
             }
             service.publish_state(state, extra);
             send(service, command(service, vi_protocol::Command::StartControl, 1, 501));
-            send(service, command(service, vi_protocol::Command::Cylinder, 2, 502, 1, 1));
             VisCommand control;
             assert(!service.poll_command(control));
-            for (int id : {501, 502})
-                assert(std::any_of(service.results_.begin(), service.results_.end(), [&](const auto& r)
-                    { return r.command_id == id && r.result == 1 && r.reason.find(expected) != std::string::npos; }));
+            assert(std::any_of(service.results_.begin(), service.results_.end(), [&](const auto& r)
+                { return r.command_id == 501 && r.result == 1 && r.reason.find(expected) != std::string::npos; }));
         }
+    }
+
+    static void independent_cylinders()
+    {
+        for (int index = 1; index <= 4; ++index)
+        {
+            ZenohService service; initialize(service);
+            auto state = service.state_;
+            state.control_active = false; state.self_check_done = false;
+            auto extra = service.extra_;
+            extra.initial_sync_done = false; extra.handle_soft_hold = true; extra.return_ads_fault_hold = true;
+            service.publish_state(state, extra);
+            send(service, command(service, vi_protocol::Command::StartControl, 1, 601));
+            VisCommand control;
+            assert(!service.poll_command(control) && result(service, 601, 1));
+            send(service, command(service, vi_protocol::Command::Cylinder, 2, 602, index, 1));
+            assert(service.poll_command(control) && control.type == VisCommandType::SetCylinderManualPosition &&
+                control.param1 == index - 1 && control.param2 == ((index == 1 || index == 3) ? 2000 : 10));
+            service.command_processed();
+            state.cylinder_manual_mask = static_cast<std::uint8_t>(1u << (index - 1));
+            service.publish_state(state, extra);
+            assert(result(service, 602, 0));
+            send(service, command(service, vi_protocol::Command::Cylinder, 3, 603, index, 0));
+            assert(service.poll_command(control) && control.type == VisCommandType::ResetCylinderManual);
+            service.command_processed();
+            state.cylinder_manual_mask = 0;
+            service.publish_state(state, extra);
+            assert(result(service, 603, 0));
+        }
+        ZenohService blocked; initialize(blocked);
+        auto state = blocked.state_; state.cylinder_manual_allowed = false;
+        blocked.publish_state(state, blocked.extra_);
+        send(blocked, command(blocked, vi_protocol::Command::Cylinder, 1, 604, 1, 1));
+        VisCommand control;
+        assert(!blocked.poll_command(control) && result(blocked, 604, 1));
     }
 
     static void resource_transition_rejection()
@@ -278,11 +332,13 @@ int main()
     ZenohServiceTestAccess::results_exclude_jog_and_alive();
     ZenohServiceTestAccess::positioning_arm_speed();
     ZenohServiceTestAccess::task_association();
+    ZenohServiceTestAccess::prepare_axis6_limit();
     ZenohServiceTestAccess::challenge_cannot_revoke();
     ZenohServiceTestAccess::handle_replay();
     ZenohServiceTestAccess::task_waits_for_observed_state();
     ZenohServiceTestAccess::resource_transition_rejection();
     ZenohServiceTestAccess::control_rejection_reasons();
+    ZenohServiceTestAccess::independent_cylinders();
     std::cout << "PASS: FIFO256/overflow/order, independent handle, 2s expiry, session/sequence replay, "
         "results32 excluding jog/alive, task IDs/state observation, authentication isolation, handle replay, resource transitions.\n";
 }

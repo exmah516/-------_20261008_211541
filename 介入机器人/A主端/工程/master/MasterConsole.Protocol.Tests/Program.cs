@@ -120,7 +120,7 @@ namespace MasterConsole.Protocol.Tests
             HasNetDistance = true, Axis1NetDistanceMm = 12.25, Axis6NetDistanceMm = -3.125,
             PrepareTaskState = 2, PrepareTaskCommandId = 40, StartTaskState = 1, StartTaskCommandId = 41,
             Results = new[] { new CommandResultFrame { CommandId = 39, Result = 0 }, new CommandResultFrame { CommandId = 38, Result = 1, Reason = "拒绝" } },
-            EventText = "ready"
+            EventText = "ready", Axis6WindowStartFromLeftMm = 16, Axis6WindowEndFromLeftMm = 48
         };
         private static ForceFrame NewForce() => new ForceFrame
         {

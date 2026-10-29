@@ -149,6 +149,7 @@ namespace MasterConsole.ViewModels
         {
             if (!IsConnected) _hasStatus = false;
             foreach (var name in StatusPropertyNames) OnPropertyChanged(name);
+            foreach (var name in Axis6WindowPropertyNames) OnPropertyChanged(name);
             OnPropertyChanged(nameof(IsConnected));
             OnPropertyChanged(nameof(HasControl));
             OnPropertyChanged(nameof(CanOperate));
@@ -197,6 +198,19 @@ namespace MasterConsole.ViewModels
 
         public string Axis1NetDistance => FormatDistance(_s.Axis1NetDistanceMm);
         public string Axis6NetDistance => FormatDistance(_s.Axis6NetDistanceMm);
+
+        public bool Axis6WindowAvailable => StatusFresh && AdsHealthy && _s.AxisFromLeft != null && _s.AxisFromLeft.Length == 7 &&
+            IsFinite(_s.AxisFromLeft[5]) && IsFinite(_s.Axis6WindowStartFromLeftMm) && IsFinite(_s.Axis6WindowEndFromLeftMm) &&
+            _s.Axis6WindowEndFromLeftMm > _s.Axis6WindowStartFromLeftMm;
+        private double Axis6WindowWidth => (double)_s.Axis6WindowEndFromLeftMm - _s.Axis6WindowStartFromLeftMm;
+        private double Axis6WindowOffset => (double)_s.AxisFromLeft[5] - _s.Axis6WindowStartFromLeftMm;
+        public double Axis6WindowPercent => Axis6WindowAvailable ? Math.Max(0, Math.Min(100, Axis6WindowOffset / Axis6WindowWidth * 100)) : 0;
+        public string Axis6WindowPositionText => Axis6WindowAvailable
+            ? Axis6WindowOffset.ToString("0.0", CultureInfo.InvariantCulture) + " / " + Axis6WindowWidth.ToString("0.0", CultureInfo.InvariantCulture) + " mm" : "—";
+        // 两端都可能触发主动或被动快退；距任一边界3 mm内仅显示提醒。
+        public bool Axis6WindowNearBoundary => Axis6WindowAvailable && Math.Min(Axis6WindowOffset, Axis6WindowWidth - Axis6WindowOffset) <= 3;
+        public string Axis6WindowWarning => Axis6WindowNearBoundary ? "接近导丝机构窗口位置，将要触发机构快退" : "";
+        private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
         private string FormatDistance(double mm)
             => IsConnected && StatusFresh && _s.HasNetDistance && !double.IsNaN(mm) && !double.IsInfinity(mm)
@@ -417,6 +431,7 @@ namespace MasterConsole.ViewModels
             OnPropertyChanged(nameof(ModeText));
             OnPropertyChanged(nameof(Axis1NetDistance));
             OnPropertyChanged(nameof(Axis6NetDistance));
+            foreach (var name in Axis6WindowPropertyNames) OnPropertyChanged(name);
             // 状态过期是由时间推移产生的，需要在这里重新评估。
             OnPropertyChanged(nameof(StatusFresh));
             OnPropertyChanged(nameof(CanOperate));
@@ -445,6 +460,7 @@ namespace MasterConsole.ViewModels
             }
 
             foreach (var name in StatusPropertyNames) OnPropertyChanged(name);
+            foreach (var name in Axis6WindowPropertyNames) OnPropertyChanged(name);
             OnPropertyChanged(nameof(CanOperate));
             OnPropertyChanged(nameof(CanStartControl));
             OnPropertyChanged(nameof(OperateHintText));
@@ -459,6 +475,12 @@ namespace MasterConsole.ViewModels
             nameof(Axis2PointerX), nameof(Axis2PointerY), nameof(Axis7PointerX), nameof(Axis7PointerY),
             nameof(PrepareStatusText), nameof(FfCaption), nameof(YValveCaption), nameof(Injector1Text), nameof(Injector2Text), nameof(Axis4Text),
             nameof(StatusFresh),
+        };
+
+        private static readonly string[] Axis6WindowPropertyNames =
+        {
+            nameof(Axis6WindowAvailable), nameof(Axis6WindowPercent), nameof(Axis6WindowPositionText),
+            nameof(Axis6WindowNearBoundary), nameof(Axis6WindowWarning),
         };
 
         // ============================================================ 日志

@@ -43,7 +43,9 @@ if test == 'main_recovery_test':
     observe = between(observe_start, '\t\tif (ads_events.selfcheck_status')
     hold = between('\t\tif (!ads_motion_cycle_valid)', '\t\t\tif (!ads_soft_hold_active)') + '\n}\n'
     (build / 'main_observe.inc').write_text(observe + hold, encoding='utf-8')
-    rebase = between('\t\telse if ((ads_soft_hold_active', '\t\tconst bool connection_hold_active')
+    active_recovery = '\t\telse if (ads_soft_hold_active && planned_return.active())'
+    rebase = between(active_recovery if active_recovery in source else '\t\telse if ((ads_soft_hold_active',
+                     '\t\tconst bool connection_hold_active')
     (build / 'main_rebase.inc').write_text(rebase.replace('else if', 'if', 1), encoding='utf-8')
     auto = between('\t\tif (!control_active && !return_ads_fault_hold', '\t\tunsigned short cylinder1_cmd')
     (build / 'main_auto_resume.inc').write_text(auto, encoding='utf-8')

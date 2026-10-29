@@ -8,6 +8,32 @@
             <Border Style="{StaticResource Card}" Margin="4"><StackPanel><TextBlock Text="导管轴向力" Style="{StaticResource Hint}"/><Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left"><TextBlock Text="{Binding Force587F}" Style="{StaticResource Readout}"/></Viewbox></StackPanel></Border>
             <Border Style="{StaticResource Card}" Margin="4"><StackPanel><TextBlock Text="导管力矩" Style="{StaticResource Hint}"/><Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left"><TextBlock Text="{Binding Force587N}" Style="{StaticResource Readout}"/></Viewbox></StackPanel></Border>
         </UniformGrid>
+        <Border Style="{StaticResource Card}" Margin="0,0,0,8" Padding="10,7">
+            <StackPanel>
+                <DockPanel Margin="0,0,0,4">
+                    <TextBlock Text="轴 6 窗口位置" Style="{StaticResource Hint}"/>
+                    <TextBlock Text="{Binding Axis6WindowPositionText}" Style="{StaticResource Hint}" HorizontalAlignment="Right"/>
+                </DockPanel>
+                <ProgressBar x:Name="Axis6WindowProgress" Minimum="0" Maximum="100" Height="8"
+                    Value="{Binding Axis6WindowPercent, Mode=OneWay}" IsEnabled="{Binding Axis6WindowAvailable}"
+                    AutomationProperties.Name="轴 6 在导丝机构窗口中的相对位置">
+                    <ProgressBar.Style>
+                        <Style TargetType="ProgressBar">
+                            <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                            <Setter Property="Background" Value="{StaticResource SurfaceAltBrush}"/>
+                            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Axis6WindowNearBoundary}" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource StatusAmberBrush}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ProgressBar.Style>
+                </ProgressBar>
+                <TextBlock x:Name="Axis6WindowWarning" Text="{Binding Axis6WindowWarning}" Foreground="{StaticResource StatusAmberBrush}" TextWrapping="Wrap"
+                    AutomationProperties.LiveSetting="Polite"/>
+            </StackPanel>
+        </Border>
         <TextBlock Text="操作区" Style="{StaticResource SectionTitle}"/>
         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
             <Button x:Name="ConnectButton" Content="{Binding ConnectButtonText}" Command="{Binding ConnectCommand}" MinWidth="114"/>

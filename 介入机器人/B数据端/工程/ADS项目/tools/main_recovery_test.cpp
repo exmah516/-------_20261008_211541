@@ -35,7 +35,7 @@ struct Fixture {
     Input* axis6_input_handle=&input6;
     double axis1_prev_linear_filtered=0, axis6_prev_linear_filtered=0;
     double axis1_prev_rot_filtered=0, axis6_prev_rot_filtered=0;
-    struct { bool active() const { return false; } } planned_return;
+    struct { bool running=false; bool active() const { return running; } } planned_return;
     void load_pos_from_actual() {}
     bool return_ads_fault_hold = false, motion_startup_active = false;
     bool estop_hold_active = false, ads_soft_hold_active = false, handle_soft_hold_active = false;
@@ -44,19 +44,19 @@ struct Fixture {
     unsigned int pending_selfcheck_axes = 0;
     struct { bool enabled = false; } axis6_crawl;
     GuidewireMode guidewire_mode = GuidewireMode::Independent;
-    struct { void reset() {} } spacing_recovery;
+    struct { bool active() const { return false; } void reset() {} } spacing_recovery;
     struct {
         StartupPhase phase = StartupPhase::Done;
         bool completed = true, recovery_mode = false, direct_positioning = false, prompted = false;
         bool is_active() const { return false; }
     } startup;
-    int sync_count = 0;
+    int sync_count = 0, cancel_count = 0;
     bool sync_ok = true;
     bool sync_all(int) { ++sync_count; return sync_ok; }
     bool restore_startup_v_limit() { return true; }
     bool consume_startup_loading_ready() { return true; }
     void clear_cylinder_manual_overrides() {}
-    bool cancel_active_return_motion(bool) { return true; }
+    bool cancel_active_return_motion(bool) { ++cancel_count; planned_return.running=false; return true; }
     void observe() {
 #include "main_observe.inc"
     }
@@ -73,6 +73,15 @@ struct Fixture {
     }
 };
 int main() {
+    Fixture repeated;
+    repeated.planned_return.running = true;
+    repeated.start();
+    check(repeated.planned_return.active() && repeated.cancel_count == 0 && repeated.sync_count == 0,
+          "repeated start leaves an active return and its baseline untouched");
+    repeated.ads_soft_hold_active = true;
+    repeated.recover();
+    check(repeated.planned_return.active() && !repeated.ads_soft_hold_active && motion_sync::dual_calls == 0,
+          "fresh ADS releases the snapshot gate without rebasing an unfinished return");
     Fixture f;
     f.ads_motion_cycle_valid = false;
     f.has_new_ads_snapshot = false;

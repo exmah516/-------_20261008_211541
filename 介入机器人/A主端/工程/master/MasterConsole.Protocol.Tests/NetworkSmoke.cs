@@ -27,6 +27,7 @@ namespace MasterConsole.Protocol.Tests
             Process process = null;
             var ready = new ManualResetEventSlim();
             int handleCount = 0, forceCount = 0, stateCount = 0, commandCount = 0;
+            int windowStateMatched = 0;
             var commands = new ConcurrentQueue<CommandFrame>();
             try
             {
@@ -43,6 +44,11 @@ namespace MasterConsole.Protocol.Tests
                     cachedPublisher.Dispose(); cachedPublisher.Dispose();
                     Check("相同 Topic 复用与 Publisher 幂等释放", !cachedPublisher.IsAvailable);
                     link.LogReceived += (sender, log) => Console.WriteLine("[链路] " + log.Text);
+                    link.StatusReceived += (sender, state) =>
+                    {
+                        if (state.AxisFromLeft[5] == 627 && state.Axis6WindowStartFromLeftMm == 611 && state.Axis6WindowEndFromLeftMm == 643)
+                            Interlocked.Exchange(ref windowStateMatched, 1);
+                    };
                     process.StandardInput.WriteLine("pause"); process.StandardInput.Flush();
                     Thread.Sleep(700); // 等缓存状态过期，确保 ConnectAsync 后状态帧尚未到达。
                     var acquire = Task.Run(async () =>
@@ -57,6 +63,7 @@ namespace MasterConsole.Protocol.Tests
                     if (!acquired.Ok) return;
                     Check("原生 Zenoh-C 与真实主端认证", link.IsConnected);
                     Check("有控制权", Wait(() => link.HasControl, 3000));
+                    Check("轴6位置与窗口边界通过原生数据端映射到主端", Wait(() => Volatile.Read(ref windowStateMatched) == 1, 3000));
                     Check("准备位置专用状态", Result(link.PreparePositionAsync(12, 125), 7000).Ok);
                     Check("开始控制专用状态", Result(link.StartControlAsync(), 7000).Ok);
                     Check("点动直接返回发送结果", Result(link.SetArmCartesianJogAsync(1, 1000), 1000).Ok);

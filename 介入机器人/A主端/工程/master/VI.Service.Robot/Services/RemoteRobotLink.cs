@@ -435,7 +435,8 @@ namespace MasterConsole.Services
                     Force587N = f.Force587N, CleanForceN = (f.Flags & (uint)StatusFlags.CleanForceValid) != 0 ? f.CleanForceN : float.NaN, AdsActualHz = f.AdsActualHz,
                     AxisPos = new[] { f.AxisPos0, f.AxisPos1, f.AxisPos2, f.AxisPos3, f.AxisPos4, f.AxisPos5, f.AxisPos6 },
                     AxisFromLeft = new[] { f.AxisFromLeft0, f.AxisFromLeft1, f.AxisFromLeft2, f.AxisFromLeft3, f.AxisFromLeft4, f.AxisFromLeft5, f.AxisFromLeft6 },
-                    HasNetDistance = f.HasNetDistance, Axis1NetDistanceMm = f.Axis1NetDistanceMm, Axis6NetDistanceMm = f.Axis6NetDistanceMm
+                    HasNetDistance = f.HasNetDistance, Axis1NetDistanceMm = f.Axis1NetDistanceMm, Axis6NetDistanceMm = f.Axis6NetDistanceMm,
+                    Axis6WindowStartFromLeftMm = f.Axis6WindowStartFromLeftMm, Axis6WindowEndFromLeftMm = f.Axis6WindowEndFromLeftMm
                 };
                 if (f.EchoMainMonotonicMs != 0 && f.EchoMainMonotonicMs <= (ulong)now)
                 {
