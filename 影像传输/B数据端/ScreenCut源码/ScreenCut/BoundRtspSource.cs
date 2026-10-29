@@ -55,7 +55,12 @@ namespace ScreenCut
                     upstream.Close(); downstream.Close();
                     try { await Task.WhenAll(a, b).ConfigureAwait(false); } catch { }
                 }
-                catch (Exception ex) { if (!_stop.IsCancellationRequested) _log("相机 " + _camera.Ip + "：" + ex.Message); }
+                catch (Exception ex)
+                {
+                    if (!_stop.IsCancellationRequested)
+                        _log("相机 RTSP " + _camera.LocalIp + " → " + _camera.Ip + ":" + _camera.RtspPort + "：" + ex.Message +
+                            (ex is SocketException socket ? "；SocketError=" + socket.SocketErrorCode : ""));
+                }
                 finally
                 {
                     downstream.Close();

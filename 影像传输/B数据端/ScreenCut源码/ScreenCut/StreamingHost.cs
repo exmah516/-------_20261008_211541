@@ -2,7 +2,10 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
+using System.Collections.Generic;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
@@ -22,7 +25,9 @@ namespace ScreenCut
         private Process _media, _encoder;
         private Rectangle? _region;
         private bool _testPattern, _started, _disposed;
+        private readonly string[] _cameraWarnings = new string[2];
         public event Action<string> Status;
+        public event Action<string> CameraWarning;
         public string LogPath => StreamingLog.LogPath;
 
         public StreamingHost(StreamingSettings settings)
@@ -48,7 +53,9 @@ namespace ScreenCut
                 for (int i = 0; i < 2; i++)
                     if (_settings.Cameras[i].Enabled)
                     {
-                        _sources[i] = new BoundRtspSource(_settings.Cameras[i], Log);
+                        var camera = _settings.Cameras[i];
+                        Log("监控 " + (i + 1) + " 输入：" + camera.LocalIp + " → " + camera.Ip + ":" + camera.RtspPort + "，RTSP 通道 " + camera.Channel);
+                        _sources[i] = new BoundRtspSource(camera, Log);
                         ports[i] = _sources[i].Port;
                     }
                 File.WriteAllText(Path.Combine(_work, "mediamtx.yml"), _settings.MediaMtxConfig(ports), new UTF8Encoding(false));
@@ -58,9 +65,74 @@ namespace ScreenCut
             {
                 await WaitReadyAsync().ConfigureAwait(false);
                 Log("媒体服务已启动；主端 " + _settings.MasterIp + "，信令 TCP " + _settings.WebRtcPort + "，视频 UDP/TCP " + _settings.MediaPort);
+                _ = CheckCameraConnectivityAsync();
                 _ = WatchAsync();
             }
             catch { Dispose(); throw; }
+        }
+
+        private async Task CheckCameraConnectivityAsync()
+        {
+            try
+            {
+                var candidates = new List<string>();
+                foreach (var camera in _settings.Cameras)
+                    if (camera.Enabled && !candidates.Contains(camera.LocalIp)) candidates.Add(camera.LocalIp);
+
+                for (int i = 0; i < _settings.Cameras.Length; i++)
+                {
+                    if (_stop.IsCancellationRequested) return;
+                    var camera = _settings.Cameras[i];
+                    if (!camera.Enabled) continue;
+                    bool configured = await ProbeCameraAsync(camera.Ip, camera.RtspPort, camera.LocalIp).ConfigureAwait(false);
+                    if (_stop.IsCancellationRequested) return;
+                    if (configured)
+                    {
+                        Log("监控 " + (i + 1) + " 网络检查通过：" + camera.LocalIp + " → " + camera.Ip + ":" + camera.RtspPort);
+                        continue;
+                    }
+
+                    string alternate = null;
+                    foreach (string candidate in candidates)
+                        if (!candidate.Equals(camera.LocalIp, StringComparison.OrdinalIgnoreCase) &&
+                            await ProbeCameraAsync(camera.Ip, camera.RtspPort, candidate).ConfigureAwait(false))
+                        {
+                            alternate = candidate;
+                            break;
+                        }
+                    if (alternate != null)
+                        _cameraWarnings[i] = "监控 " + (i + 1) + " 网口可能接反：" + camera.Ip + " 从 " + camera.LocalIp +
+                            " 连接失败，改用 " + alternate + " 可达。请在 ScreenCut.exe.config 中设置 Camera" + (i + 1) + "LocalIp=" + alternate + "，然后重启。";
+                    else
+                        _cameraWarnings[i] = "监控 " + (i + 1) + " 连接失败：" + camera.LocalIp + " → " + camera.Ip + ":" + camera.RtspPort +
+                            "。请检查相机 RTSP、网口和端口设置。";
+                    if (_stop.IsCancellationRequested) return;
+                    Log("警告：" + _cameraWarnings[i]);
+                    CameraWarning?.Invoke(string.Join(Environment.NewLine, Array.FindAll(_cameraWarnings, warning => warning != null)));
+                }
+            }
+            catch (Exception ex)
+            {
+                if (!_stop.IsCancellationRequested) Log("相机连通性检查失败：" + ex.Message);
+            }
+        }
+
+        private static async Task<bool> ProbeCameraAsync(string cameraIp, int port, string localIp)
+        {
+            using (var client = new TcpClient(AddressFamily.InterNetwork))
+            {
+                try
+                {
+                    client.Client.Bind(new IPEndPoint(IPAddress.Parse(localIp), 0));
+                    var connect = client.ConnectAsync(cameraIp, port);
+                    if (await Task.WhenAny(connect, Task.Delay(3000)).ConfigureAwait(false) != connect) return false;
+                    await connect.ConfigureAwait(false);
+                    return true;
+                }
+                catch (SocketException) { return false; }
+                catch (TimeoutException) { return false; }
+                catch (ArgumentException) { return false; }
+            }
         }
 
         private async Task WaitReadyAsync()

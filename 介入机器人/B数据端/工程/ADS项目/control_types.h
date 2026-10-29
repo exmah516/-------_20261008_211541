@@ -371,6 +371,8 @@ struct DualHandoffRequest
 	bool wire_caused = false;
 	bool gap_boundary = false;
 	bool reverse = false;
+	bool wire_reverse = false;
+	bool axis4_caused = false;
 
 	bool active() const { return axis1 || axis6; }
 	void reset() { *this = DualHandoffRequest{}; }

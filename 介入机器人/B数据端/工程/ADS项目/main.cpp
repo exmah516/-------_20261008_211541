@@ -53,8 +53,8 @@ int main()
 	constexpr DWORD ads_snapshot_wait_timeout_ms = 300;
 	// Zenoh 状态约 30 Hz；手柄与力反馈由服务独立保持 100 Hz。
 	constexpr std::int64_t vis_publish_rate_hz = 30;
-	// 轴4为30°/s、传动轮半径7.45 mm且1∶1，轴6线速度=7.45×30×π/180 mm/s。
-	constexpr double axis4_coupled_axis6_speed_mm_s = 3.9008108782;
+	// 轴4为60°/s、传动轮半径7.45 mm且1∶1，轴6线速度=7.45×60×π/180 mm/s。
+	constexpr double axis4_coupled_axis6_speed_mm_s = 7.8016217564;
 	const char* hardcoded_ads_netid = "169.254.119.135.1.1";
 
 	ControlConfig cfg;
@@ -3444,7 +3444,17 @@ int main()
 				const double lo1 = axis1_crawl.min_abs();
 				const double hi1 = axis1_crawl.max_abs();
 				const bool reverse = axis1_reverse_pressed;
-				if (dual_handoff.active() && dual_handoff.reverse != reverse)
+				// 轴4点动独立选择轴6主动换手方向，轴1及其被动换手仍使用全局方向。
+				const bool axis4_direction_active = axis4_forward_request || axis4_reverse_request;
+				const bool requested_wire_reverse = axis4_direction_active
+					? axis4_reverse_request : reverse;
+				// 轴4已触发的换手在松开点动按钮后仍需完成；只有重新按下相反点动方向才取消。
+				const bool wire_reverse = dual_handoff.active() && dual_handoff.axis4_caused &&
+					!axis4_direction_active
+					? dual_handoff.wire_reverse : requested_wire_reverse;
+				if (dual_handoff.active() &&
+					(((dual_handoff.axis1 || !dual_handoff.wire_caused) && dual_handoff.reverse != reverse) ||
+						(dual_handoff.wire_caused && dual_handoff.wire_reverse != wire_reverse)))
 				{
 					dual_handoff.reset();
 				}
@@ -3556,8 +3566,8 @@ int main()
 				// 按截断前的净间距变化识别触边；已经离开端点的输入不能再次换手。
 				const bool g_toward_hi = requested_gap_delta > 1e-9;
 				const bool g_toward_lo = requested_gap_delta < -1e-9;
-				const bool wire_hit_hi = (g_now >= gmax - tol) && reverse && d6_before_gap > 0.0 && g_toward_hi;
-				const bool wire_hit_lo = (g_now <= gmin + tol) && !reverse && d6_before_gap < 0.0 && g_toward_lo;
+				const bool wire_hit_hi = (g_now >= gmax - tol) && wire_reverse && d6_before_gap > 0.0 && g_toward_hi;
+				const bool wire_hit_lo = (g_now <= gmin + tol) && !wire_reverse && d6_before_gap < 0.0 && g_toward_lo;
 				const bool cath_hit_hi = (g_now >= gmax - tol) && !reverse && d1_before_gap < 0.0 && g_toward_hi;
 				const bool cath_hit_lo = (g_now <= gmin + tol) && reverse && d1_before_gap > 0.0 && g_toward_lo;
 				const bool trig_1_left = axis1_window_ok && !reverse &&
@@ -3574,12 +3584,14 @@ int main()
 					dual_handoff.gap_boundary = dual_handoff.wire_caused || cath_hit_hi || cath_hit_lo;
 					dual_handoff.axis6 = dual_handoff.gap_boundary || merge_axis6;
 					dual_handoff.reverse = reverse;
+					dual_handoff.wire_reverse = wire_reverse;
+					dual_handoff.axis4_caused = dual_handoff.wire_caused && axis4_direction_active;
 				}
 				const bool want_axis1_leg = dual_handoff.axis1;
 				const bool want_axis6_leg = dual_handoff.axis6;
 				const bool wire_caused_g = dual_handoff.wire_caused;
 				const double g_actual = (axis6_abs - plc_leftlimit[5]) - (axis5_abs - plc_leftlimit[4]);
-				const double gap_edge = (wire_caused_g ? reverse : !reverse) ? gmax : gmin;
+				const double gap_edge = (wire_caused_g ? dual_handoff.wire_reverse : !reverse) ? gmax : gmin;
 				bool handoff_ready = dual_handoff.active() &&
 					(!want_axis1_leg || std::abs(axis1_abs - (reverse ? hi1 : lo1)) <= tol + 1e-9) &&
 					(!dual_handoff.gap_boundary || std::abs(g_actual - gap_edge) <= tol + 1e-9);
@@ -3602,7 +3614,7 @@ int main()
 					const double passive_distance_mm = (std::min)(cfg.axis6_passive_distance_limit_mm,
 						cfg.axis6_passive_clearance_mm + axis1_remaining_mm);
 					const double g_target = wire_caused_g
-						? (reverse ? cfg.axis6_active_retraction_gap_mm : cfg.axis6_active_delivery_gap_mm)
+						? (dual_handoff.wire_reverse ? cfg.axis6_active_retraction_gap_mm : cfg.axis6_active_delivery_gap_mm)
 						: (reverse ? gmin + passive_distance_mm : gmax - passive_distance_mm);
 					double axis6_target_abs = plc_leftlimit[5] + axis5_left_now + g_target;
 					axis6_target_abs = (std::min)(axis6_target_abs, abs6_soft); // 越限只夹取，不停机
@@ -4812,7 +4824,7 @@ int main()
 					break;
 				case VisCommandType::SetArmAxisJog:
 					if (vcmd.param1 >= 1 && vcmd.param1 <= 5 && vcmd.param2 >= -1 && vcmd.param2 <= 1)
-						arm_manual_ads.set_jog_direction(vcmd.param1, vcmd.param2);
+						arm_manual_ads.set_jog_direction(vcmd.param1, vcmd.param2, vcmd.arm_jog_speed_scale);
 					break;
 				case VisCommandType::SetArmJogParameter:
 				{

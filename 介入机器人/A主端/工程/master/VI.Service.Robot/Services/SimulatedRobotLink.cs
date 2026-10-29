@@ -176,7 +176,7 @@ namespace MasterConsole.Services
             => Task.FromResult(CommandResult.DoneWithReason("模拟链路：定位臂程序归零命令已发送。"));
         public Task<CommandResult> SetArmCartesianParameterAsync(int field, int valueMilli)
             => Task.FromResult(CommandResult.Done());
-        public void SetArmAxisJog(int axis, int direction) { }
+        public void SetArmAxisJog(int axis, int direction, double speedScale = 1.0) { }
         public void KeepArmCartesianAlive() { }
 
         public async Task<CommandResult> SetYValveClosedAsync(bool closed)

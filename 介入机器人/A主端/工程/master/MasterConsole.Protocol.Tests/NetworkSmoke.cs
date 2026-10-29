@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Collections.Concurrent;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -66,6 +67,12 @@ namespace MasterConsole.Protocol.Tests
                     foreach (var command in commands)
                     { if (command.Sequence <= previous) increasing = false; previous = command.Sequence; }
                     Check("并发发送命令的序号按发送顺序递增", increasing && commands.Count >= 64);
+                    foreach (double scale in new[] { 2.0, 1.0, 0.5 }) link.SetArmAxisJog(2, -1, scale);
+                    link.SetArmAxisJog(2, -1, 0.75);
+                    Check("三档点动倍率通过 MessagePack 和 Zenoh 发送，非法倍率不发送", Wait(() => commands
+                        .Where(frame => frame.Command == ZenohCommand.ArmAxisJog && frame.Param1 == 2 && frame.Param2 == -1)
+                        .Select(frame => frame.Value1).SequenceEqual(new[] { 2.0, 1.0, 0.5 }), 2000));
+                    link.SetArmAxisJog(2, 0);
                     int startHandle = handleCount, startState = stateCount, startForce = forceCount;
                     var frequencyClock = Stopwatch.StartNew();
                     Thread.Sleep(3000);

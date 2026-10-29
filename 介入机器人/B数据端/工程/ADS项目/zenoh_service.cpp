@@ -782,9 +782,10 @@ void ZenohService::consume_command_locked(const vi_protocol::CommandFrame& recei
          type == vi_protocol::Command::YValve))
     { add_result_locked(frame.command_id, 1, "A long-running command is still pending."); return; }
 
-    const auto enqueue = [&](VisCommandType command_type, int p1 = 0, int p2 = 0, bool receipt = true)
+    const auto enqueue = [&](VisCommandType command_type, int p1 = 0, int p2 = 0, bool receipt = true, double jog_speed_scale = 1.0)
     {
         VisCommand command; command.type = command_type; command.param1 = p1; command.param2 = p2;
+        command.arm_jog_speed_scale = jog_speed_scale;
         queue_command(command, receipt ? frame.command_id : 0, receipt);
     };
     const ULONGLONG now = GetTickCount64();
@@ -880,8 +881,12 @@ void ZenohService::consume_command_locked(const vi_protocol::CommandFrame& recei
         if (frame.param1 < 1 || frame.param1 > 5) { add_result_locked(frame.command_id, 1, "Invalid positioning-arm axis."); return; }
         enqueue(VisCommandType::RequestArmAxisReset, frame.param1); break;
     case vi_protocol::Command::ArmAxisJog:
-        if (frame.param1 < 1 || frame.param1 > 5 || frame.param2 < -1 || frame.param2 > 1) { add_result_locked(frame.command_id, 1, "Invalid positioning-arm jog."); return; }
-        enqueue(VisCommandType::SetArmAxisJog, frame.param1, frame.param2, false); break;
+        if (frame.param1 < 1 || frame.param1 > 5 || frame.param2 < -1 || frame.param2 > 1 ||
+            (frame.param2 != 0 && frame.value1 != 0 && frame.value1 != 0.5 && frame.value1 != 1.0 && frame.value1 != 2.0))
+        { add_result_locked(frame.command_id, 1, "Invalid positioning-arm jog."); return; }
+        // 旧主端的零倍率按中档处理；停止指令不受档位影响。
+        enqueue(VisCommandType::SetArmAxisJog, frame.param1, frame.param2, false,
+            frame.param2 == 0 || frame.value1 == 0 ? 1.0 : frame.value1); break;
     case vi_protocol::Command::ArmCartesianJog:
         if (frame.param1 < 1 || frame.param1 > 5 || frame.param2 < -100000 || frame.param2 > 100000) { add_result_locked(frame.command_id, 1, "Invalid Cartesian jog."); return; }
         enqueue(VisCommandType::SetArmCartesianJog, frame.param1, frame.param2, false); break;

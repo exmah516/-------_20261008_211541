@@ -60,7 +60,7 @@ namespace ScreenCut
                 s.Cameras[i] = new CameraSettings {
                     Enabled = enabled,
                     Ip = Ipv4(Get(p + "Ip", i == 0 ? "192.168.1.64" : "192.168.1.32")),
-                    LocalIp = Ipv4(Get(p + "LocalIp", i == 0 ? "192.168.1.96" : "192.168.1.97")),
+                    LocalIp = Ipv4(Get(p + "LocalIp", i == 0 ? "192.168.1.97" : "192.168.1.96")),
                     Username = Get(p + "Username", "admin"), Password = Get(p + "Password", ""),
                     RtspPort = Number(p + "RtspPort", 554, 1, 65535),
                     Channel = Number(p + "RtspChannel", 102, 101, 99999)
@@ -134,12 +134,13 @@ namespace ScreenCut
             string input = testPattern ? "-re -f lavfi -i testsrc2=size=" + VideoWidth + "x" + VideoHeight + ":rate=" + VideoFps + " " :
                 "-f gdigrab -framerate " + VideoFps + " -draw_mouse 0 -offset_x " + region.X + " -offset_y " + region.Y +
                 " -video_size " + region.Width + "x" + region.Height + " -i desktop ";
+            // 给关键帧保留半秒码率预算，并平衡 I/P 帧量化，抑制每秒一次的清晰度跳变。
             return "-hide_banner -loglevel warning -nostats -nostdin " + input +
                 "-an -vf \"scale=" + VideoWidth + ":" + VideoHeight + ":force_original_aspect_ratio=decrease:force_divisible_by=2," +
                 "pad=" + VideoWidth + ":" + VideoHeight + ":(ow-iw)/2:(oh-ih)/2,format=yuv420p\" " +
                 "-c:v libx264 -preset veryfast -tune zerolatency -threads 2 -profile:v baseline -level:v 4.0 " +
-                "-b:v " + BitrateKbps + "k -minrate " + BitrateKbps + "k -maxrate " + BitrateKbps + "k -bufsize " + (BitrateKbps / 10) + "k " +
-                "-g " + VideoFps + " -keyint_min " + VideoFps + " -bf 0 -x264-params \"nal-hrd=cbr:force-cfr=1:scenecut=0\" " +
+                "-b:v " + BitrateKbps + "k -minrate " + BitrateKbps + "k -maxrate " + BitrateKbps + "k -bufsize " + (BitrateKbps / 2) + "k " +
+                "-g " + VideoFps + " -keyint_min " + VideoFps + " -bf 0 -x264-params \"nal-hrd=cbr:force-cfr=1:scenecut=0:ipratio=0.9\" " +
                 "-flush_packets 1 -muxdelay 0 -rtsp_transport tcp -f rtsp rtsp://127.0.0.1:" + RtspPort + "/stream_dsa";
         }
 

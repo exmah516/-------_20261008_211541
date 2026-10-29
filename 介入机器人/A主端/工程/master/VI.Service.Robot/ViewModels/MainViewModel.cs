@@ -60,6 +60,7 @@ namespace MasterConsole.ViewModels
         private string _prepareError = "";
         private LinkStats _stats = new LinkStats();
         private string _armFeedbackText = "定位臂命令待发送";
+        private double _armJogSpeedScale = 1.0;
 
         public MainViewModel(IRobotLink link)
         {
@@ -352,6 +353,18 @@ namespace MasterConsole.ViewModels
             ? "手柄 SDK 未加载（缺 FLCatheter.dll）"
             : "582 " + (_stats.Handle582Online ? "在线" : "离线") + " / 587 " + (_stats.Handle587Online ? "在线" : "离线");
         public string ArmFeedbackText => _armFeedbackText;
+        public bool ArmSpeedFast { get => _armJogSpeedScale == 2.0; set { if (value) SetArmJogSpeedScale(2.0); } }
+        public bool ArmSpeedMedium { get => _armJogSpeedScale == 1.0; set { if (value) SetArmJogSpeedScale(1.0); } }
+        public bool ArmSpeedSlow { get => _armJogSpeedScale == 0.5; set { if (value) SetArmJogSpeedScale(0.5); } }
+
+        private void SetArmJogSpeedScale(double scale)
+        {
+            if (_armJogSpeedScale == scale) return;
+            _armJogSpeedScale = scale;
+            OnPropertyChanged(nameof(ArmSpeedFast));
+            OnPropertyChanged(nameof(ArmSpeedMedium));
+            OnPropertyChanged(nameof(ArmSpeedSlow));
+        }
 
         public async Task SetArmManualEnableAsync(bool enabled) =>
             await ReportArm("定位臂总使能", await _link.SetArmManualEnableAsync(enabled));
@@ -359,7 +372,7 @@ namespace MasterConsole.ViewModels
             await ReportArm($"定位臂轴{axis}{(enabled ? "上电" : "断电")}", await _link.SetArmAxisEnableAsync(axis, enabled));
         public async Task ResetArmAxisAsync(int axis) =>
             await ReportArm($"定位臂轴{axis}复位", await _link.ResetArmAxisAsync(axis));
-        public void SetArmAxisJog(int axis, int direction) => _link.SetArmAxisJog(axis, direction);
+        public void SetArmAxisJog(int axis, int direction) => _link.SetArmAxisJog(axis, direction, _armJogSpeedScale);
         public async Task<bool> SetArmCartesianJogAsync(int mode, int speedMilli)
         {
             var result = await _link.SetArmCartesianJogAsync(mode, speedMilli);

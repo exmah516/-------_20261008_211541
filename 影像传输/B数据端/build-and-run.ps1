@@ -49,6 +49,9 @@ try {
     $oldRelay = Join-Path $runtime 'ImagingCameraRelay.dll'
     if (Test-Path -LiteralPath $oldRelay) { Remove-Item -LiteralPath $oldRelay -Force }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../依赖/第三方组件说明.md') -Destination $runtime -Force
+    foreach ($name in @('check-camera-connection.ps1','检查相机连接.cmd')) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $runtime -Force
+    }
     $exe = Join-Path $runtime 'ScreenCut.exe'
     Write-Host "已生成完整数据端运行包：$runtime"
     if (!$BuildOnly) { Start-Process -FilePath $exe -WorkingDirectory $runtime -WindowStyle Normal }

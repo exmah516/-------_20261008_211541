@@ -72,7 +72,7 @@ namespace MasterConsole.Services
         Task<CommandResult> StopArmAsync();
         Task<CommandResult> ReturnArmProgramZeroAsync();
         Task<CommandResult> SetArmCartesianParameterAsync(int field, int valueMilli);
-        void SetArmAxisJog(int axis, int direction);
+        void SetArmAxisJog(int axis, int direction, double speedScale = 1.0);
         void KeepArmCartesianAlive();
 
         /// <summary>力反馈开关；开启前的零点采集由从端自动完成。</summary>

@@ -6,6 +6,12 @@
             <ToggleButton Content="总使能" MinWidth="94" IsEnabled="{Binding CanOperate}" Click="ArmManualEnable_Click"/>
             <TextBlock Text="{Binding ArmFeedbackText}" Style="{StaticResource Hint}" Margin="10,0,0,0"/>
         </WrapPanel>
+        <WrapPanel Margin="0,0,0,8" ToolTip="统一调整五轴点动速度">
+            <TextBlock Text="速度" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <RadioButton x:Name="ArmSpeedFast" Content="快" GroupName="ArmJogSpeed" IsChecked="{Binding ArmSpeedFast, Mode=TwoWay}" Style="{StaticResource ModeChipRadio}" Padding="12,5" MinWidth="46" ToolTip="原速度的 2 倍"/>
+            <RadioButton x:Name="ArmSpeedMedium" Content="中" GroupName="ArmJogSpeed" IsChecked="{Binding ArmSpeedMedium, Mode=TwoWay}" Style="{StaticResource ModeChipRadio}" Padding="12,5" MinWidth="46" ToolTip="原速度"/>
+            <RadioButton x:Name="ArmSpeedSlow" Content="慢" GroupName="ArmJogSpeed" IsChecked="{Binding ArmSpeedSlow, Mode=TwoWay}" Style="{StaticResource ModeChipRadio}" Padding="12,5" MinWidth="46" ToolTip="原速度的 0.5 倍"/>
+        </WrapPanel>
         <TextBlock Text="各轴：上电、复位、按住 Jog；松开即停" Style="{StaticResource Hint}" Margin="0,0,0,8"/>
         <UniformGrid Columns="5">
             <StackPanel Margin="0,0,3,0"><TextBlock Text="轴 1" HorizontalAlignment="Center"/><ToggleButton Content="上电" Tag="1" Click="ArmAxisEnable_Click" IsEnabled="{Binding CanOperate}"/><Button Content="复位" Tag="1" Click="ArmAxisReset_Click" IsEnabled="{Binding CanOperate}"/><UniformGrid Columns="2"><Button Content="−" Tag="1" CommandParameter="-1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}" AutomationProperties.Name="轴1负向点动"/><Button x:Name="Axis1Forward" Content="+" Tag="1" CommandParameter="1" PreviewMouseLeftButtonDown="ArmJogButton_Down" PreviewMouseLeftButtonUp="ArmJogButton_Up" LostMouseCapture="ArmJogButton_Up" IsEnabled="{Binding CanOperate}" AutomationProperties.Name="轴1正向点动"/></UniformGrid></StackPanel>

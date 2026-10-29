@@ -107,6 +107,33 @@ struct ZenohServiceTestAccess
         assert(service.results_.empty());
     }
 
+    static void positioning_arm_speed()
+    {
+        ZenohService service; initialize(service);
+        std::uint64_t sequence = 0;
+        VisCommand control;
+        for (double scale : { 0.0, 0.5, 1.0, 2.0, 2.0, 0.5, 1.0 })
+        {
+            auto frame = command(service, vi_protocol::Command::ArmAxisJog, ++sequence, 0, 3, -1);
+            frame.value1 = scale; send(service, frame);
+            assert(service.poll_command(control) && control.type == VisCommandType::SetArmAxisJog);
+            assert(control.param1 == 3 && control.param2 == -1);
+            assert(control.arm_jog_speed_scale == (scale == 0 ? 1.0 : scale));
+            service.command_processed();
+        }
+        for (double invalid : { -1.0, 0.25, 0.75, 3.0 })
+        {
+            auto frame = command(service, vi_protocol::Command::ArmAxisJog, ++sequence, 0, 3, 1);
+            frame.value1 = invalid; send(service, frame);
+            assert(!service.poll_command(control));
+        }
+        auto stop = command(service, vi_protocol::Command::ArmAxisJog, ++sequence, 0, 3, 0);
+        stop.value1 = 3.0; send(service, stop);
+        assert(service.poll_command(control) && control.param2 == 0);
+        service.command_processed();
+        assert(service.results_.empty());
+    }
+
     static void task_association()
     {
         ZenohService service; initialize(service);
@@ -219,6 +246,7 @@ int main()
     ZenohServiceTestAccess::fifo_and_high_rate();
     ZenohServiceTestAccess::expiry_and_replay();
     ZenohServiceTestAccess::results_exclude_jog_and_alive();
+    ZenohServiceTestAccess::positioning_arm_speed();
     ZenohServiceTestAccess::task_association();
     ZenohServiceTestAccess::challenge_cannot_revoke();
     ZenohServiceTestAccess::handle_replay();

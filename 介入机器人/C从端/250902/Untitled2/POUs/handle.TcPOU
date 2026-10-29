@@ -70,7 +70,7 @@ VAR
 	axis4_stop_exec : BOOL := FALSE;
 	axis4_finish_error : BOOL := FALSE;
 	axis4_error_id_pending : UDINT := 0;
-	axis4_manual_velocity : LREAL := 30;
+	axis4_manual_velocity : LREAL := 60;
 	axis4_manual_acc : LREAL := 200;
 	axis4_manual_dec : LREAL := 200;
 	axis4_manual_jerk : LREAL := 500.0;

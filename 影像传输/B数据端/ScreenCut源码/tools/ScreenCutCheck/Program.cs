@@ -15,11 +15,12 @@ using MasterConsole.Services;
 using Microsoft.Web.WebView2.Wpf;
 using ScreenCut;
 
-internal static class Program
+internal static partial class Program
 {
     private static int _checks, _exitCode;
     private static bool _bandwidthOnly;
     private static bool _legacyBandwidth;
+    private static bool _cameraCheckOnly;
     private static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
     private static readonly string Work = Path.Combine(Path.GetTempPath(), "VI.Imaging.Check-" + Guid.NewGuid().ToString("N"));
     private static readonly List<Process> Children = new List<Process>();
@@ -37,6 +38,8 @@ internal static class Program
     public static int Main(string[] args)
     {
         if (args.Contains("--logging")) return LoggingCheck.Run();
+        if (args.Contains("--encoding")) return EncodingCheck.Run();
+        _cameraCheckOnly = args.Contains("--camera-check");
         _legacyBandwidth = args.Contains("--legacy-bandwidth");
         _bandwidthOnly = _legacyBandwidth || args.Contains("--bandwidth");
         Directory.CreateDirectory(Work);
@@ -104,6 +107,7 @@ internal static class Program
     private static int N(Dictionary<string, object> row, string key) => row.ContainsKey(key) ? Convert.ToInt32(row[key]) : 0;
     private static async Task RunAsync(WebView2 view)
     {
+        if (_cameraCheckOnly) { await CameraWarningCheckAsync(); return; }
         var settings = TestSettings();
         Reject(() => StreamingSettings.Load(new NameValueCollection { ["MasterIp"] = "0.0.0.0" }), "invalid IP rejected");
         Reject(() => StreamingSettings.Load(new NameValueCollection { ["VideoBitrateKbps"] = "9999" }), "bitrate outside 128–3000 kbps rejected");
@@ -111,6 +115,7 @@ internal static class Program
         Reject(() => StreamingSettings.Load(new NameValueCollection { ["VideoFps"] = "0" }), "invalid frame rate rejected");
         var defaults = StreamingSettings.Load(new NameValueCollection());
         Check(defaults.VideoWidth == 960 && defaults.VideoHeight == 540 && defaults.VideoFps == 25 && defaults.BitrateKbps == 512, "default DSA fits shared 2 Mbps budget");
+        Check(defaults.Cameras[0].LocalIp == "192.168.1.97" && defaults.Cameras[1].LocalIp == "192.168.1.96", "camera default source addresses match the verified physical wiring");
         Reject(() => StreamingSettings.Load(new NameValueCollection { ["WebRtcMediaPort"] = "8889" }), "ICE TCP and signaling port conflict rejected");
         Reject(() => StreamingSettings.ValidateRegion(int.MaxValue, 0, int.MaxValue, 10, new Rectangle(0, 0, 1920, 1080)), "overflowing crop rejected");
         Check(StreamingSettings.ValidateRegion(-100, 0, 100, 100, new Rectangle(-100, 0, 2020, 1080)).X == -100, "negative multi-monitor coordinates retained");
@@ -129,6 +134,7 @@ internal static class Program
         File.AppendAllText(Path.Combine(Work, "dsa_screencut.ini"), "streamPath=../invalid\n", Encoding.UTF8);
         Reject(() => StreamSettings.Load(Work), "unsafe stream path rejected");
         await BoundSocketCheckAsync();
+        await CameraWarningCheckAsync();
 
         string cameraConfig = Path.Combine(Work, "fake-cameras.yml");
         File.WriteAllText(cameraConfig, @"logLevel: warn

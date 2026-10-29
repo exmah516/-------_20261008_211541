@@ -1,7 +1,13 @@
 cmake_minimum_required(VERSION 3.24)
 project(PositioningArmKinematics VERSION 0.1.0 LANGUAGES CXX)
 
-find_package(Eigen3 3.4 REQUIRED NO_MODULE)
+find_package(Eigen3 3.4 QUIET NO_MODULE)
+if(NOT TARGET Eigen3::Eigen)
+    # 随运行包提供的是 Eigen 头文件，也允许不含 CMake 安装元数据的目录。
+    find_path(EIGEN3_INCLUDE_DIR Eigen/Core PATH_SUFFIXES include/eigen3 REQUIRED)
+    add_library(Eigen3::Eigen INTERFACE IMPORTED)
+    set_target_properties(Eigen3::Eigen PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${EIGEN3_INCLUDE_DIR}")
+endif()
 
 add_library(PositioningArmKinematics STATIC src/kinematics.cpp src/program_zero.cpp)
 add_library(PositioningArm::Kinematics ALIAS PositioningArmKinematics)
@@ -24,7 +30,7 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME positioning_arm_tests COMMAND positioning_arm_tests)
     if(WIN32)
-        set(ADS_PROJECT "${CMAKE_CURRENT_SOURCE_DIR}/../64位ADS - 相对路径 - 传数组 - 加上手柄")
+        set(ADS_PROJECT "${CMAKE_CURRENT_SOURCE_DIR}/../ADS项目")
         add_executable(arm_ads_tests tests/arm_ads_test.cpp "${ADS_PROJECT}/arm_manual_ads_service.cpp")
         target_include_directories(arm_ads_tests PRIVATE "${ADS_PROJECT}" "${ADS_PROJECT}/ADS/Include")
         target_link_libraries(arm_ads_tests PRIVATE PositioningArmKinematics)

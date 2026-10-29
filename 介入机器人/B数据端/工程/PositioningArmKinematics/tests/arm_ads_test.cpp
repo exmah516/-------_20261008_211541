@@ -1,13 +1,19 @@
 #include "arm_manual_ads_service.h"
 #include "ads_communication.h"
 #include <cstring>
+#include <algorithm>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
 namespace {
 std::mutex fake_mutex;
 std::array<double, 5> actual{{100, 90, 180, 180, 0}};
+std::array<double, 5> jog_velocity{{5, 5, 5, 5, 5}}, jog_acc{{50, 50, 50, 50, 50}};
+std::array<double, 5> jog_dec{{50, 50, 50, 50, 50}}, jog_jerk{{500, 500, 500, 500, 500}};
+std::array<bool, 5> jog_pos{}, jog_neg{};
+std::array<double, 5> started_velocity{};
 ArmCurve staged_curve;
 std::uint32_t acknowledged = 0, plc_state = 0, plc_error = 0;
 std::vector<std::string> writes;
@@ -54,6 +60,17 @@ bool AdsCommunicationService::write_sum(const char* const* names, const unsigned
         const std::string name(names[i]);
         writes.push_back(name);
         if (name == fail_symbol) return false;
+        if (name == "G.arm_jog_velocity") std::memcpy(jog_velocity.data(), values[i], sizes[i]);
+        if (name == "G.arm_jog_acc") std::memcpy(jog_acc.data(), values[i], sizes[i]);
+        if (name == "G.arm_jog_dec") std::memcpy(jog_dec.data(), values[i], sizes[i]);
+        if (name == "G.arm_jog_jerk") std::memcpy(jog_jerk.data(), values[i], sizes[i]);
+        if (name == "G.arm_jog_pos_req" || name == "G.arm_jog_neg_req") {
+            auto& requests = name == "G.arm_jog_pos_req" ? jog_pos : jog_neg;
+            const auto* next = static_cast<const bool*>(values[i]);
+            for (int axis = 0; axis < 5; ++axis)
+                if (next[axis] && !requests[axis]) started_velocity[axis] = jog_velocity[axis];
+            std::memcpy(requests.data(), values[i], sizes[i]);
+        }
         if (name == "G.arm_curve_data") {
             check(sizes[i] == sizeof(staged_curve.values), "Wrong curve packet size");
             std::memcpy(staged_curve.values.data(), values[i], sizes[i]);
@@ -87,10 +104,13 @@ bool AdsCommunicationService::read_sum(const char* const* names, const unsigned 
         else if (name == "G.arm_manual_enable" || name == "G.arm_enable_req"
             || (name.find("G.arm_power_output[") == 0 && name.find(".Done") != std::string::npos))
             std::memset(values[i], 1, sizes[i]);
-        else if (name == "G.arm_jog_velocity" || name == "G.arm_jog_acc"
-            || name == "G.arm_jog_dec" || name == "G.arm_jog_jerk") {
-            auto* output = static_cast<double*>(values[i]);
-            for (int axis = 0; axis < 5; ++axis) output[axis] = name == "G.arm_jog_velocity" ? 5 : 50;
+        else if (name == "G.arm_jog_velocity") std::memcpy(values[i], jog_velocity.data(), sizes[i]);
+        else if (name == "G.arm_jog_acc") std::memcpy(values[i], jog_acc.data(), sizes[i]);
+        else if (name == "G.arm_jog_dec") std::memcpy(values[i], jog_dec.data(), sizes[i]);
+        else if (name == "G.arm_jog_jerk") std::memcpy(values[i], jog_jerk.data(), sizes[i]);
+        else if (name == "G.arm_cmd_dir") {
+            auto* output = static_cast<std::int8_t*>(values[i]);
+            for (int axis = 0; axis < 5; ++axis) output[axis] = jog_pos[axis] ? 1 : (jog_neg[axis] ? -1 : 0);
         }
     }
     return true;
@@ -146,6 +166,38 @@ int main()
         service.set_cartesian_parameter(3, 30);
         check(service.start(), "Service start");
         until([&] { return service.snapshot().valid; });
+        for (double scale : { 1.0, 2.0, 2.0, 0.5, 1.0 }) {
+            for (int axis = 1; axis <= 5; ++axis) {
+                const int direction = axis % 2 ? 1 : -1;
+                service.set_jog_direction(axis, direction, scale);
+                until([&] {
+                    const auto state = service.snapshot();
+                    return state.cmd_dir[axis - 1] == direction
+                        && std::all_of(state.jog_velocity.begin(), state.jog_velocity.end(),
+                            [=](double value) { return value == 5.0 * scale; });
+                });
+                {
+                    std::lock_guard<std::mutex> lock(fake_mutex);
+                    check(started_velocity[axis - 1] == 5.0 * scale, "Jog started before the selected velocity was written");
+                    check(jog_acc == acceleration && jog_dec == acceleration && jog_jerk[0] == 500,
+                        "Speed selection changed acceleration/deceleration/jerk");
+                }
+                service.set_jog_direction(axis, 0, std::numeric_limits<double>::quiet_NaN());
+                until([&] { return service.snapshot().cmd_dir[axis - 1] == 0; });
+            }
+        }
+        for (double invalid : { 0.0, -1.0, 0.75, 3.0, std::numeric_limits<double>::quiet_NaN() })
+            service.set_jog_direction(1, 1, invalid);
+        std::this_thread::sleep_for(std::chrono::milliseconds(80));
+        check(service.snapshot().cmd_dir[0] == 0 && service.snapshot().jog_velocity == velocity,
+            "Invalid speed changed jog requests or velocity");
+        service.set_jog_direction(1, 1, 0.5);
+        until([&] { return service.snapshot().cmd_dir[0] == 1; });
+        until([&] { return service.snapshot().cmd_dir[0] == 0; });
+        service.set_jog_direction(1, 1);
+        until([&] { return service.snapshot().cmd_dir[0] == 1 && service.snapshot().jog_velocity == velocity; });
+        service.set_jog_direction(1, 0);
+        until([&] { return service.snapshot().cmd_dir[0] == 0; });
         service.request_program_zero();
         until([&] { return service.snapshot().cartesian_status == 3; });
         check(count("G.arm_curve_request") == 0, "Already-home caused movement");
@@ -210,7 +262,7 @@ int main()
         check(count("G.arm_curve_cancel") == cancels_before_shutdown + 1,
             "Service shutdown did not cancel active curve");
         check(count("G.arm_curve_request") == 6, "Shutdown committed another curve");
-        std::cout << "PASS: PLC units, home window, staged commit, cancellation, no retries, lease/feedback loss, PLC error, shutdown; no hardware.\n";
+        std::cout << "PASS: three jog speeds/all axes/no accumulation/write order/release/lease, PLC units, home window, staged commit, cancellation, no retries, lease/feedback loss, PLC error, shutdown; no hardware.\n";
     } catch (const std::exception& error) {
         std::cerr << "FAIL: " << error.what() << '\n';
         return 1;

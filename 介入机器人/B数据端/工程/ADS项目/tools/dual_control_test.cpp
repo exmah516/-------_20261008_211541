@@ -292,7 +292,7 @@ static void test_examples() {
     r=tick({30,615,616},0.1,-0.1,true);
     require(r.leg1 && r.leg6 && close(r.target6-615,28),"axis1 at retraction endpoint merges near passive wire");
     r=tick({18,615,648},0,0,false,1);
-    require(!r.transaction && close(r.after.a6,648),"axis4 jog cannot override global direction");
+    require(r.transaction && r.leg6 && !r.leg1 && close(r.target6-615,6),"axis4 reverse hands off at high gap independently of global delivery");
     r=tick({18,615,648},1,1);
     require(!r.transaction && close(r.after.a6-r.after.a5,33),"equal pull at delivery far boundary");
     r=tick({30,615,640},1,0,true);
@@ -470,6 +470,73 @@ static void advance(Plant& p,FollowSession& s,double mirror_step=0.25) {
     p.a6=approach(p.a6,s.command.a6,0.25);
     s.velocity[0]=(p.a1-before.a1)/0.01; s.velocity[2]=(p.a3-before.a3)/0.01;
     s.velocity[4]=(p.a5-before.a5)/0.01; s.velocity[5]=(p.a6-before.a6)/0.01;
+}
+static void test_axis4_direction_independence() {
+    Config cfg;
+    const double lo=cfg.catheter_axis6_window_min_gap_from_axis5_mm;
+    const double hi=lo+cfg.catheter_axis6_window_size_mm;
+    for(bool global_reverse:{false,true}) for(int jog:{-1,1}) {
+        const double edge=jog>0?hi:lo;
+        const double target=jog>0?cfg.axis6_active_retraction_gap_mm:cfg.axis6_active_delivery_gap_mm;
+        auto r=tick({18,615,628},0,0,global_reverse,jog);
+        require(!r.transaction && (r.follow.a6-628)*jog>0,"轴4慢速方向独立于全局模式");
+        r=tick({18,615,615+edge},0,0,global_reverse,jog);
+        require(r.transaction&&r.leg6&&!r.leg1&&close(r.target6-615,target),
+                "轴4按自身方向触边并使用对应主动换手目标");
+        r=tick({18,615,615+(jog>0?lo:hi)},0,0,global_reverse,jog);
+        require(!r.transaction,"轴4离开另一端时不误换手");
+
+        // 导管与轴4相反时，两条腿仍各自使用自己的方向和目标。
+        const double end1=global_reverse?cfg.axis1_window_right_from_left_mm:cfg.axis1_window_left_from_left_mm;
+        r=tick({end1,615,615+edge},global_reverse?cfg.linear_increment_noise_deadband_mm:-cfg.linear_increment_noise_deadband_mm,0,global_reverse,jog);
+        require(r.leg1&&r.leg6&&close(r.target6-615,target)&&
+                close(r.target1,global_reverse?cfg.axis1_window_left_from_left_mm:cfg.axis1_window_right_from_left_mm),
+                "合并换手保留轴1全局方向及轴4独立方向");
+
+        Plant p{18,615,615+edge-jog*0.21}; FollowSession s(p);
+        r=tick(p,0,0,global_reverse,jog,true,&s);
+        require(s.pending.active()&&!r.transaction,"轴4命令触边后等待实际到位");
+        const Plant endpoint=s.command;
+        r=tick(p,0,0,!global_reverse,jog,true,&s);
+        require(s.pending.active()&&!r.transaction&&close(r.follow.a6,endpoint.a6),
+                "切换全局模式不能取消或改写轴4等待换手");
+        r=tick(p,0,0,!global_reverse,0,true,&s);
+        require(s.pending.active()&&!r.transaction&&close(r.follow.a6,endpoint.a6),
+                "松开轴4后全局模式变化不能取消已触发换手");
+        p=endpoint;
+        s.velocity[5]=cfg.handoff_stop_velocity_mm_s+0.01;
+        require(!tick(p,0,0,!global_reverse,jog,true,&s).transaction,"轴4换手仍等待实际停稳");
+        s.velocity[5]=0;
+        r=tick(p,0,0,!global_reverse,jog,true,&s);
+        require(r.transaction&&close(r.target6-615,target),"实际到位停稳后按轴4原方向换手");
+
+        p={18,615,615+edge-jog*0.21}; s=FollowSession(p);
+        tick(p,0,0,global_reverse,jog,true,&s);
+        r=tick(p,0,0,global_reverse,-jog,true,&s);
+        require(!r.transaction&&!s.pending.active(),"轴4反向请求取消尚未执行的旧方向换手");
+
+        p={18,615,615+(jog>0?lo:hi)}; s=FollowSession(p);
+        int returns=0;
+        for(int n=0;n<2400&&returns<2;++n) {
+            r=tick(p,0,0,global_reverse,jog,true,&s);
+            require(s.command.a6-s.command.a5>=lo-1e-7&&s.command.a6-s.command.a5<=hi+1e-7,
+                    "轴4连续点动保持原间距窗口");
+            if(r.transaction) {
+                require(r.leg6&&!r.leg1&&close(r.target6-615,target),"连续换手目标与轴4方向一致");
+                ++returns;
+                p=r.after;
+                s=FollowSession(p);
+            } else advance(p,s);
+        }
+        require(returns==2,"按住轴4点动在快速换端和重建基准后继续下一轮");
+    }
+    for(bool reverse:{false,true}) {
+        auto r=tick({18,650,670},0,0,reverse,1);
+        require(!r.transaction&&r.follow.a6<=670,"轴4后退不能突破轴6软限位去触发窗口换手");
+        r=tick({18,650,651},0,0,reverse,-1);
+        require(r.leg6&&r.target6<=670,"轴4前进快速换端目标仍受软限位约束");
+    }
+    std::cout<<"PASS axis4 independent direction, merged targets, lag/speed gates, repeated handoffs and soft limits\n";
 }
 static void test_handoff_lag() {
     for(int axis:{1,6}) for(bool rev:{false,true}) for(double input:{0.1,1.,4.}) {
@@ -718,6 +785,7 @@ static void test_single_mapping_mirror() {
 }
 
 int main() {
+    test_axis4_direction_independence();
     test_lead_across_handoffs();
     test_single_mapping_mirror();
     test_post_return_lead();

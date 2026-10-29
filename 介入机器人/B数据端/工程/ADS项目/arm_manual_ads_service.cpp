@@ -194,13 +194,21 @@ void ArmManualAdsService::request_reset(int axis_one_based)
 	wake_cv_.notify_all();
 }
 
-void ArmManualAdsService::set_jog_direction(int axis_one_based, int direction)
+void ArmManualAdsService::set_jog_direction(int axis_one_based, int direction, double speed_scale)
 {
 	if (!valid_axis(axis_one_based) || direction < -1 || direction > 1) return;
+	if (direction != 0 && speed_scale != 0.5 && speed_scale != 1.0 && speed_scale != 2.0) return;
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
 		if (direction != 0 && (curve_pending_ || home_requested_ || cartesian_mode_ != 0))
 			return;
+		if (direction != 0 && jog_speed_scale_ != speed_scale)
+		{
+			for (double velocity : desired_jog_velocity_)
+				if (!valid_parameter(velocity * speed_scale)) return;
+			jog_speed_scale_ = speed_scale;
+			params_dirty_ = true;
+		}
 		const int index = axis_one_based - 1;
 		const bool pos = direction > 0;
 		const bool neg = direction < 0;
@@ -385,6 +393,7 @@ bool ArmManualAdsService::set_jog_parameter(int axis_one_based, int parameter_ki
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
 		const int index = axis_one_based - 1;
+		if (parameter_kind == 0 && !valid_parameter(value * jog_speed_scale_)) return false;
 		switch (parameter_kind)
 		{
 		case 0: desired_jog_velocity_[index] = value; break;
@@ -533,6 +542,8 @@ bool ArmManualAdsService::write_dirty_request()
 	std::array<bool, 5> jog_pos_req{};
 	std::array<bool, 5> jog_neg_req{};
 	std::array<double, 5> velocity{};
+	std::array<double, 5> base_velocity{};
+	double speed_scale = 1.0;
 	std::array<double, 5> acc{};
 	std::array<double, 5> dec{};
 	std::array<double, 5> jerk{};
@@ -549,7 +560,11 @@ bool ArmManualAdsService::write_dirty_request()
 		reset_req = desired_reset_req_;
 		jog_pos_req = desired_jog_pos_req_;
 		jog_neg_req = desired_jog_neg_req_;
-		velocity = desired_jog_velocity_;
+		base_velocity = desired_jog_velocity_;
+		speed_scale = jog_speed_scale_;
+		// 始终从基准计算，反复切档和保活不会累乘。
+		for (int axis = 0; axis < kArmAxisCount; ++axis)
+			velocity[axis] = base_velocity[axis] * speed_scale;
 		acc = desired_jog_acc_;
 		dec = desired_jog_dec_;
 		jerk = desired_jog_jerk_;
@@ -573,8 +588,6 @@ bool ArmManualAdsService::write_dirty_request()
 	if (manual_dirty) append(kManualEnable, sizeof(manual_enable), &manual_enable);
 	if (enable_dirty) append(kEnableReq, sizeof(enable_req), enable_req.data());
 	if (reset_dirty) append(kResetReq, sizeof(reset_req), reset_req.data());
-	if (jog_pos_dirty) append(kJogPosReq, sizeof(jog_pos_req), jog_pos_req.data());
-	if (jog_neg_dirty) append(kJogNegReq, sizeof(jog_neg_req), jog_neg_req.data());
 	if (params_dirty)
 	{
 		append(kJogVelocity, sizeof(velocity), velocity.data());
@@ -582,6 +595,9 @@ bool ArmManualAdsService::write_dirty_request()
 		append(kJogDec, sizeof(dec), dec.data());
 		append(kJogJerk, sizeof(jerk), jerk.data());
 	}
+	// 先更新速度，再提交方向请求，避免首次按下时沿用旧档。
+	if (jog_pos_dirty) append(kJogPosReq, sizeof(jog_pos_req), jog_pos_req.data());
+	if (jog_neg_dirty) append(kJogNegReq, sizeof(jog_neg_req), jog_neg_req.data());
 	if (symbols.empty()) return true;
 	const bool ok = ads_service_.write_sum(
 		symbols.data(), lengths.data(), inputs.data(), static_cast<unsigned long>(symbols.size()), kAdsTimeoutMs);
@@ -597,7 +613,7 @@ bool ArmManualAdsService::write_dirty_request()
 	}
 	if (jog_pos_dirty && desired_jog_pos_req_ == jog_pos_req) jog_pos_dirty_ = false;
 	if (jog_neg_dirty && desired_jog_neg_req_ == jog_neg_req) jog_neg_dirty_ = false;
-	if (params_dirty && desired_jog_velocity_ == velocity && desired_jog_acc_ == acc &&
+	if (params_dirty && desired_jog_velocity_ == base_velocity && jog_speed_scale_ == speed_scale && desired_jog_acc_ == acc &&
 		desired_jog_dec_ == dec && desired_jog_jerk_ == jerk)
 	{
 		params_dirty_ = false;

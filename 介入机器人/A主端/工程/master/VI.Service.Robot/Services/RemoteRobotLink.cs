@@ -195,8 +195,11 @@ namespace MasterConsole.Services
         public Task<CommandResult> ReturnArmProgramZeroAsync() => RequestAsync(ZenohCommand.ArmProgramZero, 0, 0, 0, 0, 5000);
         public Task<CommandResult> SetArmCartesianParameterAsync(int field, int valueMilli)
             => RequestAsync(ZenohCommand.ArmCartesianParameter, field, valueMilli, 0, 0, 5000);
-        public void SetArmAxisJog(int axis, int direction)
-            => SendCommand(ZenohCommand.ArmAxisJog, axis, direction, 0, 0, "", null, null, null, 0);
+        public void SetArmAxisJog(int axis, int direction, double speedScale = 1.0)
+        {
+            if (direction != 0 && speedScale != 0.5 && speedScale != 1.0 && speedScale != 2.0) return;
+            SendCommand(ZenohCommand.ArmAxisJog, axis, direction, direction == 0 ? 0 : speedScale, 0, "", null, null, null, 0);
+        }
         public void KeepArmCartesianAlive()
             => SendCommand(ZenohCommand.ArmCartesianAlive, 0, 0, 0, 0, "", null, null, null, 0);
         public Task<CommandResult> SetForceFeedbackAsync(bool enable)

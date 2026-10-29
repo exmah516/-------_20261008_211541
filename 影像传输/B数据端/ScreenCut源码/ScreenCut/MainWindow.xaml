@@ -16,6 +16,7 @@
     </WrapPanel>
     <StackPanel Grid.Row="1" Margin="0,6,0,8">
       <TextBlock x:Name="sendStatus" Text="媒体服务启动中…" TextWrapping="Wrap"/>
+      <TextBlock x:Name="cameraWarning" TextWrapping="Wrap" Foreground="#B14627" FontWeight="SemiBold" Margin="0,4,0,0" Visibility="Collapsed"/>
       <TextBlock x:Name="cameraStatus" TextWrapping="Wrap" Foreground="#586576" Margin="0,4,0,0"/>
     </StackPanel>
     <Border Grid.Row="2" Background="#111821" CornerRadius="4"><Image x:Name="pictureBox" Stretch="Uniform"/></Border>

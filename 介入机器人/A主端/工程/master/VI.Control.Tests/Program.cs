@@ -112,6 +112,26 @@ internal static class Program
 
         var holdArm = (UserControl)Activator.CreateInstance(arm.GetType(), holdVm)!;
         var axis = (Button)holdArm.FindName("Axis1Forward")!;
+        var speedFast = (RadioButton)holdArm.FindName("ArmSpeedFast")!;
+        var speedMedium = (RadioButton)holdArm.FindName("ArmSpeedMedium")!;
+        var speedSlow = (RadioButton)holdArm.FindName("ArmSpeedSlow")!;
+        Pump();
+        Check(speedMedium.IsChecked == true && speedFast.IsChecked == false && speedSlow.IsChecked == false,
+            "positioning arm starts in medium speed");
+        foreach (var (selector, scale) in new[] { (speedFast, 2.0), (speedSlow, 0.5), (speedFast, 2.0), (speedMedium, 1.0) })
+        {
+            selector.SetCurrentValue(RadioButton.IsCheckedProperty, true);
+            Pump();
+            Check(new[] { speedFast, speedMedium, speedSlow }.Count(button => button.IsChecked == true) == 1,
+                "speed selector keeps exactly one level selected");
+            for (int armAxis = 1; armAxis <= 5; armAxis++)
+            {
+                holdVm.SetArmAxisJog(armAxis, 1);
+                Check(recordingLink.LastArmJog == (armAxis, 1) && recordingLink.LastArmSpeedScale == scale,
+                    $"shared speed {scale} reaches arm axis {armAxis}");
+                holdVm.SetArmAxisJog(armAxis, 0);
+            }
+        }
         Invoke(holdArm, "ArmJogButton_Down", axis, MouseArgs(axis));
         Invoke(holdArm, "ArmJogButton_Up", axis, new RoutedEventArgs(UIElement.PreviewMouseLeftButtonUpEvent));
         Check(recordingLink.LastArmJog == (1, 0), "arm mouse release sends zero jog");
@@ -234,6 +254,7 @@ public class RecordingRobotLink : DispatchProxy
     public Dictionary<int, int> InjectorDirections { get; } = new();
     public int LastAxis4 { get; private set; }
     public (int Axis, int Direction) LastArmJog { get; private set; }
+    public double LastArmSpeedScale { get; private set; }
     public Dictionary<int, int> ArmJogDirections { get; } = new();
     public int StopArmCount { get; private set; }
     public int DisconnectCount { get; private set; }
@@ -287,6 +308,7 @@ public class RecordingRobotLink : DispatchProxy
         if (name == "SetArmAxisJog")
         {
             LastArmJog = ((int)args![0]!, (int)args[1]!);
+            LastArmSpeedScale = (double)args[2]!;
             ArmJogDirections[LastArmJog.Axis] = LastArmJog.Direction;
             return null;
         }

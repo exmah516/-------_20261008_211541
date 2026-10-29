@@ -152,7 +152,7 @@
 
 `ZenohCommand`：0 Hello，1 Authenticate，2 Acquire，3 Release，4 PreparePosition，5 StartControl，6 ForceFeedback，7 Cylinder，8 ArmManualEnable，9 ArmAxisEnable，10 ArmAxisReset，11 ArmAxisJog，12 ArmCartesianJog，13 ArmStop，14 ArmProgramZero，15 ArmCartesianParameter，16 ArmCartesianAlive，17 YValve。没有软件急停命令；ArmStop 仅停止定位臂，PLC 急停继续走原独立路径。
 
-PreparePosition 的两个 double 是导管与导丝准备位置；Cylinder 的 Param1 为 1..4，Param2 为打开/恢复；YValve Param1 表示关闭；定位臂轴号 1..5，点动方向 -1/0/1，速度和参数继续沿用现有 ×1000 整数单位。ForceFeedback 开启沿用零点采集后开启的流程。
+PreparePosition 的两个 double 是导管与导丝准备位置；Cylinder 的 Param1 为 1..4，Param2 为打开/恢复；YValve Param1 表示关闭；定位臂轴号 1..5；ArmAxisJog 的 Param2 为方向 -1/0/1，Value1 为统一速度倍率：快=2.0、中=1.0、慢=0.5，旧消息的 0 按中档处理，停止不受倍率影响。倍率随每次点动/保活发送，按各轴原基准速度计算，不累乘；默认中档。末端点动速度和参数继续沿用现有 ×1000 整数单位。ForceFeedback 开启沿用零点采集后开启的流程。
 
 AuthState：0 未认证、1 挑战、2 已认证。准备和开始控制任务状态：0 空闲、1 运行中、2 完成、3 拒绝/失败，分别带关联 CommandId。Results 最多 32 项，Result=0 完成、1 拒绝；定位臂点动和保活不入结果队列。普通短命令 Result=0 表示通过服务门控且已由原控制循环消费，不等同于实体机构已到位。准备、开始控制、力反馈切换、电缸和 Y 阀由实际状态快照确认完成。
 

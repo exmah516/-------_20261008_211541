@@ -193,5 +193,7 @@ struct VisCommand
 	int param1 = 0;
 	int param2 = 0;
 	std::string payload_utf8;
+	// 五轴点动统一倍率，基准速度由定位臂服务保存。
+	double arm_jog_speed_scale = 1.0;
 };
 
