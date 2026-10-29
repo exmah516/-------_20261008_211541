@@ -84,8 +84,14 @@ namespace MasterConsole.Protocol.Tests
                     Check("手柄与力反馈接近 100Hz，状态接近 30Hz", handleHz >= 85 && handleHz <= 115 && forceHz >= 85 && forceHz <= 115 && stateHz >= 25 && stateHz <= 35);
                     Check("四个 Topic 均有流量", handleCount >= 100 && forceCount >= 100 && stateCount >= 20 && commandCount >= 5);
                     Check("单调 Echo RTT 与有效触觉帧", !double.IsNaN(link.GetStats().RttMs) && link.GetStats().HapticAgeMs < 500);
+                    int acquireCount = commands.Count(frame => frame.Command == ZenohCommand.Acquire);
+                    process.StandardInput.WriteLine("pause-handles"); process.StandardInput.Flush();
+                    Thread.Sleep(3600);
+                    Check("单向手柄断流不撤销已认证控制权", link.IsConnected && link.HasControl &&
+                        commands.Count(frame => frame.Command == ZenohCommand.Acquire) == acquireCount);
+                    process.StandardInput.WriteLine("resume-handles"); process.StandardInput.Flush();
                     process.StandardInput.WriteLine("pause"); process.StandardInput.Flush();
-                    Check("有效状态超过 2s 断联", Wait(() => !link.IsConnected, 2500));
+                    Check("有效状态超过 2s 断联", Wait(() => !link.IsConnected, ProtocolConstants.StatusTimeoutMs + 1000));
                     process.StandardInput.WriteLine("resume"); process.StandardInput.Flush();
                     Check("短暂中断自动恢复", Wait(() => link.IsConnected, 4000));
                     process.StandardInput.WriteLine("pause"); process.StandardInput.Flush();
@@ -93,8 +99,13 @@ namespace MasterConsole.Protocol.Tests
                     Check("状态停止后无假在线", !link.IsConnected);
                     process.StandardInput.WriteLine("resume"); process.StandardInput.Flush();
                     Check("长中断后重新认证恢复", Wait(() => link.IsConnected, 10000));
-                    Check("重新认证后获取控制权", Result(link.AcquireControlAsync(), 7000).Ok);
+                    Check("重新认证后自动恢复此前已申请的控制权", Wait(() => link.HasControl, 7000));
                     Check("释放控制权", Result(link.ReleaseControlAsync(), 7000).Ok);
+                    Check("主动释放后保持无控制权", Wait(() => !link.HasControl, 3000));
+                    process.StandardInput.WriteLine("pause"); process.StandardInput.Flush();
+                    Thread.Sleep(3600);
+                    process.StandardInput.WriteLine("resume"); process.StandardInput.Flush();
+                    Check("主动释放后重连不自动取得控制权", Wait(() => link.IsConnected, 10000) && !link.HasControl);
                     link.Disconnect();
                     Check("主动断开", !link.IsConnected);
                     link.ConnectAsync().GetAwaiter().GetResult();

@@ -2,8 +2,8 @@
 #include "remote_handle_bridge.h"
 #include <stdio.h>
 
-// 超过采样最大龄期即视为手柄断开，由主循环走既有的软保持/重连流程。
-static constexpr ULONGLONG kRemoteMaxAgeMs = 250;
+// 允许短暂网络抖动；真正断流超过3秒才进入既有重连流程。
+static constexpr ULONGLONG kRemoteMaxAgeMs = 3000;
 
 Handle::Handle(DWORD serial)
 	: serial_number_(serial)
@@ -47,9 +47,12 @@ bool Handle::poll()
 	{
 		return false;
 	}
+	if (last_sample_rx_ms_ != 0 && sample.rx_ms > last_sample_rx_ms_ &&
+		sample.rx_ms - last_sample_rx_ms_ > 250) rebase_requested_ = true;
+	last_sample_rx_ms_ = sample.rx_ms;
 	for (int i = 0; i < 2; ++i)
 	{
-		fVels2[i] = static_cast<double>(sample.vels[i]);
+		fVels2[i] = GetTickCount64() - sample.rx_ms > 250 ? 0.0 : static_cast<double>(sample.vels[i]);
 		fJoints2[i] = static_cast<double>(sample.joints[i]);
 		encoders2[i] = static_cast<long>(sample.encoders[i]);
 	}
@@ -62,6 +65,8 @@ bool Handle::poll()
 
 void Handle::clear_cache()
 {
+	last_sample_rx_ms_ = 0;
+	rebase_requested_ = false;
 	objData.buttons2 = 0;
 	objData.encoders2[0] = 0;
 	objData.encoders2[1] = 0;

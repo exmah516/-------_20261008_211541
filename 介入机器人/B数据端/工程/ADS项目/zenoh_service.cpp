@@ -26,7 +26,6 @@ namespace
     constexpr std::size_t kMaxCommandQueue = 256;
     constexpr std::size_t kMaxPendingTasks = 8;
     constexpr ULONGLONG kCommandMaxAgeMs = 2000;
-    constexpr ULONGLONG kHandleReleaseMs = 3000;
     constexpr ULONGLONG kHoldRenewMs = 100;
     constexpr ULONGLONG kStateFreshMs = 500;
 
@@ -789,6 +788,18 @@ void ZenohService::consume_command_locked(const vi_protocol::CommandFrame& recei
         queue_command(command, receipt ? frame.command_id : 0, receipt);
     };
     const ULONGLONG now = GetTickCount64();
+    const auto control_unavailable_reason = [&]() -> std::string
+    {
+        if (state_.ads_state != 2) return u8"ADS 尚未处于运行态";
+        if (state_.estop_hold) return u8"PLC 保持请求尚未解除，请查看数据端 PLC 故障提示";
+        if (state_.host_comm_timeout) return u8"PLC 通信恢复握手尚未完成";
+        if (!state_.self_check_done) return u8"PLC 器械准备尚未完成";
+        if (extra_.return_ads_fault_hold) return u8"回退任务故障尚未解除，请查看数据端回退错误";
+        if (extra_.handle_soft_hold) return u8"手柄有效采样尚未就绪";
+        if (!extra_.initial_sync_done) return u8"初始坐标同步尚未完成";
+        if (extra_.ads_soft_hold) return u8"ADS 位置快照或恢复重同步尚未就绪";
+        return {};
+    };
 
     switch (type)
     {
@@ -820,9 +831,8 @@ void ZenohService::consume_command_locked(const vi_protocol::CommandFrame& recei
         if (std::any_of(pending_tasks_.begin(), pending_tasks_.end(), [](const auto& task)
             { return task.kind == PendingKind::StartControl; }))
         { add_result_locked(frame.command_id, 1, "Start-control is already pending."); return; }
-        if (state_.ads_state != 2 || extra_.ads_soft_hold || !state_.self_check_done || state_.estop_hold ||
-            extra_.return_ads_fault_hold || extra_.handle_soft_hold || !extra_.initial_sync_done)
-        { add_result_locked(frame.command_id, 1, "Start-control safety gates are not clear."); return; }
+        if (const auto reason = control_unavailable_reason(); !reason.empty())
+        { add_result_locked(frame.command_id, 1, reason); return; }
         if (state_.control_active) { add_result_locked(frame.command_id, 0, ""); return; }
         enqueue(VisCommandType::SelectDirectControl, 0, 0, false);
         start_task_state_ = 1; start_task_command_id_ = frame.command_id;
@@ -863,7 +873,13 @@ void ZenohService::consume_command_locked(const vi_protocol::CommandFrame& recei
         if (engaged == enable) { add_result_locked(frame.command_id, 0, ""); return; }
         if (enable)
         {
-            if (!state_.cylinder_manual_allowed) { add_result_locked(frame.command_id, 1, "Cylinder manual control is unavailable."); return; }
+            if (!state_.cylinder_manual_allowed)
+            {
+                auto reason = control_unavailable_reason();
+                if (reason.empty()) reason = state_.control_active
+                    ? u8"自动换手、准备或限位流程正在接管电缸" : u8"尚未开始手柄控制";
+                add_result_locked(frame.command_id, 1, reason); return;
+            }
             enqueue(VisCommandType::SetCylinderManualPosition, index, (index == 0 || index == 2) ? 2000 : 10, false);
         }
         else enqueue(VisCommandType::ResetCylinderManual, index, 0, false);
@@ -955,18 +971,13 @@ void ZenohService::worker_loop()
     auto next_state = Clock::now(), next_force = next_state;
     while (!stop_requested_.load())
     {
-        const ULONGLONG now = GetTickCount64();
         const auto dropped = dropped_commands_.exchange(0);
         if (dropped != 0)
             std::cout << "Zenoh: command FIFO full; dropped " << dropped << " oldest commands." << std::endl;
         const auto expired = expired_commands_.exchange(0);
         if (expired != 0)
             std::cout << "Zenoh: dropped " << expired << " commands older than 2 seconds in the ADS queue." << std::endl;
-        {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            if (lease_held_ && now - last_handle_rx_ms_ > kHandleReleaseMs)
-                release_lease_locked("Handle stream timed out; control lease released.");
-        }
+        // 断流由手柄采样龄期处理，不撤销已认证会话的控制权；新会话或显式释放仍撤销。
         const auto publish_tick = Clock::now();
         if (publish_tick >= next_state)
         {

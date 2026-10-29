@@ -892,7 +892,6 @@ int main()
 	std::uint64_t handled_plc_restart_count = 0;
 	std::uint64_t handled_reconnect_count = 0;
 	bool ads_soft_hold_active = true;
-	bool ads_resume_required = false;
 	bool plc_restart_recovery_latched = false;
 	std::vector<AdsFastSnapshot> drained_ads_snapshots;
 	struct HandleRecordSnapshot
@@ -1174,13 +1173,12 @@ int main()
 			? (!handle1_poll_ok && !handle6_poll_ok)
 			: (!handle1_poll_ok || !handle6_poll_ok);
 
+		const bool handle1_rebase_requested = handle_axis1.take_rebase_request();
+		const bool handle6_rebase_requested = handle_axis6.take_rebase_request();
+		const bool handle_rebase_requested = handle1_rebase_requested || handle6_rebase_requested;
 		if (!ads_motion_cycle_valid)
 		{
-			if (initial_sync_done)
-			{
-				ads_resume_required = true;
-				control_active = false;
-			}
+			// 缺快照只门控本拍输出，保留已选择的控制模式；恢复后按当前反馈重建基准。
 			if (!ads_soft_hold_active)
 			{
 				ads_soft_hold_active = true;
@@ -1234,7 +1232,7 @@ int main()
 				last_ads_diagnostic_log_ms = loop_now_ms;
 			}
 		}
-		else if ((ads_soft_hold_active || (connection_hold_active_prev && initial_sync_done)) &&
+		else if ((ads_soft_hold_active || handle_rebase_requested || (connection_hold_active_prev && initial_sync_done)) &&
 			!planned_return.active())
 		{
 			if (!handle_soft_hold_active)
@@ -1252,7 +1250,11 @@ int main()
 			// ADS 或手柄恢复时重建当前反馈基准，不追赶中断前的旋转目标。
 			if (!handle_soft_hold_active && initial_sync_done)
 			{
-				if (guidewire_mode == GuidewireMode::Independent)
+				if (!single_handle_mode)
+				{
+					baseline_rebuilt = motion_sync::rebase_dual_after_return(ctx);
+				}
+				else if (guidewire_mode == GuidewireMode::Independent)
 				{
 					baseline_rebuilt = motion_sync::sync_axis6(ctx, 1, false, false, false);
 				}
@@ -1297,8 +1299,6 @@ int main()
 			independent_axis2_hold_rel = plc_act_pos[1];
 			std::cout << "连接就绪：保持 PLC 当前反馈位置，不恢复历史目标。axis2="
 				<< plc_act_pos[1] << "，axis7=" << plc_act_pos[6] << "（相对角度）" << std::endl;
-			if (ads_resume_required)
-				std::cout << "通信恢复后保持停控；请点击“开始控制”在当前位置继续，无需重新进入准备位置。" << std::endl;
 		}
 
 		if (!initial_sync_done)
@@ -1788,7 +1788,7 @@ int main()
 				startup.completed = true;
 				startup.direct_positioning = false;
 				startup.prompted = false;
-				if (coordinates_refreshed && !ads_resume_required && !estop_hold_active &&
+				if (coordinates_refreshed && !estop_hold_active &&
 					!ads_soft_hold_active && sync_all(30))
 				{
 					control_active = true;
@@ -1809,7 +1809,7 @@ int main()
 			(void)cancel_active_return_motion(true);
 			const bool coordinates_refreshed = ads_communication.refresh_coordinates();
 			if (!coordinates_refreshed) ads_communication.request_coordinate_refresh();
-			if (coordinates_refreshed && !ads_resume_required && !estop_hold_active &&
+			if (coordinates_refreshed && !estop_hold_active &&
 				!ads_soft_hold_active && !startup.is_active() &&
 				sync_all(30))
 			{
@@ -1821,7 +1821,9 @@ int main()
 		// 8) 当启动已完成但控制未激活时，通过全量重同步恢复。
 		const bool motion_startup_active = startup.is_active();
 		startup_smoothing_bypass = motion_startup_active || emergency_retract_active;
-		if (!control_active && !return_ads_fault_hold && !ads_resume_required && !motion_startup_active &&
+		if (!control_active && !return_ads_fault_hold && !motion_startup_active &&
+			ads_motion_cycle_valid && initial_sync_done && !connection_hold_active &&
+			!handle_soft_hold_active && self_check_done &&
 			!estop_hold_active && !ads_soft_hold_active && startup.completed)
 		{
 			if (sync_all(20))
@@ -5010,7 +5012,7 @@ int main()
 							}
 							else if (sync_all(20))
 							{
-								if (!ads_resume_required)
+								if (!startup.completed)
 								{
 									guidewire_mode = GuidewireMode::None;
 									axis6_crawl.enabled = false;
@@ -5022,7 +5024,6 @@ int main()
 								startup.completed = true;
 								startup.prompted = false;
 								control_active = true;
-								ads_resume_required = false;
 								plc_restart_recovery_latched = false;
 								std::cout << "已在当前位置开始控制。" << std::endl;
 							}

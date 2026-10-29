@@ -225,6 +225,36 @@ struct ZenohServiceTestAccess
         assert(result(service, 202, 0));
     }
 
+    static void control_rejection_reasons()
+    {
+        for (int gate = 0; gate < 8; ++gate)
+        {
+            ZenohService service; initialize(service);
+            auto state = service.state_; state.self_check_done = true; state.cylinder_manual_allowed = false;
+            auto extra = service.extra_;
+            std::string expected;
+            switch (gate)
+            {
+            case 0: state.ads_state = 4; expected = u8"ADS 尚未处于运行态"; break;
+            case 1: state.estop_hold = true; expected = u8"PLC 保持请求"; break;
+            case 2: state.host_comm_timeout = true; expected = u8"通信恢复握手"; break;
+            case 3: state.self_check_done = false; expected = u8"器械准备尚未完成"; break;
+            case 4: extra.return_ads_fault_hold = true; expected = u8"回退任务故障"; break;
+            case 5: extra.handle_soft_hold = true; expected = u8"手柄有效采样"; break;
+            case 6: extra.initial_sync_done = false; expected = u8"初始坐标同步"; break;
+            case 7: extra.ads_soft_hold = true; expected = u8"位置快照"; break;
+            }
+            service.publish_state(state, extra);
+            send(service, command(service, vi_protocol::Command::StartControl, 1, 501));
+            send(service, command(service, vi_protocol::Command::Cylinder, 2, 502, 1, 1));
+            VisCommand control;
+            assert(!service.poll_command(control));
+            for (int id : {501, 502})
+                assert(std::any_of(service.results_.begin(), service.results_.end(), [&](const auto& r)
+                    { return r.command_id == id && r.result == 1 && r.reason.find(expected) != std::string::npos; }));
+        }
+    }
+
     static void resource_transition_rejection()
     {
         ZenohService service; initialize(service);
@@ -252,6 +282,7 @@ int main()
     ZenohServiceTestAccess::handle_replay();
     ZenohServiceTestAccess::task_waits_for_observed_state();
     ZenohServiceTestAccess::resource_transition_rejection();
+    ZenohServiceTestAccess::control_rejection_reasons();
     std::cout << "PASS: FIFO256/overflow/order, independent handle, 2s expiry, session/sequence replay, "
         "results32 excluding jog/alive, task IDs/state observation, authentication isolation, handle replay, resource transitions.\n";
 }

@@ -41,6 +41,8 @@ namespace MasterConsole.Services
         private long _lastHapticMs = -1;
         private double _rttMs = double.NaN;
         private bool _hasControl;
+        private bool _controlRequested;
+        private int _controlRequestGeneration;
         private bool _authSent;
         private byte[] _nonceClient = FrameAuth.NewNonce();
         private byte[] _nonceServer;
@@ -177,8 +179,22 @@ namespace MasterConsole.Services
         public void Disconnect() => Shutdown("链路已断开。", "warn");
         public void Dispose() => Shutdown(null, null);
 
-        public Task<CommandResult> AcquireControlAsync() => RequestAsync(ZenohCommand.Acquire, 0, 0, 0, 0, 5000);
-        public Task<CommandResult> ReleaseControlAsync() => RequestAsync(ZenohCommand.Release, 0, 0, 0, 0, 5000);
+        public async Task<CommandResult> AcquireControlAsync()
+        {
+            int generation;
+            lock (_lock) generation = ++_controlRequestGeneration;
+            var result = await RequestAsync(ZenohCommand.Acquire, 0, 0, 0, 0, 5000).ConfigureAwait(false);
+            lock (_lock)
+            {
+                if (generation == _controlRequestGeneration && _acceptingCallbacks) _controlRequested = result.Ok;
+            }
+            return result;
+        }
+        public Task<CommandResult> ReleaseControlAsync()
+        {
+            lock (_lock) { _controlRequested = false; ++_controlRequestGeneration; }
+            return RequestAsync(ZenohCommand.Release, 0, 0, 0, 0, 5000);
+        }
         public Task<CommandResult> PreparePositionAsync(double catheterMm, double wireMm)
             => RequestAsync(ZenohCommand.PreparePosition, 0, 0, catheterMm, wireMm, 330000);
         public Task<CommandResult> StartControlAsync() => RequestAsync(ZenohCommand.StartControl, 0, 0, 0, 0, 10000);
@@ -396,6 +412,7 @@ namespace MasterConsole.Services
                 if (_hasStateSequence && f.Sequence <= _lastStateSequence) return;
                 long now = NowMs;
                 ExpireStateLocked(now);
+                bool restoreControl = !_authenticated && _controlRequested;
                 _lastStateSequence = f.Sequence;
                 _hasStateSequence = _authenticated = true;
                 _lastStateMs = receivedMs;
@@ -403,6 +420,9 @@ namespace MasterConsole.Services
                 if (!_forceGateOpen) _forceGateOpenedAtOrdinal = callbackOrdinal;
                 _forceGateOpen = true;
                 ExpireStateLocked(now);
+                // 自动重认证只恢复先前的控制权申请，不补发运动指令或旧输入。
+                if (restoreControl && !_hasControl && IsFreshLocked(now))
+                    SendCommand(ZenohCommand.Acquire, 0, 0, 0, 0, "", null, null, null, 0);
                 Interlocked.Increment(ref _statusCount);
                 status = new StatusFrame
                 {
@@ -517,7 +537,8 @@ namespace MasterConsole.Services
                 ++_callbackGeneration;
                 _zenoh = null; _handlePublisher = null; _commandPublisher = null; _hasControl = false;
                 _cts = null; _handleThread = null;
-                _authenticated = false; _sessionId = 0; _sessionKey = null;
+                _authenticated = false; _controlRequested = false; ++_controlRequestGeneration;
+                _sessionId = 0; _sessionKey = null;
                 _inj1 = _inj2 = _axis4 = 0;
                 Interlocked.Exchange(ref _lastStateMs, -1);
                 Interlocked.Exchange(ref _lastHapticMs, -1);

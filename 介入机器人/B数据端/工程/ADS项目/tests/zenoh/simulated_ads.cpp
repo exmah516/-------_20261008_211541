@@ -4,6 +4,17 @@
 #include <string>
 #include <thread>
 
+// 只在模拟器内制造单向手柄断流；不改生产服务接口，也不连接硬件。
+struct ZenohServiceTestAccess
+{
+    static void pause_handles(ZenohService& service, bool paused)
+    {
+        std::lock_guard<std::mutex> lock(service.state_mutex_);
+        service.have_handle_sequence_ = paused;
+        service.last_handle_sequence_ = paused ? UINT64_MAX : 0;
+    }
+};
+
 namespace
 {
     std::string utf8(const wchar_t* text)
@@ -97,6 +108,8 @@ int wmain(int argc, wchar_t** argv)
     {
         if (input == "pause") { paused = true; std::cout << "SIM_PAUSED\n" << std::flush; }
         else if (input == "resume") { paused = false; std::cout << "SIM_RESUMED\n" << std::flush; }
+        else if (input == "pause-handles") { ZenohServiceTestAccess::pause_handles(service, true); }
+        else if (input == "resume-handles") { ZenohServiceTestAccess::pause_handles(service, false); }
         else if (input == "quit") break;
     }
     stopped = true;

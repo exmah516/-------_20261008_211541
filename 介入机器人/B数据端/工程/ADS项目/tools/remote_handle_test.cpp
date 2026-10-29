@@ -73,9 +73,20 @@ int main()
     {
         auto& st = detail::state();
         std::lock_guard<std::mutex> lock(st.m);
-        st.samples[0].rx_ms = GetTickCount64() - 251;
+        st.samples[0].rx_ms = GetTickCount64() - 500;
     }
-    check(!a.poll() && b.poll(), "samples older than 250 ms are rejected per handle");
+    check(a.poll() && b.poll(), "a 500 ms network gap does not disconnect the remote handle");
+    check(a.fVels2[0] == 0.0 && a.fVels2[1] == 0.0, "stale sample velocity is not repeated during the gap");
+    sa.joints[0] = 8.0f;
+    put_sample(0, sa);
+    check(a.poll() && a.fJoints2[0] == 8.0 && a.take_rebase_request() && !a.take_rebase_request(),
+          "first fresh sample after a gap requests one current-position rebase");
+    {
+        auto& st = detail::state();
+        std::lock_guard<std::mutex> lock(st.m);
+        st.samples[0].rx_ms = GetTickCount64() - 3001;
+    }
+    check(!a.poll() && b.poll(), "a sample older than 3 seconds is still rejected per handle");
     a.close();
     check(!a.is_open() && !a.poll() && a.buttons2 == 0 && a.encoders2[0] == 0 &&
           a.encoders2[1] == 0 && a.fJoints2[0] == 0.0 && a.fJoints2[1] == 0.0 &&

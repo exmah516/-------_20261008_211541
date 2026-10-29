@@ -136,6 +136,28 @@ namespace MasterConsole.Protocol.Tests
             Check("链路释放不拥有共享手柄生命周期", !handles.Disposed && handles.Starts == 0 && handles.Stops == 0);
             StateReceiptTimeTest(token);
             ForceRecoveryOrderTest(token);
+            IdleStateTest(token);
+        }
+
+        private static void IdleStateTest(byte[] token)
+        {
+            var time = new RobotTestTimeProvider();
+            using var link = new RemoteRobotLink(new RemoteLinkSettings { Token = token }, null, time, () => true);
+            var challenge = NewState();
+            challenge.AuthState = 1;
+            link.OnState(challenge);
+            byte[] key = FrameAuth.DeriveSessionKey(token, link.ClientNonce, challenge.NonceServer);
+            for (ulong sequence = 1; sequence <= 900; ++sequence)
+            {
+                var frame = NewState();
+                frame.Sequence = sequence;
+                frame.Flags |= (uint)StatusFlags.LeaseHeld;
+                frame.AuthTag = ZenohWire.Sign(frame, key);
+                link.OnState(frame);
+                time.Advance(1000);
+                link.CheckConnection();
+            }
+            Check("静止15分钟但状态持续接收不会断联或丢控制权", link.IsConnected && link.HasControl);
         }
 
         private static void ForceRecoveryOrderTest(byte[] token)

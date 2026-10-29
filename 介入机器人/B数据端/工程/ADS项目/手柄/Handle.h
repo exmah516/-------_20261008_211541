@@ -25,6 +25,8 @@ public:
 	bool init();
 	bool init(DWORD serial);
 	bool poll();
+	// 抖动恢复时通知主循环重建当前位置基准，避免追赶断流期间的手柄位移。
+	bool take_rebase_request() { const bool value = rebase_requested_; rebase_requested_ = false; return value; }
 
 	void clear_cache();
 	void close();
@@ -45,4 +47,6 @@ public:
 
 private:
 	DWORD serial_number_;
+	ULONGLONG last_sample_rx_ms_ = 0;
+	bool rebase_requested_ = false;
 };
