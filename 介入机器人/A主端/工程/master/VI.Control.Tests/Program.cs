@@ -99,6 +99,32 @@ internal static class Program
         Check(holdVm.CanOperate, "fresh authorized fake state unlocks hold controls");
         Check(holdVm.Force582F == "0.120 N" && holdVm.Force582N == "25.000 N·mm" && holdVm.Force587F == "0.300 N" && holdVm.Force587N == "-9.000 N·mm", "all four readouts preserve force and torque units");
         var holdIntervention = (UserControl)Activator.CreateInstance(intervention.GetType(), holdVm)!;
+        var wireForceButton = (System.Windows.Controls.Primitives.ToggleButton)holdIntervention.FindName("GuidewireForceFeedback")!;
+        var catheterForceButton = (System.Windows.Controls.Primitives.ToggleButton)holdIntervention.FindName("CatheterForceFeedback")!;
+        var forceHoldButton = (System.Windows.Controls.Primitives.ToggleButton)holdIntervention.FindName("ForceHold")!;
+        var zeroForceButton = (Button)holdIntervention.FindName("ForceZero")!;
+        Pump();
+        catheterForceButton.Command.Execute(null);
+        Check(recordingLink.LastForce == (true, 1), "catheter force button targets only physical587");
+        wireForceButton.Command.Execute(null);
+        Check(recordingLink.LastForce == (true, 2), "guidewire force button targets only physical582");
+        recordingLink.PublishForce(StatusFlags.FfEnabled | StatusFlags.Force582Enabled | StatusFlags.CalZeroed | StatusFlags.ForceHoldEnabled);
+        Pump();
+        Check(wireForceButton.IsChecked == true && catheterForceButton.IsChecked == false && holdVm.FfCaption == "零点已采集",
+            "independent feedback switches follow acknowledged state");
+        wireForceButton.Command.Execute(null);
+        Check(recordingLink.LastForce == (false, 2), "enabled wire button sends explicit off for only wire");
+        zeroForceButton.Command.Execute(null);
+        Check(recordingLink.ForceZeroCount == 1, "zero button sends a standalone calibration command");
+        Check((string)forceHoldButton.Content == "关闭保持", "hold caption reflects enabled state");
+        forceHoldButton.Command.Execute(null);
+        Check(!recordingLink.LastForceHold, "hold button sends explicit off");
+        recordingLink.PublishForce(StatusFlags.None); Pump();
+        Check((string)forceHoldButton.Content == "开启保持", "hold caption reflects disabled state");
+        forceHoldButton.Command.Execute(null);
+        Check(recordingLink.LastForceHold, "hold button sends explicit on");
+        Check(recordingLink.StopArmCount == 0 && recordingLink.DisconnectCount == 0,
+            "feedback controls do not stop motion or disconnect");
         var windowProgress = (ProgressBar)holdIntervention.FindName("Axis6WindowProgress")!;
         foreach (var (position, expectedPercent, near) in new[] { (117f, 50.0, false), (102f, 3.125, true), (132f, 96.875, true), (101f, 0.0, true), (133f, 100.0, true) })
         {
@@ -291,6 +317,17 @@ public class RecordingRobotLink : DispatchProxy
     public (int Index, int Direction) LastInjector { get; private set; }
     public Dictionary<int, int> InjectorDirections { get; } = new();
     public int LastAxis4 { get; private set; }
+    public (bool Enable, int Channel) LastForce { get; private set; }
+    public bool LastForceHold { get; private set; }
+    public int ForceZeroCount { get; private set; }
+    public void PublishForce(StatusFlags flags)
+    {
+        _events.TryGetValue("StatusReceived", out var handler);
+        ((EventHandler<StatusFrame>?)handler)?.Invoke(this, new StatusFrame
+        {
+            Flags = StatusFlags.LeaseHeld | flags, AxisPos = new float[7], AxisFromLeft = new float[7]
+        });
+    }
     public (int Axis, int Direction) LastArmJog { get; private set; }
     public double LastArmSpeedScale { get; private set; }
     public Dictionary<int, int> ArmJogDirections { get; } = new();
@@ -362,6 +399,9 @@ public class RecordingRobotLink : DispatchProxy
             ArmJogDirections[LastArmJog.Axis] = LastArmJog.Direction;
             return null;
         }
+        if (name == "SetForceFeedbackAsync") { LastForce = ((bool)args![0]!, (int)args[1]!); return Task.FromResult(CommandResult.Done()); }
+        if (name == "SetForceFeedbackHoldAsync") { LastForceHold = (bool)args![0]!; return Task.FromResult(CommandResult.Done()); }
+        if (name == "ZeroForceSensorAsync") { ForceZeroCount++; return Task.FromResult(CommandResult.Done()); }
         if (name == "StopArmAsync") { StopArmCount++; return Task.FromResult(CommandResult.Done()); }
         if (targetMethod.ReturnType == typeof(Task<CommandResult>)) return Task.FromResult(CommandResult.Done());
         if (targetMethod.ReturnType == typeof(Task)) return Task.CompletedTask;

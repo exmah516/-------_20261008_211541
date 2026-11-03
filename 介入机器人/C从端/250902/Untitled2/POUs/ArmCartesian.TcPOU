@@ -95,7 +95,7 @@ IF G.arm_curve_request <> G.arm_curve_ack THEN
             acceleration_limit[i] := G.arm_jog_acc[i];
             deceleration_limit[i] := G.arm_jog_dec[i];
             jerk_limit[i] := G.arm_jog_jerk[i];
-            IF G.arm_motion_busy[i] OR (ABS(G.arm_act_vel[i]) > 0.1)
+            IF G.arm_motion_busy[i] OR (ABS(G.arm_act_vel[i]) > 2)
                 OR (ABS(G.arm_act_pos[i] - p[i]) > 0.05)
                 OR (ABS(bend) > ABS(delta) / 4.0 + 0.000000001)
                 OR NOT ((velocity_limit[i] > 0) AND (velocity_limit[i] <= 10000))

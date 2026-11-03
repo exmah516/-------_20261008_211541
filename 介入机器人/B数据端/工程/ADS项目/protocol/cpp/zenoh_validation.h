@@ -53,7 +53,7 @@ namespace vi_protocol
         if (!detail::array(o, kCommandFields)) return false;
         const auto p = o.via.array.ptr;
         if (!detail::version(p[0]) || !detail::uint(p[1], UINT64_MAX) || !detail::uint(p[2], UINT64_MAX) || p[2].via.u64 == 0 ||
-            !detail::uint(p[3], UINT64_MAX) || !detail::uint(p[4], INT32_MAX) || !detail::uint(p[5], 17) ||
+            !detail::uint(p[3], UINT64_MAX) || !detail::uint(p[4], INT32_MAX) || !detail::uint(p[5], static_cast<std::uint8_t>(Command::ForceHold)) ||
             !detail::i32(p[6]) || !detail::i32(p[7]) || !detail::f64(p[8]) || !detail::f64(p[9]) || !detail::text(p[10]) ||
             !detail::optional_bin(p[11], 16) || !detail::optional_bin(p[12], 16) ||
             !detail::optional_bin(p[13], 32) || !detail::optional_bin(p[14], 16)) return false;

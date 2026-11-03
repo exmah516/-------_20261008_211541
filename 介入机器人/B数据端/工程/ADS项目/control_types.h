@@ -84,8 +84,16 @@ struct ControlConfig
 
 	// 力反馈输出配置：轴向力映射到 SDK 三轴力向量中的一个轴。
 	int axial_force_axis = 1;
-	// 力反馈全局缩放系数，轴向力和力矩统一使用。
-	double force_feedback_scale = 0.3;
+	// 按物理手柄分别缩放标定后的力和扭矩；0.5 表示该分量输出一半。
+	double force_feedback_582_force_scale = 0.3;  // 导丝582：力比例
+	double force_feedback_582_torque_scale = 0.3; // 导丝582：扭矩比例
+	double force_feedback_587_force_scale = 0.3;  // 导管587：力比例
+	double force_feedback_587_torque_scale = 0.3; // 导管587：扭矩比例
+	// 操作者实际感受到的轴向力为 k_f * F_fb - b * v_m。
+	// v_m 使用对应远程手柄第一通道的 SDK 速度，单位随手柄 SDK；从小值开始现场调节。
+	double force_feedback_damping_n_per_velocity = 0.01;
+	// 一阶轴向力低通系数；100 Hz 控制循环下 0.25 可抑制短时尖峰，1.0 表示关闭滤波。
+	double force_feedback_force_filter_alpha = 0.25;
 
 	// 按键映射来自 buttons2 位掩码。
 	unsigned char btn_b6 = 0x40;
@@ -174,7 +182,7 @@ struct ControlConfig
 	DWORD startup_recovery_stage_delay_ms = 2000;
 	double startup_motion_speed_scale = 0.005;
 	unsigned short startup_cyl3_open = 500;
-	unsigned short startup_cyl4_open = 0;
+	unsigned short startup_cyl4_open = 5;
 	unsigned short startup_cyl3_clamp = 0;
 	unsigned short startup_cyl4_clamp = 1000;
 	// PLC 自检完成后的器械装卸等待姿态；旧 PLC 无就绪标志时也用于兼容判定。
@@ -203,7 +211,7 @@ struct CylinderPreset
 	unsigned short cyl1_clamp = 5;
 	unsigned short cyl2_open = 5;
 	unsigned short cyl2_clamp = 1000;
-	unsigned short cyl3_open = 450;
+	unsigned short cyl3_open = 550;
 	unsigned short cyl3_clamp = 50;
 	unsigned short cyl4_open = 5;
 	unsigned short cyl4_clamp = 1000;
@@ -466,33 +474,57 @@ struct CrawlState
 
 struct ForceFeedbackState
 {
-	// 力反馈开关：F=ON 时使用传感器反馈，F=OFF 时输出为 0。
-	bool enabled = false;
+	struct HandoffHold
+	{
+		bool active = false;
+		bool handoff_complete = false;
+		bool blending = false;
+		double force = 0.0;
+		double torque = 0.0;
+		double resume_origin_abs = 0.0;
+		double resume_direction = 0.0;
+		ULONGLONG blend_start_ms = 0;
+	};
+
+	// 按物理手柄独立开关：582 导丝，587 导管；传感器映射保持不变。
+	bool enabled_582 = false;
+	bool enabled_587 = false;
+	bool enabled() const { return enabled_582 || enabled_587; }
+
+	// channel: 0=两侧，1=导管587，2=导丝582。切换只清除对应侧的历史输出。
+	void set_enabled(int channel, bool value)
+	{
+		if (channel == 0 || channel == 2)
+		{
+			enabled_582 = value;
+			force_582_f = force_582_n = force_582_theory_f = force_582_theory_n = 0.0;
+			force_582_filtered_f = 0.0;
+			force_582_filter_initialized = false;
+			hold_582 = HandoffHold{};
+		}
+		if (channel == 0 || channel == 1)
+		{
+			enabled_587 = value;
+			force_587_f = force_587_n = 0.0;
+			force_587_filtered_f = 0.0;
+			force_587_filter_initialized = false;
+			hold_587 = HandoffHold{};
+		}
+	}
 	bool clamp_hold_enabled = true;
-	// 当前输出命令缓存（用于调试与冻结保持）。
+	// 当前输出命令缓存（用于调试和换手保持）。
 	double force_582_f = 0.0;
 	double force_582_n = 0.0;
 	double force_582_theory_f = 0.0;
 	double force_582_theory_n = 0.0;
 	double force_587_f = 0.0;
 	double force_587_n = 0.0;
-	// 导管快进/快退期间冻结 582 输出，保持进入冻结时最后一拍命令。
-	bool freeze_582_active = false;
-	double freeze_582_f = 0.0;
-	double freeze_582_n = 0.0;
-	// 另一侧快进/快退期间冻结 587 输出，避免动作切换时出现力反馈跳变。
-	bool freeze_587_active = false;
-	double freeze_587_f = 0.0;
-	double freeze_587_n = 0.0;
-	// 夹爪闭合瞬间力反馈锁存 200 ms。
-	bool clamp_hold_582_active = false;
-	double clamp_hold_582_f = 0.0;
-	double clamp_hold_582_n = 0.0;
-	ULONGLONG clamp_hold_582_until_ms = 0;
-	bool clamp_hold_587_active = false;
-	double clamp_hold_587_f = 0.0;
-	double clamp_hold_587_n = 0.0;
-	ULONGLONG clamp_hold_587_until_ms = 0;
+	double force_582_filtered_f = 0.0;
+	double force_587_filtered_f = 0.0;
+	bool force_582_filter_initialized = false;
+	bool force_587_filter_initialized = false;
+	HandoffHold hold_582;
+	HandoffHold hold_587;
 	// 调试观测缓存。
 	short last_fn_1_raw = 0;
 	short last_ft_1_raw = 0;
@@ -502,20 +534,54 @@ struct ForceFeedbackState
 
 	void clear_clamp_holds()
 	{
-		clamp_hold_582_active = false;
-		clamp_hold_582_f = 0.0;
-		clamp_hold_582_n = 0.0;
-		clamp_hold_582_until_ms = 0;
-		clamp_hold_587_active = false;
-		clamp_hold_587_f = 0.0;
-		clamp_hold_587_n = 0.0;
-		clamp_hold_587_until_ms = 0;
+		hold_582 = HandoffHold{};
+		hold_587 = HandoffHold{};
+	}
+
+	void reset_force_filters()
+	{
+		force_582_filtered_f = 0.0;
+		force_587_filtered_f = 0.0;
+		force_582_filter_initialized = false;
+		force_587_filter_initialized = false;
+	}
+
+	void capture_clamp_hold(int channel, bool reverse_mode, double force, double torque)
+	{
+		if (!clamp_hold_enabled) return;
+		HandoffHold& hold = channel == 2 ? hold_582 : hold_587;
+		const bool enabled = channel == 2 ? enabled_582 : enabled_587;
+		if (!enabled) return;
+		hold = HandoffHold{};
+		hold.active = true;
+		hold.force = force;
+		hold.torque = torque;
+		hold.resume_direction = reverse_mode ? 1.0 : -1.0;
+	}
+
+	void complete_clamp_hold(int channel, double axis_abs)
+	{
+		HandoffHold& hold = channel == 2 ? hold_582 : hold_587;
+		if (!hold.active) return;
+		hold.handoff_complete = true;
+		hold.resume_origin_abs = axis_abs;
+	}
+
+	void observe_clamp_hold_motion(int channel, double axis_abs, bool position_valid, ULONGLONG now_ms)
+	{
+		HandoffHold& hold = channel == 2 ? hold_582 : hold_587;
+		if (!hold.active || !hold.handoff_complete || hold.blending || !position_valid) return;
+		if ((axis_abs - hold.resume_origin_abs) * hold.resume_direction >= 2.0)
+		{
+			hold.blending = true;
+			hold.blend_start_ms = now_ms;
+		}
 	}
 
 	int clamp_hold_owner() const
 	{
-		const bool catheter = clamp_hold_582_active;
-		const bool guidewire = clamp_hold_587_active;
+		const bool catheter = hold_587.active;
+		const bool guidewire = hold_582.active;
 		if (catheter && guidewire) return 3;
 		if (catheter) return 1;
 		if (guidewire) return 2;
@@ -530,12 +596,7 @@ struct ForceFeedbackState
 		force_582_theory_n = 0.0;
 		force_587_f = 0.0;
 		force_587_n = 0.0;
-		freeze_582_active = false;
-		freeze_582_f = 0.0;
-		freeze_582_n = 0.0;
-		freeze_587_active = false;
-		freeze_587_f = 0.0;
-		freeze_587_n = 0.0;
+		reset_force_filters();
 		clear_clamp_holds();
 		last_fast_move = false;
 	}
@@ -548,12 +609,7 @@ struct ForceFeedbackState
 		force_582_theory_n = 0.0;
 		force_587_f = 0.0;
 		force_587_n = 0.0;
-		freeze_582_active = false;
-		freeze_582_f = 0.0;
-		freeze_582_n = 0.0;
-		freeze_587_active = false;
-		freeze_587_f = 0.0;
-		freeze_587_n = 0.0;
+		reset_force_filters();
 		clear_clamp_holds();
 	}
 };

@@ -58,6 +58,13 @@ struct Fixture {
     bool connection_hold_active_prev=false, handle_rebase_requested=false;
     struct { unsigned int reconnect_count=0; } ads_stats;
     unsigned int handled_reconnect_count=0;
+    struct ForceFeedbackStub {
+        int completed[3]={};
+        double position[3]={};
+        void complete_clamp_hold(int channel,double axis_abs) {
+            ++completed[channel]; position[channel]=axis_abs;
+        }
+    } ff;
     struct { void set_following(bool) {} } axis1_net_distance, axis6_net_distance;
     struct { void disable_compensation() {} } tracking_controller;
     struct Filter {
@@ -202,6 +209,26 @@ int main() {
         check(f.planned_return.clamp_output_applied||f.planned_return.completion_clear_confirmed||
               f.planned_return.release_applied,
               "the corresponding motion write acknowledges the original handoff");
+        check(f.ff.completed[1]==0&&f.ff.completed[2]==0,
+              "hold release origin is not set before final handoff synchronization");
+    }
+    {
+        Fixture f(false,true);
+        f.finish_plc();
+        f.planned_return.phase=PlannedReturnPhase::PostHandoffClampSettle;
+        f.planned_return.restore_stage=1;
+        f.planned_return.release_output_generation=10;
+        f.planned_return.release_applied=true;
+        f.planned_return.phase_t0_ms=f.now_ms;
+        f.ads_communication.motion_applied=11;
+        f.tick(false);
+        check(f.ff.completed[1]==0&&f.ff.completed[2]==0,
+              "the 2 mm release origin waits for the final clamp settle");
+        for(int n=0;n<5;++n) f.tick(false);
+        check(f.ff.completed[1]==1&&f.ff.completed[2]==1&&
+              f.ff.position[1]==f.plc_act_pos[0]+f.plc_init_pos[0]&&
+              f.ff.position[2]==f.plc_act_pos[5]+f.plc_init_pos[5],
+              "each handle starts its 2 mm release distance from the completed handoff position");
     }
     for(bool both:{false,true}) for(bool already_done:{false,true}) {
         Fixture f(false,both);
@@ -309,6 +336,8 @@ int main() {
         f.finish_plc();
         for(int n=0;n<40;++n) f.tick(hold_through_return);
         check(!f.planned_return.active()&&f.rebases>=2,"original return finishes its fresh-snapshot and clamp handoff");
+        check(f.ff.completed[1]==1&&(both ? f.ff.completed[2]==1 : f.ff.completed[2]==0),
+              "only axes included in the return arm their handle force hold");
         check(f.spacing_recovery.active()==hold_through_return,"only a still-held recovery button enters recovery after return");
         f.tick(false);
         for(int n=0;n<25;++n) f.tick(false);

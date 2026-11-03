@@ -26,7 +26,7 @@ namespace vi_protocol
         Cylinder = 7, ArmManualEnable = 8, ArmAxisEnable = 9,
         ArmAxisReset = 10, ArmAxisJog = 11, ArmCartesianJog = 12,
         ArmStop = 13, ArmProgramZero = 14, ArmCartesianParameter = 15,
-        ArmCartesianAlive = 16, YValve = 17
+        ArmCartesianAlive = 16, YValve = 17, ForceZero = 18, ForceHold = 19
     };
 
     enum StateFlag : std::uint32_t
@@ -37,7 +37,8 @@ namespace vi_protocol
         YValveClosed = 1u << 6, LeaseHeld = 1u << 7,
         StartupCompleted = 1u << 8, AdsHealthy = 1u << 9,
         ForceZeroing = 1u << 10, GlobalReverse = 1u << 11,
-        CleanForceValid = 1u << 12
+        CleanForceValid = 1u << 12, Force582Enabled = 1u << 13,
+        Force587Enabled = 1u << 14, ForceHoldEnabled = 1u << 15
     };
 
     struct HandleFrame

@@ -3,22 +3,17 @@
 
 namespace force_direct_calibration
 {
-	// 2026-08-31 传感器本体砝码标定。正常链路以 raw/1000.0 表示电压；系数仅由 ADS 数据验证。
+	// 第一层：2026-11-02 提供的传感器系数；采样仍为 raw/1000.0 V，斜率相应乘1000。
 	constexpr double counts_per_volt = 1000.0;
-	constexpr double ft_1_slope_n_per_count = 0.000620117055;
-	constexpr double ft_1_intercept_n = 0.62466536;
+	constexpr double ft_1_slope_n_per_count = 0.000703683250522;
 	constexpr double fn_1_slope_n_per_count = 0.000319519429;
-	constexpr double fn_1_intercept_n = -0.04012571;
-	constexpr double fn_2_slope_n_per_count = 0.001139996290;
-	constexpr double fn_2_intercept_n = 0.89751126;
-	constexpr double ft_2_slope_n_per_count = 0.000130548347;
-	constexpr double ft_2_intercept_n = -0.06307914;
+	constexpr double fn_2_slope_n_per_count = 0.001134444473;
+	constexpr double ft_2_slope_n_per_count = 0.000133373639;
 	constexpr double ft_1_slope_n_per_volt = ft_1_slope_n_per_count * counts_per_volt;
 	constexpr double fn_1_slope_n_per_volt = fn_1_slope_n_per_count * counts_per_volt;
 	constexpr double fn_2_slope_n_per_volt = fn_2_slope_n_per_count * counts_per_volt;
 	constexpr double ft_2_slope_n_per_volt = ft_2_slope_n_per_count * counts_per_volt;
 	constexpr double max_validated_force_n = 0.4903325;
-	constexpr double max_validated_handle_torque_nm = max_validated_force_n * 3.0 * 0.001;
 	constexpr double operational_force_limit_n = 5.0;
 	constexpr double operational_handle_torque_limit_nm = 20.0 * 0.001;
 
@@ -31,10 +26,10 @@ namespace force_direct_calibration
 
 struct ForceCalibrationConfig
 {
-	// 第一组传感器（fn_1/ft_1）；四路仅验证0～50 g正向载荷。
+	// 导管：第一组传感器（fn_1/ft_1），反馈到控制轴1的SN587。
 	double axial_direct_n_per_v = force_direct_calibration::fn_1_slope_n_per_volt;
 	double tangential_direct_n_per_v = force_direct_calibration::ft_1_slope_n_per_volt;
-	// 第二组传感器（fn_2/ft_2）分别提供另一只手柄的轴向力与力矩。
+	// 导丝：第二组传感器（fn_2/ft_2），反馈到控制轴6的SN582。
 	double guidewire_axial_direct_n_per_v = force_direct_calibration::fn_2_slope_n_per_volt;
 	double guidewire_tangential_direct_n_per_v = force_direct_calibration::ft_2_slope_n_per_volt;
 
@@ -43,9 +38,11 @@ struct ForceCalibrationConfig
 	double decouple_tf = -0.103597;
 	double decouple_tt =  0.996063;
 
-	double handle_radius_mm = 3.0;
-	// 原值: double k_feedback = 1.0;
-	double k_feedback = 1.8; // 将手柄力反馈增益设为 1.8，补偿从端传力损耗
+	// 第二层：装机后的物理量标定，两侧共用；偏置在装机取零时抵消。
+	double installed_axial_gain = 1.80;
+	double installed_axial_offset_n = 0.183108;
+	double installed_torque_nmm_per_n = 18.440851;
+	double installed_torque_offset_nmm = 0.020906;
 
 	// 参数来自返工前实验；validated=false时即使误设enabled也不会进入计算。
 	bool gravity_comp_enabled = false;
@@ -88,7 +85,15 @@ struct CleanForce
 	double handle_torque_nm = 0.0;
 };
 
-// 纯净力只应用装机零点、F_direct斜率和手柄半径，不进入反馈处理链。
+inline CleanForce convert_installed_force(
+	double axial_sensor_n, double tangential_sensor_n, const ForceCalibrationConfig& cfg)
+{
+	// affine(sample)-affine(zero)使两层固定截距抵消，不能重新向已取零输出添加恒力。
+	return { cfg.installed_axial_gain * axial_sensor_n,
+		cfg.installed_torque_nmm_per_n * tangential_sensor_n * 0.001 };
+}
+
+// 纯净力应用装机零点和两层标定，不进入反馈死区、限幅、保持及手柄比例处理。
 inline CleanForce calculate_clean_force(
 	double fn_raw_v,
 	double ft_raw_v,
@@ -100,15 +105,14 @@ inline CleanForce calculate_clean_force(
 	{
 		return out;
 	}
-	out.force_n = force_direct_calibration::zeroed_force_n(
+	const double axial_force_n = force_direct_calibration::zeroed_force_n(
 		fn_raw_v, state.f_zero, cfg.axial_direct_n_per_v);
 	const double tangential_force_n = force_direct_calibration::zeroed_force_n(
 		ft_raw_v, state.ft_zero, cfg.tangential_direct_n_per_v);
-	out.handle_torque_nm = tangential_force_n * cfg.handle_radius_mm * 0.001;
-	return out;
+	return convert_installed_force(axial_force_n, tangential_force_n, cfg);
 }
 
-// 第二组传感器的纯净力：只扣除装机零点并应用本侧 F_direct 斜率。
+// 第二组导丝传感器使用本侧传感器系数与同一组装机参数。
 inline CleanForce calculate_clean_guidewire_force(
 	double fn_2_raw_v,
 	double ft_2_raw_v,
@@ -120,12 +124,11 @@ inline CleanForce calculate_clean_guidewire_force(
 	{
 		return out;
 	}
-	out.force_n = force_direct_calibration::zeroed_force_n(
+	const double axial_force_n = force_direct_calibration::zeroed_force_n(
 		fn_2_raw_v, state.fn_2_zero, cfg.guidewire_axial_direct_n_per_v);
 	const double tangential_force_n = force_direct_calibration::zeroed_force_n(
 		ft_2_raw_v, state.ft_2_zero, cfg.guidewire_tangential_direct_n_per_v);
-	out.handle_torque_nm = tangential_force_n * cfg.handle_radius_mm * 0.001;
-	return out;
+	return convert_installed_force(axial_force_n, tangential_force_n, cfg);
 }
 
 inline CalibratedForce calibrate_direct_pair(
@@ -175,8 +178,9 @@ inline CalibratedForce calibrate_direct_pair(
 	double F_dec = df_n;
 	double Ft_dec = dft_n;
 
-	out.f_feedback_n = cfg.k_feedback * F_dec;
-	out.t_feedback_nm = cfg.k_feedback * Ft_dec * cfg.handle_radius_mm * 0.001;
+	const CleanForce installed = convert_installed_force(F_dec, Ft_dec, cfg);
+	out.f_feedback_n = installed.force_n;
+	out.t_feedback_nm = installed.handle_torque_nm;
 
 	if (std::abs(out.f_feedback_n) < cfg.deadband_f_n) out.f_feedback_n = 0.0;
 	if (std::abs(out.t_feedback_nm) < cfg.deadband_t_nm) out.t_feedback_nm = 0.0;
@@ -216,7 +220,7 @@ inline CalibratedForce calibrate_guidewire_force(
 	const ForceCalibrationConfig& cfg,
 	const ForceCalibrationState& state)
 {
-	// 返工后的导丝传感器尚无独立旋转重力模型，当前只应用F_direct和动态零点。
+	// 导丝没有已验证的旋转重力模型，当前只应用动态零点和两层标定。
 	return calibrate_direct_pair(
 		fn_2_sensor_v,
 		ft_2_sensor_v,

@@ -74,7 +74,10 @@ namespace MasterConsole.ViewModels
 
             ConnectCommand = new RelayCommand(ToggleConnect);
             PrepareCommand = new RelayCommand(Prepare);
-            ForceFeedbackCommand = new RelayCommand(ToggleForceFeedback);
+            CatheterForceFeedbackCommand = new RelayCommand(() => ToggleForceFeedback(1));
+            GuidewireForceFeedbackCommand = new RelayCommand(() => ToggleForceFeedback(2));
+            ForceZeroCommand = new RelayCommand(ZeroForceSensor);
+            ForceHoldCommand = new RelayCommand(ToggleForceHold);
             CylinderCommand = new RelayCommand(p => ToggleCylinder(p));
             YValveCommand = new RelayCommand(ToggleYValve);
             StartControlCommand = new RelayCommand(StartControl);
@@ -97,7 +100,10 @@ namespace MasterConsole.ViewModels
 
         public ICommand ConnectCommand { get; }
         public ICommand PrepareCommand { get; }
-        public ICommand ForceFeedbackCommand { get; }
+        public ICommand CatheterForceFeedbackCommand { get; }
+        public ICommand GuidewireForceFeedbackCommand { get; }
+        public ICommand ForceZeroCommand { get; }
+        public ICommand ForceHoldCommand { get; }
         public ICommand CylinderCommand { get; }
         public ICommand YValveCommand { get; }
         public ICommand StartControlCommand { get; }
@@ -178,6 +184,10 @@ namespace MasterConsole.ViewModels
         public bool ControlActive => Has(StatusFlags.ControlActive);
         public bool FfEnabled => Has(StatusFlags.FfEnabled);
         public bool FfZeroing => Has(StatusFlags.FfZeroing);
+        public bool CatheterFfEnabled => Has(StatusFlags.Force587Enabled);
+        public bool GuidewireFfEnabled => Has(StatusFlags.Force582Enabled);
+        public bool ForceHoldEnabled => Has(StatusFlags.ForceHoldEnabled);
+        public string ForceHoldCaption => ForceHoldEnabled ? "关闭保持" : "开启保持";
         public bool YValveClosed => Has(StatusFlags.YValveClosed);
         public bool AdsHealthy => Has(StatusFlags.AdsHealthy);
 
@@ -267,7 +277,7 @@ namespace MasterConsole.ViewModels
             }
         }
 
-        public string FfCaption => FfZeroing ? "正在自动零点采集…" : (FfEnabled ? "已开启" : "已关闭（开启前自动采集零点）");
+        public string FfCaption => FfZeroing ? "正在采集零点…" : Has(StatusFlags.CalZeroed) ? "零点已采集" : "尚未取零点，首次开启自动采集";
         public string YValveCaption => YValveClosed ? "Y 阀已关闭（再次点击取消并打开）" : "Y 阀已打开";
 
         public string Injector1Text => InjectorText(_hasStatus ? _s.InjectorActive1 : 0);
@@ -298,12 +308,23 @@ namespace MasterConsole.ViewModels
             await Report("开始控制", r);
         }
 
-        private async void ToggleForceFeedback()
+        private async void ToggleForceFeedback(int channel)
         {
-            if (FfZeroing) return; // 零点采集期间不响应
-            bool target = !FfEnabled;
-            await Report(target ? "开启力反馈" : "关闭力反馈", await _link.SetForceFeedbackAsync(target));
-            OnPropertyChanged(nameof(FfEnabled));
+            if (FfZeroing) return;
+            bool target = !(channel == 1 ? CatheterFfEnabled : GuidewireFfEnabled);
+            string side = channel == 1 ? "导管" : "导丝";
+            await Report((target ? "开启" : "关闭") + side + "力反馈", await _link.SetForceFeedbackAsync(target, channel));
+        }
+
+        private async void ZeroForceSensor()
+        {
+            if (FfZeroing) return;
+            await Report("力反馈取零点", await _link.ZeroForceSensorAsync());
+        }
+
+        private async void ToggleForceHold()
+        {
+            await Report(ForceHoldCaption, await _link.SetForceFeedbackHoldAsync(!ForceHoldEnabled));
         }
 
         private async void ToggleCylinder(object parameter)
@@ -469,6 +490,7 @@ namespace MasterConsole.ViewModels
         private static readonly string[] StatusPropertyNames =
         {
             nameof(EstopHold), nameof(ControlActive), nameof(FfEnabled), nameof(FfZeroing), nameof(YValveClosed),
+            nameof(CatheterFfEnabled), nameof(GuidewireFfEnabled), nameof(ForceHoldEnabled), nameof(ForceHoldCaption),
             nameof(AdsHealthy), nameof(ModeText), nameof(PhaseText), nameof(CanStartControl),
             nameof(Force582F), nameof(Force582N), nameof(Force587F), nameof(Force587N),
             nameof(Axis1NetDistance), nameof(Axis6NetDistance),

@@ -18,7 +18,7 @@ namespace MasterConsole.Protocol
         Cylinder = 7, ArmManualEnable = 8, ArmAxisEnable = 9,
         ArmAxisReset = 10, ArmAxisJog = 11, ArmCartesianJog = 12,
         ArmStop = 13, ArmProgramZero = 14, ArmCartesianParameter = 15,
-        ArmCartesianAlive = 16, YValve = 17
+        ArmCartesianAlive = 16, YValve = 17, ForceZero = 18, ForceHold = 19
     }
 
     [MessagePackObject]

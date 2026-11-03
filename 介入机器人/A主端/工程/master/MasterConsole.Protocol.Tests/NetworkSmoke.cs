@@ -27,7 +27,7 @@ namespace MasterConsole.Protocol.Tests
             Process process = null;
             var ready = new ManualResetEventSlim();
             int handleCount = 0, forceCount = 0, stateCount = 0, commandCount = 0;
-            int windowStateMatched = 0;
+            int windowStateMatched = 0, forceMask = -1;
             var commands = new ConcurrentQueue<CommandFrame>();
             try
             {
@@ -37,7 +37,11 @@ namespace MasterConsole.Protocol.Tests
                 using (var link = new RemoteRobotLink(new RemoteLinkSettings { Host = "127.0.0.1", Endpoint = endpoint, Token = token }, null))
                 {
                     observer.Subscribe<HandleFrame>(ZenohProtocol.HandleTopic, f => Interlocked.Increment(ref handleCount));
-                    observer.Subscribe<ForceFrame>(ZenohProtocol.ForceTopic, f => Interlocked.Increment(ref forceCount));
+                    observer.Subscribe<ForceFrame>(ZenohProtocol.ForceTopic, f =>
+                    {
+                        Interlocked.Increment(ref forceCount);
+                        Interlocked.Exchange(ref forceMask, (f.Enable582 ? 1 : 0) | (f.Enable587 ? 2 : 0));
+                    });
                     observer.Subscribe<StateFrame>(ZenohProtocol.StateTopic, f => Interlocked.Increment(ref stateCount));
                     observer.Subscribe<CommandFrame>(ZenohProtocol.CommandTopic, f => { Interlocked.Increment(ref commandCount); commands.Enqueue(f); });
                     var cachedPublisher = observer.Advertise<CommandFrame>(ZenohProtocol.CommandTopic);
@@ -66,6 +70,11 @@ namespace MasterConsole.Protocol.Tests
                     Check("轴6位置与窗口边界通过原生数据端映射到主端", Wait(() => Volatile.Read(ref windowStateMatched) == 1, 3000));
                     Check("准备位置专用状态", Result(link.PreparePositionAsync(12, 125), 7000).Ok);
                     Check("开始控制专用状态", Result(link.StartControlAsync(), 7000).Ok);
+                    Check("显式取零通过真实Zenoh命令/状态回执", Result(link.ZeroForceSensorAsync(), 7000).Ok);
+                    Check("单独开启导管反馈", Result(link.SetForceFeedbackAsync(true, 1), 7000).Ok && Wait(() => Volatile.Read(ref forceMask) == 2, 2000));
+                    Check("单独开启导丝反馈", Result(link.SetForceFeedbackAsync(true, 2), 7000).Ok && Wait(() => Volatile.Read(ref forceMask) == 3, 2000));
+                    Check("单独关闭导管反馈", Result(link.SetForceFeedbackAsync(false, 1), 7000).Ok && Wait(() => Volatile.Read(ref forceMask) == 1, 2000));
+                    Check("开启与关闭保持", Result(link.SetForceFeedbackHoldAsync(true), 7000).Ok && Result(link.SetForceFeedbackHoldAsync(false), 7000).Ok);
                     Check("点动直接返回发送结果", Result(link.SetArmCartesianJogAsync(1, 1000), 1000).Ok);
                     link.KeepArmCartesianAlive(); link.SetArmAxisJog(1, 0);
                     Parallel.For(0, 64, i => link.SetArmAxisJog(1, 0));

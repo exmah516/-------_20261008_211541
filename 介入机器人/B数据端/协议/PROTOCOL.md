@@ -152,9 +152,9 @@
 
 ## 命令及状态语义
 
-`ZenohCommand`：0 Hello，1 Authenticate，2 Acquire，3 Release，4 PreparePosition，5 StartControl，6 ForceFeedback，7 Cylinder，8 ArmManualEnable，9 ArmAxisEnable，10 ArmAxisReset，11 ArmAxisJog，12 ArmCartesianJog，13 ArmStop，14 ArmProgramZero，15 ArmCartesianParameter，16 ArmCartesianAlive，17 YValve。没有软件急停命令；ArmStop 仅停止定位臂，PLC 急停继续走原独立路径。
+`ZenohCommand`：0 Hello，1 Authenticate，2 Acquire，3 Release，4 PreparePosition，5 StartControl，6 ForceFeedback，7 Cylinder，8 ArmManualEnable，9 ArmAxisEnable，10 ArmAxisReset，11 ArmAxisJog，12 ArmCartesianJog，13 ArmStop，14 ArmProgramZero，15 ArmCartesianParameter，16 ArmCartesianAlive，17 YValve，18 ForceZero，19 ForceHold。没有软件急停命令；ArmStop 仅停止定位臂，PLC 急停继续走原独立路径。
 
-PreparePosition 的两个 double 是导管与导丝准备位置；Cylinder 的 Param1 为 1..4，Param2 为打开/恢复；YValve Param1 表示关闭；定位臂轴号 1..5；ArmAxisJog 的 Param2 为方向 -1/0/1，Value1 为统一速度倍率：快=2.0、中=1.0、慢=0.5，旧消息的 0 按中档处理，停止不受倍率影响。倍率随每次点动/保活发送，按各轴原基准速度计算，不累乘；默认中档。末端点动速度和参数继续沿用现有 ×1000 整数单位。ForceFeedback 开启沿用零点采集后开启的流程。
+PreparePosition 的两个 double 是导管与导丝准备位置；Cylinder 的 Param1 为 1..4，Param2 为打开/恢复；YValve Param1 表示关闭；定位臂轴号 1..5；ArmAxisJog 的 Param2 为方向 -1/0/1，Value1 为统一速度倍率：快=2.0、中=1.0、慢=0.5，旧消息的 0 按中档处理，停止不受倍率影响。倍率随每次点动/保活发送，按各轴原基准速度计算，不累乘；默认中档。末端点动速度和参数继续沿用现有 ×1000 整数单位。ForceFeedback Param1=0/1 为关闭/开启，Param2=0 为两侧、1 为导管手柄587、2 为导丝手柄582；只有尚未取零时首次开启才自动取零。ForceZero 显式采集连续3帧ADS零点，Param1/Param2均为0，不改变两侧开关；ForceHold Param1=0/1 关闭/开启换手力反馈保持。开启时在换手触发时立即锁存相关手柄当前输出的轴向力和扭矩，跨越回退、重新递送与夹爪恢复阶段；最终重同步完成后，导管/导丝各自对应轴1/6沿自己的递送/撤出方向运动2 mm，再用100 ms线性平滑恢复实时值。保持默认开启。
 
 AuthState：0 未认证、1 挑战、2 已认证。准备和开始控制任务状态：0 空闲、1 运行中、2 完成、3 拒绝/失败，分别带关联 CommandId。Results 最多 32 项，Result=0 完成、1 拒绝；定位臂点动和保活不入结果队列。普通短命令 Result=0 表示通过服务门控且已由原控制循环消费，不等同于实体机构已到位。准备、开始控制、力反馈切换、电缸和 Y 阀由实际状态快照确认完成。
 
@@ -173,3 +173,5 @@ IsConnected = Zenoh Session 可用，并且最近通过协议/认证/session/序
 ## 验证入口
 
 共享黄金 Hex 样本位于包根 protocol/fixtures/zenoh-v1，两端协议测试读取同一组固定文件；从包根运行 `验证记录/20261020_Zenoh迁移/验证.ps1`（完成后以脚本实际输出为准）。测试使用本机回环和模拟控制状态，不启动 ADS.exe，不连接 PLC。
+
+力反馈状态：Flags bit13=Force582Enabled（导丝手柄），bit14=Force587Enabled（导管手柄），bit15=ForceHoldEnabled。bit3仍表示任一侧开启，bit10表示正在采集零点。传感器映射为导管fn_1/ft_1→587、导丝fn_2/ft_2→582，与运动控制对象一致。新增命令与标志不改变位置数组长度，两端应一起更新。

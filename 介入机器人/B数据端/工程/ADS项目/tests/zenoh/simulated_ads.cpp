@@ -36,7 +36,12 @@ namespace
             state.self_check_done = true; state.selfcheck_status = 2; state.startup_completed = true; break;
         case VisCommandType::SelectDirectControl: state.control_active = true; break;
         case VisCommandType::ZeroForceSensor: ++extra.force_zero_ok_count; state.cal_zeroed = true; break;
-        case VisCommandType::ToggleForceFeedback: state.ff_enabled = !state.ff_enabled; break;
+        case VisCommandType::SetForceFeedback:
+            if (command.param2 == 0 || command.param2 == 2) state.ff_582_enabled = command.param1 != 0;
+            if (command.param2 == 0 || command.param2 == 1) state.ff_587_enabled = command.param1 != 0;
+            state.ff_enabled = state.ff_582_enabled || state.ff_587_enabled;
+            break;
+        case VisCommandType::SetForceFeedbackHold: state.force_feedback_hold_enabled = command.param1 != 0; break;
         case VisCommandType::SetCylinderManualPosition:
             if (command.param1 >= 0 && command.param1 < 4)
             {

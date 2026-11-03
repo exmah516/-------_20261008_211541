@@ -5,7 +5,7 @@ const cp = require('child_process');
 // 抽取生产分支，用内存替身验证运动与通信，不加载设备DLL。
 const project = path.resolve(__dirname, '..');
 const selected = process.argv[2] || 'all';
-if (!['all', 'dual', 'recovery', 'cylinder', 'ads', 'handle'].includes(selected)) throw Error('Usage: node run_offline_tests.cjs [all|dual|recovery|cylinder|ads|handle] [report-directory]');
+if (!['all', 'dual', 'recovery', 'cylinder', 'ads', 'handle', 'recording'].includes(selected)) throw Error('Usage: node run_offline_tests.cjs [all|dual|recovery|cylinder|ads|handle|recording] [report-directory]');
 const report = process.argv[3] && path.resolve(process.argv[3]);
 const build = fs.mkdtempSync(path.join(os.tmpdir(), 'handoff-offline-'));
 if (report) fs.mkdirSync(report, {recursive:true});
@@ -120,5 +120,11 @@ if (selected === 'all' || selected === 'ads') {
 }
 if (selected === 'all' || selected === 'handle') {
     run('remote_handle_test', ['tools/remote_handle_test.cpp', '手柄/手柄.cpp']);
+}
+if (selected === 'all' || selected === 'recording') {
+    fs.writeFileSync(path.join(build,'recording_start.inc'),between(read('main.cpp'),'\tExperimentStartInfo recording_info{};','\n\twhile (true)'),'utf8');
+    fs.writeFileSync(path.join(build,'recording_handoff.inc'),between(read('main.cpp'),'\t\tif (planned_return.phase == PlannedReturnPhase::PublishHandoff &&','\n\t\tprocess_force_feedback('),'utf8');
+    const includes = ['','ADS/Include','手柄'].map(p=>'/I"'+path.join(project,p)+'"').join(' ');
+    run('recording_feedback_test', ['tools/recording_feedback_test.cpp','experiment_recorder.cpp','force_feedback.cpp','手柄/手柄.cpp'], '/DNOMINMAX '+includes);
 }
 console.log('Offline test artifacts: '+build);

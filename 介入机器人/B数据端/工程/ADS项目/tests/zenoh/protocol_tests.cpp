@@ -133,6 +133,18 @@ int wmain(int argc, wchar_t** argv)
         golden(dir, "command", new_command(), key);
         golden(dir, "state", new_state(), key);
         golden(dir, "force", new_force(), key);
+        const char* force_names[] = {"command_force_zero", "command_force_hold", "command_force_catheter", "command_force_guidewire"};
+        const int force_commands[][3] = {{18, 0, 0}, {19, 1, 0}, {6, 1, 1}, {6, 0, 2}};
+        for (int i = 0; i < 4; ++i)
+        {
+            auto sample = new_command(); sample.command = static_cast<std::uint8_t>(force_commands[i][0]);
+            sample.param1 = force_commands[i][1]; sample.param2 = force_commands[i][2];
+            sample.value1 = sample.value2 = 0; sample.payload.clear();
+            golden(dir, force_names[i], sample, key);
+        }
+        auto force_state = new_state();
+        force_state.flags |= vi_protocol::ForceFeedbackEnabled | vi_protocol::Force582Enabled | vi_protocol::Force587Enabled | vi_protocol::ForceHoldEnabled;
+        golden(dir, "state_force_controls", force_state, key);
         vi_protocol::CommandFrame hello, auth;
         check("Hello strict decode", vi_protocol::decode(read_hex(dir / "hello.hex"), hello));
         check("Hello reserialize", vi_protocol::encode(hello) == read_hex(dir / "hello.hex"));

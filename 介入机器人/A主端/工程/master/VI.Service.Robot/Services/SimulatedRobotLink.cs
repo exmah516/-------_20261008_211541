@@ -22,7 +22,8 @@ namespace MasterConsole.Services
 
         private bool _connected;
         private bool _hasControl;
-        private bool _ffEnabled;
+        private bool _ff582Enabled, _ff587Enabled;
+        private bool _ffHoldEnabled = true;
         private bool _ffZeroing;
         private bool _calZeroed;
         private bool _yClosed;
@@ -62,7 +63,7 @@ namespace MasterConsole.Services
             _connected = false;
             _hasControl = false;
             _controlStarted = false;
-            _ffEnabled = _ffZeroing = false;
+            _ff582Enabled = _ff587Enabled = _ffZeroing = false;
             _injectorDir[0] = _injectorDir[1] = 0;
             _axis4Dir = 0;
             ConnectionChanged?.Invoke(this, EventArgs.Empty);
@@ -112,32 +113,46 @@ namespace MasterConsole.Services
             Log("info", "已到达器械准备位置（模拟）。");
         }
 
-        public async Task<CommandResult> SetForceFeedbackAsync(bool enable)
+        public async Task<CommandResult> SetForceFeedbackAsync(bool enable, int channel = 0)
         {
             var guard = Guard();
             if (guard != null) return guard;
-            await Task.Delay(100);
-            if (!enable)
+            if (channel < 0 || channel > 2) return CommandResult.Rejected("力反馈通道无效");
+            if (_ffZeroing) return CommandResult.Rejected("正在采集零点");
+            if (enable && !_calZeroed)
             {
-                _ffEnabled = false;
-                _ffZeroing = false;
-                Log("info", "力反馈已关闭。");
-                return CommandResult.Done();
+                var zero = await ZeroForceSensorAsync();
+                if (!zero.Ok) return zero;
             }
-            _ffZeroing = true;
-            Log("info", "力反馈开启前自动零点采集…");
-            _ = FinishZeroingAsync();
+            if (channel == 0 || channel == 1) _ff587Enabled = enable;
+            if (channel == 0 || channel == 2) _ff582Enabled = enable;
+            PublishStatus();
             return CommandResult.Done();
         }
 
-        private async Task FinishZeroingAsync()
+        public async Task<CommandResult> ZeroForceSensorAsync()
         {
-            await Task.Delay(1500);
-            if (!_connected || !_ffZeroing) return;
+            var guard = Guard();
+            if (guard != null) return guard;
+            if (_ffZeroing) return CommandResult.Rejected("正在采集零点");
+            _ffZeroing = true;
+            PublishStatus();
+            await Task.Delay(100);
             _ffZeroing = false;
+            guard = Guard();
+            if (guard != null) return guard;
             _calZeroed = true;
-            _ffEnabled = true;
-            Log("info", "零点采集完成，力反馈已开启。");
+            PublishStatus();
+            return CommandResult.Done();
+        }
+
+        public Task<CommandResult> SetForceFeedbackHoldAsync(bool enable)
+        {
+            var guard = Guard();
+            if (guard != null) return Task.FromResult(guard);
+            _ffHoldEnabled = enable;
+            PublishStatus();
+            return Task.FromResult(CommandResult.Done());
         }
 
         public async Task<CommandResult> SetCylinderAsync(int index, bool engaged)
@@ -232,7 +247,10 @@ namespace MasterConsole.Services
             var flags = StatusFlags.AdsHealthy;
             if (_hasControl) flags |= StatusFlags.LeaseHeld;
             if (_hasControl && _controlStarted && _selfCheckDone) flags |= StatusFlags.ControlActive;
-            if (_ffEnabled) flags |= StatusFlags.FfEnabled;
+            if (_ff582Enabled || _ff587Enabled) flags |= StatusFlags.FfEnabled;
+            if (_ff582Enabled) flags |= StatusFlags.Force582Enabled;
+            if (_ff587Enabled) flags |= StatusFlags.Force587Enabled;
+            if (_ffHoldEnabled) flags |= StatusFlags.ForceHoldEnabled;
             if (_ffZeroing) flags |= StatusFlags.FfZeroing;
             if (_calZeroed) flags |= StatusFlags.CalZeroed;
             if (_yClosed) flags |= StatusFlags.YValveClosed;
@@ -241,7 +259,7 @@ namespace MasterConsole.Services
             byte mask = 0;
             for (int i = 0; i < 4; i++) if (_engaged[i]) mask |= (byte)(1 << i);
 
-            float wave = _ffEnabled ? (float)Math.Sin(t * 1.3) : 0f;
+            float wave = (float)Math.Sin(t * 1.3);
             var frame = new StatusFrame
             {
                 Flags = flags,
@@ -258,10 +276,10 @@ namespace MasterConsole.Services
                 InjectorActive1 = (sbyte)_injectorDir[0],
                 InjectorActive2 = (sbyte)_injectorDir[1],
                 Axis4Active = (sbyte)_axis4Dir,
-                Force582F = 0.30f * wave + Noise(),
-                Force582N = 0.012f * wave + Noise() * 0.05f,
-                Force587F = 0.22f * (float)Math.Sin(t * 0.9) * (_ffEnabled ? 1 : 0) + Noise(),
-                Force587N = 0.009f * wave + Noise() * 0.05f,
+                Force582F = _ff582Enabled ? 0.30f * wave + Noise() : 0f,
+                Force582N = _ff582Enabled ? 0.012f * wave + Noise() * 0.05f : 0f,
+                Force587F = _ff587Enabled ? 0.22f * (float)Math.Sin(t * 0.9) + Noise() : 0f,
+                Force587N = _ff587Enabled ? 0.009f * wave + Noise() * 0.05f : 0f,
                 CleanForceN = 0.25f * wave,
                 AdsActualHz = 99.6f,
                 AxisPos = new float[7],

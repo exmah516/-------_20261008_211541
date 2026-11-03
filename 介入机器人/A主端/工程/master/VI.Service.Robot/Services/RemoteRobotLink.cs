@@ -218,8 +218,12 @@ namespace MasterConsole.Services
         }
         public void KeepArmCartesianAlive()
             => SendCommand(ZenohCommand.ArmCartesianAlive, 0, 0, 0, 0, "", null, null, null, 0);
-        public Task<CommandResult> SetForceFeedbackAsync(bool enable)
-            => RequestAsync(ZenohCommand.ForceFeedback, enable ? 1 : 0, 0, 0, 0, 15000);
+        public Task<CommandResult> SetForceFeedbackAsync(bool enable, int channel = 0)
+            => RequestAsync(ZenohCommand.ForceFeedback, enable ? 1 : 0, channel, 0, 0, 15000);
+        public Task<CommandResult> ZeroForceSensorAsync()
+            => RequestAsync(ZenohCommand.ForceZero, 0, 0, 0, 0, 15000);
+        public Task<CommandResult> SetForceFeedbackHoldAsync(bool enable)
+            => RequestAsync(ZenohCommand.ForceHold, enable ? 1 : 0, 0, 0, 0, 5000);
         public Task<CommandResult> SetCylinderAsync(int index, bool engaged)
             => RequestAsync(ZenohCommand.Cylinder, index, engaged ? 1 : 0, 0, 0, 10000);
         public Task<CommandResult> SetYValveClosedAsync(bool closed)

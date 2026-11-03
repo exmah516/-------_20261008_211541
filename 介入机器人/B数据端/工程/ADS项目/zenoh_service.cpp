@@ -53,7 +53,7 @@ namespace
         if (!std::isfinite(f.value1) || !std::isfinite(f.value2) || f.payload.size() > 4096 ||
             f.nonce_client.size() > 64 || f.nonce_server.size() > 64 || f.proof.size() > 64 || f.auth_tag.size() > 32)
             return false;
-        return f.command <= static_cast<std::uint8_t>(vi_protocol::Command::YValve) && f.command_id >= 0;
+        return f.command <= static_cast<std::uint8_t>(vi_protocol::Command::ForceHold) && f.command_id >= 0;
     }
 
     std::vector<std::uint8_t> bytes_of(const std::string& value)
@@ -400,23 +400,30 @@ void ZenohService::publish_state(const VisState& state, const RemoteExtraState& 
             { finished = true; reason = "Force-sensor zeroing failed."; force_zeroing_ = false; }
             else if (extra.force_zero_ok_count != task.zero_ok_count)
             {
-                queue_command(VisCommand{ VisCommandType::ToggleForceFeedback }, 0, false);
-                task.kind = PendingKind::ForceEnable;
-                task.start_state_sequence = sequence;
-                task.deadline_ms = now + 3000;
+                if (task.flag)
+                {
+                    queue_command(VisCommand{ VisCommandType::SetForceFeedback, 1, task.index }, 0, false);
+                    task.kind = PendingKind::ForceSet;
+                    task.start_state_sequence = sequence;
+                    task.deadline_ms = now + 3000;
+                }
+                else { finished = success = true; force_zeroing_ = false; }
             }
             else if (now >= task.deadline_ms)
             { finished = true; reason = "Force-sensor zeroing timed out."; force_zeroing_ = false; }
             break;
-        case PendingKind::ForceEnable:
-            if (state.ff_enabled) { finished = success = true; force_zeroing_ = false; }
+        case PendingKind::ForceSet:
+        {
+            const bool reached = (task.index == 1 || state.ff_582_enabled == task.flag) &&
+                (task.index == 2 || state.ff_587_enabled == task.flag);
+            if (reached) { finished = success = true; force_zeroing_ = false; }
             else if (now >= task.deadline_ms)
-            { finished = true; reason = "Force feedback did not turn on."; force_zeroing_ = false; }
+            { finished = true; reason = "Force feedback did not change."; force_zeroing_ = false; }
             break;
-        case PendingKind::ForceDisable:
-            if (!state.ff_enabled) { finished = success = true; }
-            else if (now >= task.deadline_ms)
-            { finished = true; reason = "Force feedback did not turn off."; }
+        }
+        case PendingKind::ForceHold:
+            if (state.force_feedback_hold_enabled == task.flag) { finished = success = true; }
+            else if (now >= task.deadline_ms) { finished = true; reason = "Force hold did not change."; }
             break;
         case PendingKind::CylinderOn:
         case PendingKind::CylinderOff:
@@ -777,7 +784,8 @@ void ZenohService::consume_command_locked(const vi_protocol::CommandFrame& recei
     { add_result_locked(frame.command_id, 1, "Control lease is not held."); return; }
     if (pending_tasks_.size() >= kMaxPendingTasks &&
         (type == vi_protocol::Command::PreparePosition || type == vi_protocol::Command::StartControl ||
-         type == vi_protocol::Command::ForceFeedback || type == vi_protocol::Command::Cylinder ||
+         type == vi_protocol::Command::ForceFeedback || type == vi_protocol::Command::ForceZero ||
+         type == vi_protocol::Command::ForceHold || type == vi_protocol::Command::Cylinder ||
          type == vi_protocol::Command::YValve))
     { add_result_locked(frame.command_id, 1, "A long-running command is still pending."); return; }
 
@@ -840,27 +848,43 @@ void ZenohService::consume_command_locked(const vi_protocol::CommandFrame& recei
         pending_tasks_.push_back(PendingTask{ PendingKind::StartControl, frame.command_id, now + 3000, state_snapshot_sequence_ });
         break;
     case vi_protocol::Command::ForceFeedback:
+    case vi_protocol::Command::ForceZero:
     {
-        if (!valid_bool_int(frame.param1)) { add_result_locked(frame.command_id, 1, "Invalid force-feedback value."); return; }
+        const bool zero_only = frame.command == static_cast<std::uint8_t>(vi_protocol::Command::ForceZero);
+        if ((!zero_only && (!valid_bool_int(frame.param1) || frame.param2 < 0 || frame.param2 > 2)) ||
+            (zero_only && (frame.param1 != 0 || frame.param2 != 0)))
+        { add_result_locked(frame.command_id, 1, "Invalid force-feedback value."); return; }
         if (std::any_of(pending_tasks_.begin(), pending_tasks_.end(), [](const auto& task)
-            { return task.kind == PendingKind::ForceZero || task.kind == PendingKind::ForceEnable || task.kind == PendingKind::ForceDisable; }))
+            { return task.kind == PendingKind::ForceZero || task.kind == PendingKind::ForceSet; }))
         { add_result_locked(frame.command_id, 1, "Force-feedback transition is already pending."); return; }
-        if (frame.param1 != 0)
+        const bool enable = !zero_only && frame.param1 != 0;
+        const bool reached = (frame.param2 == 1 || state_.ff_582_enabled == enable) &&
+            (frame.param2 == 2 || state_.ff_587_enabled == enable);
+        if (!zero_only && reached) { add_result_locked(frame.command_id, 0, ""); return; }
+        // 已显式取零后，切换另一侧不得重新覆盖当前装机零点。
+        if (zero_only || (enable && !state_.cal_zeroed))
         {
-            if (state_.ff_enabled) { add_result_locked(frame.command_id, 0, ""); return; }
             enqueue(VisCommandType::ZeroForceSensor, 0, 0, false);
             force_zeroing_ = true;
             pending_tasks_.push_back(PendingTask{ PendingKind::ForceZero, frame.command_id, now + 3000,
-                state_snapshot_sequence_, 0, false, extra_.force_zero_ok_count, extra_.force_zero_fail_count });
+                state_snapshot_sequence_, frame.param2, enable, extra_.force_zero_ok_count, extra_.force_zero_fail_count });
         }
         else
         {
-            if (!state_.ff_enabled) { add_result_locked(frame.command_id, 0, ""); return; }
-            enqueue(VisCommandType::ToggleForceFeedback, 0, 0, false);
-            pending_tasks_.push_back(PendingTask{ PendingKind::ForceDisable, frame.command_id, now + 3000, state_snapshot_sequence_ });
+            enqueue(VisCommandType::SetForceFeedback, frame.param1, frame.param2, false);
+            pending_tasks_.push_back(PendingTask{ PendingKind::ForceSet, frame.command_id, now + 3000,
+                state_snapshot_sequence_, frame.param2, enable });
         }
         break;
     }
+    case vi_protocol::Command::ForceHold:
+        if (!valid_bool_int(frame.param1)) { add_result_locked(frame.command_id, 1, "Invalid force-hold value."); return; }
+        if (std::any_of(pending_tasks_.begin(), pending_tasks_.end(), [](const auto& task) { return task.kind == PendingKind::ForceHold; }))
+        { add_result_locked(frame.command_id, 1, "Force-hold transition is already pending."); return; }
+        enqueue(VisCommandType::SetForceFeedbackHold, frame.param1, 0, false);
+        pending_tasks_.push_back(PendingTask{ PendingKind::ForceHold, frame.command_id, now + 3000,
+            state_snapshot_sequence_, 0, frame.param1 != 0 });
+        break;
     case vi_protocol::Command::Cylinder:
     {
         if (frame.param1 < 1 || frame.param1 > 4 || !valid_bool_int(frame.param2))
@@ -1018,6 +1042,9 @@ void ZenohService::publish_state_frame()
         if (state_.estop_hold) frame.flags |= vi_protocol::EstopHold;
         if (state_.self_check_done) frame.flags |= vi_protocol::SelfCheckDone;
         if (state_.ff_enabled) frame.flags |= vi_protocol::ForceFeedbackEnabled;
+        if (state_.ff_582_enabled) frame.flags |= vi_protocol::Force582Enabled;
+        if (state_.ff_587_enabled) frame.flags |= vi_protocol::Force587Enabled;
+        if (state_.force_feedback_hold_enabled) frame.flags |= vi_protocol::ForceHoldEnabled;
         if (state_.cal_zeroed) frame.flags |= vi_protocol::CalZeroed;
         if (state_.host_comm_timeout) frame.flags |= vi_protocol::HostCommTimeout;
         if (!extra_.y_valve_open) frame.flags |= vi_protocol::YValveClosed;
@@ -1091,12 +1118,12 @@ void ZenohService::publish_force_frame()
         {
             const auto a = remote_handle_bridge::get_output(0);
             const auto b = remote_handle_bridge::get_output(1);
-            frame.enable582 = a.enable; frame.axis582 = static_cast<std::int8_t>(std::clamp(a.axis, 0, 2));
-            frame.force582_n = a.enable && std::isfinite(static_cast<float>(a.force)) ? static_cast<float>(a.force) : 0.0f;
-            frame.torque582_nm = a.enable && std::isfinite(static_cast<float>(a.torque)) ? static_cast<float>(a.torque) : 0.0f;
-            frame.enable587 = b.enable; frame.axis587 = static_cast<std::int8_t>(std::clamp(b.axis, 0, 2));
-            frame.force587_n = b.enable && std::isfinite(static_cast<float>(b.force)) ? static_cast<float>(b.force) : 0.0f;
-            frame.torque587_nm = b.enable && std::isfinite(static_cast<float>(b.torque)) ? static_cast<float>(b.torque) : 0.0f;
+            frame.enable582 = a.enable && state_.ff_582_enabled; frame.axis582 = static_cast<std::int8_t>(std::clamp(a.axis, 0, 2));
+            frame.force582_n = frame.enable582 && std::isfinite(static_cast<float>(a.force)) ? static_cast<float>(a.force) : 0.0f;
+            frame.torque582_nm = frame.enable582 && std::isfinite(static_cast<float>(a.torque)) ? static_cast<float>(a.torque) : 0.0f;
+            frame.enable587 = b.enable && state_.ff_587_enabled; frame.axis587 = static_cast<std::int8_t>(std::clamp(b.axis, 0, 2));
+            frame.force587_n = frame.enable587 && std::isfinite(static_cast<float>(b.force)) ? static_cast<float>(b.force) : 0.0f;
+            frame.torque587_nm = frame.enable587 && std::isfinite(static_cast<float>(b.torque)) ? static_cast<float>(b.torque) : 0.0f;
         }
         key = session_key_;
     }

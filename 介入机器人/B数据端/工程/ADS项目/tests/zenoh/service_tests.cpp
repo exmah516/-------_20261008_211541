@@ -37,7 +37,9 @@ struct ZenohServiceTestAccess
     static void send(ZenohService& service, vi_protocol::CommandFrame frame)
     {
         frame.auth_tag = service.sign(frame);
-        service.on_command(frame);
+        vi_protocol::CommandFrame decoded;
+        assert(service.decode(service.pack(frame), decoded));
+        service.on_command(decoded);
     }
 
     static bool result(const ZenohService& service, int id, int value)
@@ -238,12 +240,70 @@ struct ZenohServiceTestAccess
         send(service, command(service, vi_protocol::Command::ForceFeedback, 2, 202, 1));
         assert(service.poll_command(control) && control.type == VisCommandType::ZeroForceSensor);
         service.command_processed(); ++extra.force_zero_ok_count; service.publish_state(state, extra);
-        assert(service.poll_command(control) && control.type == VisCommandType::ToggleForceFeedback);
+        assert(service.poll_command(control) && control.type == VisCommandType::SetForceFeedback && control.param1 == 1 && control.param2 == 0);
         service.command_processed();
         service.publish_state(state, extra); service.publish_state(state, extra);
         assert(!result(service, 202, 1));
-        state.ff_enabled = true; service.publish_state(state, extra);
+        state.ff_enabled = state.ff_582_enabled = state.ff_587_enabled = true; state.cal_zeroed = true;
+        service.publish_state(state, extra);
         assert(result(service, 202, 0));
+    }
+
+    static void force_controls()
+    {
+        ZenohService service; initialize(service);
+        auto state = service.state_; auto extra = service.extra_;
+        VisCommand control;
+        // 显式取零只确认采集完成，不替用户打开反馈。
+        send(service, command(service, vi_protocol::Command::ForceZero, 1, 301));
+        assert(service.poll_command(control) && control.type == VisCommandType::ZeroForceSensor);
+        service.command_processed(); service.publish_state(state, extra);
+        assert(!result(service, 301, 0));
+        ++extra.force_zero_ok_count; state.cal_zeroed = true; service.publish_state(state, extra);
+        assert(result(service, 301, 0) && !service.force_zeroing_ && !service.poll_command(control));
+
+        // 已有零点时直接打开所选侧，不重取两侧零点。
+        send(service, command(service, vi_protocol::Command::ForceFeedback, 2, 302, 1, 1));
+        assert(service.poll_command(control) && control.type == VisCommandType::SetForceFeedback && control.param2 == 1);
+        service.command_processed(); service.publish_state(state, extra);
+        assert(!result(service, 302, 0));
+        state.ff_587_enabled = state.ff_enabled = true; service.publish_state(state, extra);
+        assert(result(service, 302, 0) && !state.ff_582_enabled);
+        send(service, command(service, vi_protocol::Command::ForceFeedback, 3, 303, 1, 2));
+        assert(service.poll_command(control) && control.type == VisCommandType::SetForceFeedback && control.param2 == 2);
+        service.command_processed(); state.ff_582_enabled = true; service.publish_state(state, extra);
+        assert(result(service, 303, 0));
+        send(service, command(service, vi_protocol::Command::ForceFeedback, 4, 304, 0, 1));
+        assert(service.poll_command(control) && control.type == VisCommandType::SetForceFeedback && control.param1 == 0 && control.param2 == 1);
+        service.command_processed(); state.ff_587_enabled = false; service.publish_state(state, extra);
+        assert(result(service, 304, 0) && state.ff_582_enabled);
+        send(service, command(service, vi_protocol::Command::ForceHold, 5, 305, 1));
+        assert(service.poll_command(control) && control.type == VisCommandType::SetForceFeedbackHold && control.param1 == 1);
+        service.command_processed(); service.publish_state(state, extra);
+        assert(!result(service, 305, 0));
+        state.force_feedback_hold_enabled = true; service.publish_state(state, extra);
+        assert(result(service, 305, 0));
+        send(service, command(service, vi_protocol::Command::ForceHold, 6, 306, 0));
+        assert(service.poll_command(control) && control.param1 == 0); service.command_processed();
+        state.force_feedback_hold_enabled = false; service.publish_state(state, extra);
+        assert(result(service, 306, 0));
+
+        send(service, command(service, vi_protocol::Command::ForceFeedback, 7, 307, 1, 3));
+        assert(!service.poll_command(control) && result(service, 307, 1));
+        send(service, command(service, vi_protocol::Command::ForceHold, 8, 308, 2));
+        assert(!service.poll_command(control) && result(service, 308, 1));
+        send(service, command(service, vi_protocol::Command::ForceZero, 9, 309));
+        assert(service.poll_command(control)); service.command_processed();
+        ++extra.force_zero_fail_count; service.publish_state(state, extra);
+        assert(result(service, 309, 1) && !service.force_zeroing_ && state.ff_582_enabled);
+
+        // 未取零时自动取零失败不得打开任何侧。
+        state.cal_zeroed = false; state.ff_enabled = state.ff_582_enabled = false; service.publish_state(state, extra);
+        send(service, command(service, vi_protocol::Command::ForceFeedback, 10, 310, 1, 2));
+        assert(service.poll_command(control) && control.type == VisCommandType::ZeroForceSensor); service.command_processed();
+        ++extra.force_zero_fail_count; service.publish_state(state, extra);
+        assert(result(service, 310, 1) && !service.poll_command(control));
+        std::cout << "Force zero/independent feedback/hold command tests passed.\n";
     }
 
     static void control_rejection_reasons()
@@ -337,6 +397,7 @@ int main()
     ZenohServiceTestAccess::handle_replay();
     ZenohServiceTestAccess::task_waits_for_observed_state();
     ZenohServiceTestAccess::resource_transition_rejection();
+    ZenohServiceTestAccess::force_controls();
     ZenohServiceTestAccess::control_rejection_reasons();
     ZenohServiceTestAccess::independent_cylinders();
     std::cout << "PASS: FIFO256/overflow/order, independent handle, 2s expiry, session/sequence replay, "

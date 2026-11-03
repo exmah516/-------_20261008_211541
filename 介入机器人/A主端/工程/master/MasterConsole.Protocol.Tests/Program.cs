@@ -23,6 +23,18 @@ namespace MasterConsole.Protocol.Tests
                 Golden(fixtures, "command", NewCommand(), key);
                 Golden(fixtures, "state", NewState(), key);
                 Golden(fixtures, "force", NewForce(), key);
+                foreach (var item in new[] { ("command_force_zero", ZenohCommand.ForceZero, 0, 0),
+                    ("command_force_hold", ZenohCommand.ForceHold, 1, 0),
+                    ("command_force_catheter", ZenohCommand.ForceFeedback, 1, 1),
+                    ("command_force_guidewire", ZenohCommand.ForceFeedback, 0, 2) })
+                {
+                    var sample = NewCommand(); sample.Command = item.Item2; sample.Param1 = item.Item3; sample.Param2 = item.Item4;
+                    sample.Value1 = sample.Value2 = 0; sample.Payload = "";
+                    Golden(fixtures, item.Item1, sample, key);
+                }
+                var forceState = NewState();
+                forceState.Flags |= (uint)(StatusFlags.FfEnabled | StatusFlags.Force582Enabled | StatusFlags.Force587Enabled | StatusFlags.ForceHoldEnabled);
+                Golden(fixtures, "state_force_controls", forceState, key);
                 var hello = ZenohWire.Deserialize<CommandFrame>(ReadHex(fixtures, "hello"));
                 Check("Hello 固定挑战字段", hello.Command == ZenohCommand.Hello && hello.NonceClient.Length == 16 && hello.SessionId == 0);
                 Check("Hello 字节一致", ZenohWire.Serialize(hello).SequenceEqual(ReadHex(fixtures, "hello")));

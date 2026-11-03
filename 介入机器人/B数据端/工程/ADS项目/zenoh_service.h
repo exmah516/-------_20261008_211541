@@ -56,7 +56,7 @@ public:
     void command_processed();
 
 private:
-    enum class PendingKind { Prepare, ForceZero, ForceEnable, ForceDisable, CylinderOn, CylinderOff, YValve, StartControl };
+    enum class PendingKind { Prepare, ForceZero, ForceSet, ForceHold, CylinderOn, CylinderOff, YValve, StartControl };
     struct PendingTask
     {
         PendingKind kind{};

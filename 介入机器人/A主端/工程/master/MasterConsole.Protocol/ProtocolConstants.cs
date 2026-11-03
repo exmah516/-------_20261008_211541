@@ -29,5 +29,8 @@ namespace MasterConsole.Protocol
         FfZeroing = 1u << 10,
         GlobalReverse = 1u << 11,
         CleanForceValid = 1u << 12,
+        Force582Enabled = 1u << 13,
+        Force587Enabled = 1u << 14,
+        ForceHoldEnabled = 1u << 15,
     }
 }

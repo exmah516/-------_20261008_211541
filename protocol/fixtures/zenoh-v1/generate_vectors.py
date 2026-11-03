@@ -70,6 +70,17 @@ challenge = samples["state"].copy()
 challenge[2], challenge[3], challenge[-1] = 1, 1, b""
 write("challenge", challenge)
 
+for name, command, p1, p2 in [("command_force_zero", 18, 0, 0), ("command_force_hold", 19, 1, 0),
+                               ("command_force_catheter", 6, 1, 1), ("command_force_guidewire", 6, 0, 2)]:
+    value = [1, sid, 101, 123457, 42, command, p1, p2, 0.0, 0.0, "", b"", b"", b"", b""]
+    value[-1] = hmac.digest(key, encode(value), "sha256")[:16]
+    write(name, value)
+force_controls = samples["state"].copy()
+force_controls[6] |= (1 << 3) | (1 << 13) | (1 << 14) | (1 << 15)
+force_controls[-1] = b""
+force_controls[-1] = hmac.digest(key, encode(force_controls), "sha256")[:16]
+write("state_force_controls", force_controls)
+
 for name, value in samples.items():
     write("invalid_" + name + "_length", value[:-1])
     value = value.copy()

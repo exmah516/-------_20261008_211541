@@ -152,6 +152,7 @@ int main()
 	{
 		// 立即清除闭爪保持状态，避免安全事件后的下一拍继续复用旧力值。
 		ff.clear_clamp_holds();
+		ff.force_582_f = ff.force_582_n = ff.force_587_f = ff.force_587_n = 0.0;
 		apply_force_output(0.0, 0.0, 0.0, 0.0);
 	};
 
@@ -765,7 +766,7 @@ int main()
 			<< ", axis2/theta0=" << cal_state.theta0_deg << " deg" << std::endl;
 		return true;
 	};
-	// Zenoh 服务据此判断“开启力反馈前自动零点采集”是否已完成（成功/失败各自计数）。
+	// Zenoh 服务据此确认显式或首次开启前的零点采集结果。
 	std::uint32_t remote_force_zero_ok_count = 0;
 	std::uint32_t remote_force_zero_fail_count = 0;
 	auto zero_force_sensor = [&](const char* source) -> bool
@@ -918,14 +919,6 @@ int main()
 	struct HandleRecordSnapshot
 	{
 		std::int64_t qpc_ticks = 0;
-		double axis1_linear_raw = 0.0;
-		double axis1_linear_filtered = 0.0;
-		double axis1_rotation_raw = 0.0;
-		double axis1_rotation_filtered = 0.0;
-		double axis6_linear_raw = 0.0;
-		double axis6_linear_filtered = 0.0;
-		double axis6_rotation_raw = 0.0;
-		double axis6_rotation_filtered = 0.0;
 		bool axis1_valid = false;
 		bool axis6_valid = false;
 	};
@@ -935,6 +928,14 @@ int main()
 	std::int64_t next_vis_publish_qpc = 0;
 	std::uint64_t reported_ads_diagnostic_sequence = 0;
 	ULONGLONG last_ads_diagnostic_log_ms = 0;
+	ExperimentStartInfo recording_info{};
+	recording_info.axis1_handle_serial = serial_axis1_handle;
+	recording_info.axis6_handle_serial = serial_axis6_handle;
+	recording_info.single_handle_mode = single_handle_mode;
+	if (experiment_recorder.start("auto", recording_info))
+		std::cout << "实验记录默认开启：records/日期/时间_auto，退出程序时保存完成。" << std::endl;
+	else
+		std::cerr << "实验记录启动失败，错误码：" << static_cast<int>(experiment_recorder.snapshot().error) << std::endl;
 
 	while (true)
 	{
@@ -1357,7 +1358,7 @@ int main()
 		{
 			handled_plc_restart_count = ads_stats.plc_restart_count;
 			plc_restart_recovery_latched = false;
-			ff.enabled = false;
+			ff.set_enabled(0, false);
 			tracking_controller.disable_compensation();
 			spacing_recovery.reset();
 			(void)cancel_active_return_motion(true);
@@ -1385,16 +1386,8 @@ int main()
 		QueryPerformanceCounter(&handle_record_qpc);
 		HandleRecordSnapshot handle_record{};
 		handle_record.qpc_ticks = handle_record_qpc.QuadPart;
-		handle_record.axis1_valid = axis1_input_handle != nullptr;
-		handle_record.axis6_valid = axis6_input_handle != nullptr;
-		handle_record.axis1_linear_raw = axis1_input_handle->fJoints2[0];
-		handle_record.axis1_linear_filtered = axis1_handle_filter.axis0_filtered;
-		handle_record.axis1_rotation_raw = axis1_input_handle->fJoints2[1];
-		handle_record.axis1_rotation_filtered = axis1_handle_filter.axis1_filtered;
-		handle_record.axis6_linear_raw = axis6_input_handle->fJoints2[0];
-		handle_record.axis6_linear_filtered = axis6_handle_filter.axis0_filtered;
-		handle_record.axis6_rotation_raw = axis6_input_handle->fJoints2[1];
-		handle_record.axis6_rotation_filtered = axis6_handle_filter.axis1_filtered;
+		handle_record.axis1_valid = handle1_poll_ok;
+		handle_record.axis6_valid = handle6_poll_ok;
 		handle_record_history.push_back(handle_record);
 		const std::int64_t handle_history_ticks = std::max<std::int64_t>(1, vis_qpc_frequency.QuadPart / 10);
 		while (!handle_record_history.empty() &&
@@ -2322,6 +2315,10 @@ int main()
 					planned_return.reset();
 					return false;
 				}
+				if (axis1_active) ff.capture_clamp_hold(
+					1, axis1_reverse_pressed, ff.force_587_f, ff.force_587_n);
+				if (axis6_active) ff.capture_clamp_hold(
+					2, axis6_effective_reverse_pressed, ff.force_582_f, ff.force_582_n);
 				clear_cylinder_manual_overrides();
 				return true;
 			};
@@ -2851,6 +2848,12 @@ int main()
 					{
 						if (rebase_planned_return())
 						{
+							// 夹爪恢复和最终重同步完成后才开始计算释放距离；
+							// 换手期间的自动轴运动不能消耗这 2 mm。
+							if (planned_return.contains_axis(0))
+								ff.complete_clamp_hold(1, plc_act_pos[0] + plc_init_pos[0]);
+							if (planned_return.contains_axis(5))
+								ff.complete_clamp_hold(2, plc_act_pos[5] + plc_init_pos[5]);
 							if (planned_return.mode == PlannedReturnMode::CatheterDelivery ||
 								(planned_return.mode == PlannedReturnMode::Dual &&
 									planned_return.contains_axis(0) && !axis1_reverse_pressed))
@@ -4153,7 +4156,7 @@ int main()
 		experiment_recorder.update_ads_communication_stats(ads_stats);
 		experiment_recorder.poll_health();
 		const DWORD force_sample_now_ms = GetTickCount();
-		const bool force_data_consumer_active = experiment_recorder.is_recording() || ff.enabled ||
+		const bool force_data_consumer_active = experiment_recorder.is_recording() || ff.enabled() ||
 			tracking_controller.compensation_enabled() || clean_force_monitor_enabled;
 		if (has_new_ads_snapshot)
 		{
@@ -4256,15 +4259,7 @@ int main()
 				if (nearest_handle != nullptr && nearest_delta <= max_handle_delta_ticks)
 				{
 					motion_row.axis1_handle_valid = nearest_handle->axis1_valid;
-					motion_row.axis1_handle_linear_raw = nearest_handle->axis1_linear_raw;
-					motion_row.axis1_handle_linear_filtered = nearest_handle->axis1_linear_filtered;
-					motion_row.axis1_handle_rotation_raw = nearest_handle->axis1_rotation_raw;
-					motion_row.axis1_handle_rotation_filtered = nearest_handle->axis1_rotation_filtered;
 					motion_row.axis6_handle_valid = nearest_handle->axis6_valid;
-					motion_row.axis6_handle_linear_raw = nearest_handle->axis6_linear_raw;
-					motion_row.axis6_handle_linear_filtered = nearest_handle->axis6_linear_filtered;
-					motion_row.axis6_handle_rotation_raw = nearest_handle->axis6_rotation_raw;
-					motion_row.axis6_handle_rotation_filtered = nearest_handle->axis6_rotation_filtered;
 				}
 				(void)experiment_recorder.enqueue_motion(motion_row);
 			}
@@ -4279,7 +4274,7 @@ int main()
 
 		// 力反馈阻断原因仅在状态变化时输出一次，避免控制台被周期性等待提示淹没。
 		std::string current_force_feedback_reason;
-		if (ff.enabled)
+		if (ff.enabled())
 		{
 			if (!cal_state.zeroed) current_force_feedback_reason = "力反馈等待：尚未完成力传感器零点采集。";
 			else if (!force_sample.valid) current_force_feedback_reason = "力反馈等待：当前没有有效力采样。";
@@ -4398,15 +4393,10 @@ int main()
 			{
 				planned_return.release_output_generation = output_generation;
 			}
-			bool clamp_hold_582_trigger = false;
-		bool clamp_hold_587_trigger = false;
 		if (planned_return.phase == PlannedReturnPhase::PublishHandoff &&
 			ads_output.motion_enabled && !ads_output.axis1_fast_return &&
 			!ads_output.axis6_fast_retract)
 		{
-			// 本次 Sum Write 正在发布恢复夹爪组合；只在这一拍触发一次 200 ms 保持。
-			clamp_hold_582_trigger = planned_return.contains_axis(0);
-			clamp_hold_587_trigger = planned_return.contains_axis(5);
 			planned_return.handoff_generation = output_generation;
 			planned_return.phase = PlannedReturnPhase::AwaitHandoffApplied;
 		}
@@ -4419,10 +4409,9 @@ int main()
 			control_active && !spacing_recovery.active() &&
 				!ads_soft_hold_active && !return_ads_fault_hold,
 			estop_hold_active,
-			axis1_fast_return,
-			axis6_fast_retract,
-			clamp_hold_582_trigger,
-			clamp_hold_587_trigger,
+			plc_act_pos[0] + plc_init_pos[0],
+			plc_act_pos[5] + plc_init_pos[5],
+			ads_motion_cycle_valid,
 			GetTickCount64(),
 			cfg,
 			cal_cfg,
@@ -4478,7 +4467,9 @@ int main()
 			vs.self_check_done = self_check_done;
 			vs.selfcheck_status = selfcheck_command_error && !self_check_done ? 4 :
 				selfcheck_start_pending ? 5 : ads_events.selfcheck_status;
-			vs.ff_enabled = ff.enabled;
+			vs.ff_enabled = ff.enabled();
+			vs.ff_582_enabled = ff.enabled_582;
+			vs.ff_587_enabled = ff.enabled_587;
 			vs.cal_zeroed = cal_state.zeroed;
 			vs.axis1_reverse = axis1_reverse_pressed;
 			vs.axis6_reverse = axis6_effective_reverse_pressed;
@@ -4716,16 +4707,21 @@ int main()
 					break;
 				}
 				case VisCommandType::ToggleForceFeedback:
-					ff.enabled = !ff.enabled;
+					ff.set_enabled(0, !ff.enabled());
 					ff.reset();
-					std::cout << "UI：力反馈：" << (ff.enabled ? "开启" : "关闭") << std::endl;
-					if (!ff.enabled) clear_force_output();
+					std::cout << "UI：力反馈：" << (ff.enabled() ? "开启" : "关闭") << std::endl;
+					if (!ff.enabled()) clear_force_output();
+					break;
+				case VisCommandType::SetForceFeedback:
+					ff.set_enabled(vcmd.param2, vcmd.param1 != 0);
+					std::cout << "UI：力反馈 " << (vcmd.param2 == 1 ? "导管587" : vcmd.param2 == 2 ? "导丝582" : "两侧")
+						<< (vcmd.param1 != 0 ? "开启" : "关闭") << std::endl;
 					break;
 				case VisCommandType::SetForceFeedbackHold:
 					ff.clamp_hold_enabled = vcmd.param1 != 0;
 					ff.clear_clamp_holds();
 					std::cout << "UI：力反馈-保持："
-						<< (ff.clamp_hold_enabled ? "开启（自动换手闭爪后保持 200 ms）" : "关闭")
+						<< (ff.clamp_hold_enabled ? "开启（换手后保持至对应轴运动 2 mm，再平滑恢复）" : "关闭")
 						<< std::endl;
 					break;
 				case VisCommandType::SetReverseMode:
@@ -4943,7 +4939,7 @@ int main()
 					axis6_window_locked = false;
 					clear_cylinder_manual_overrides();
 					tracking_controller.disable_compensation();
-					ff.enabled = false;
+					ff.set_enabled(0, false);
 					ff.reset();
 					clear_force_output();
 					startup.recovery_mode = false;

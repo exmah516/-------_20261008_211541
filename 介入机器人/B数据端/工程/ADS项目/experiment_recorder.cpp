@@ -25,10 +25,7 @@ namespace
 		"sample_index,elapsed_us,position_valid,"
 		"axis1_from_left_mm,axis2_from_left_mm,axis3_from_left_mm,axis4_from_left_mm,"
 		"axis5_from_left_mm,axis6_from_left_mm,axis7_from_left_mm,"
-		"axis1_handle_valid,axis1_handle_linear_raw,axis1_handle_linear_filtered,"
-		"axis1_handle_rotation_raw,axis1_handle_rotation_filtered,"
-		"axis6_handle_valid,axis6_handle_linear_raw,axis6_handle_linear_filtered,"
-		"axis6_handle_rotation_raw,axis6_handle_rotation_filtered\n";
+		"axis1_handle_valid,axis6_handle_valid\n";
 
 	bool directory_exists(const std::wstring& path)
 	{
@@ -245,20 +242,6 @@ void ExperimentRecorder::normalize_motion_row(MotionCsvRow& row)
 			value = nan;
 		}
 	}
-	if (!row.axis1_handle_valid)
-	{
-		row.axis1_handle_linear_raw = nan;
-		row.axis1_handle_linear_filtered = nan;
-		row.axis1_handle_rotation_raw = nan;
-		row.axis1_handle_rotation_filtered = nan;
-	}
-	if (!row.axis6_handle_valid)
-	{
-		row.axis6_handle_linear_raw = nan;
-		row.axis6_handle_linear_filtered = nan;
-		row.axis6_handle_rotation_raw = nan;
-		row.axis6_handle_rotation_filtered = nan;
-	}
 }
 
 bool ExperimentRecorder::write_force_row(std::FILE* fp, const ForceCsvRow& row)
@@ -307,38 +290,8 @@ bool ExperimentRecorder::write_motion_row(std::FILE* fp, const MotionCsvRow& row
 			return false;
 		}
 	}
-	if (std::fprintf(fp, "%d,", normalized.axis1_handle_valid ? 1 : 0) < 0)
-	{
-		return false;
-	}
-	const double axis1_values[] = {
-		normalized.axis1_handle_linear_raw, normalized.axis1_handle_linear_filtered,
-		normalized.axis1_handle_rotation_raw, normalized.axis1_handle_rotation_filtered
-	};
-	for (double value : axis1_values)
-	{
-		if (!write_double(fp, value) || std::fputc(',', fp) == EOF)
-		{
-			return false;
-		}
-	}
-	if (std::fprintf(fp, "%d,", normalized.axis6_handle_valid ? 1 : 0) < 0)
-	{
-		return false;
-	}
-	const double axis6_values[] = {
-		normalized.axis6_handle_linear_raw, normalized.axis6_handle_linear_filtered,
-		normalized.axis6_handle_rotation_raw, normalized.axis6_handle_rotation_filtered
-	};
-	for (std::size_t i = 0; i < sizeof(axis6_values) / sizeof(axis6_values[0]); ++i)
-	{
-		if (!write_double(fp, axis6_values[i]) ||
-			std::fputc(i + 1 == sizeof(axis6_values) / sizeof(axis6_values[0]) ? '\n' : ',', fp) == EOF)
-		{
-			return false;
-		}
-	}
-	return true;
+	return std::fprintf(fp, "%d,%d\n",
+		normalized.axis1_handle_valid ? 1 : 0, normalized.axis6_handle_valid ? 1 : 0) >= 0;
 }
 
 std::wstring ExperimentRecorder::utf8_to_wide(const std::string& text)
@@ -891,7 +844,7 @@ void ExperimentRecorder::write_session_json(bool final, const std::string& stop_
 		: 0;
 	std::ostringstream json;
 	json << "{\n";
-	json << "  \"schema_version\": 4,\n";
+	json << "  \"schema_version\": 6,\n";
 	json << "  \"experiment_name_raw\": \"" << json_escape(raw_name_utf8_) << "\",\n";
 	json << "  \"experiment_name_cleaned\": \"" << json_escape(wide_to_utf8(cleaned_name_)) << "\",\n";
 	json << "  \"utc_start\": \"" << format_utc_filetime(clock_.utc_start_filetime_100ns()) << "\",\n";

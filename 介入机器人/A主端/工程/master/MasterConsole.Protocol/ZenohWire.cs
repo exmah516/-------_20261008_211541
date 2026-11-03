@@ -146,7 +146,7 @@ namespace MasterConsole.Protocol
             }
             else if (value is CommandFrame c)
             {
-                if (c.Version != ZenohProtocol.Version || c.Sequence == 0 || c.CommandId < 0 || (byte)c.Command > 17)
+                if (c.Version != ZenohProtocol.Version || c.Sequence == 0 || c.CommandId < 0 || (byte)c.Command > (byte)ZenohCommand.ForceHold)
                     throw Invalid("命令头错误");
                 Length(c.NonceClient, 0, 16); Length(c.NonceServer, 0, 16); Length(c.Proof, 0, 32); TagLength(c.AuthTag);
                 if (c.Command == ZenohCommand.Hello)

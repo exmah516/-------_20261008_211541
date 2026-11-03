@@ -24,6 +24,8 @@ struct VisState
 	bool axis6_fast_retract;
 	bool self_check_done;
 	bool ff_enabled;
+	bool ff_582_enabled;
+	bool ff_587_enabled;
 	bool cal_zeroed;
 	bool axis1_reverse;
 	bool axis6_reverse;
@@ -174,7 +176,7 @@ enum class VisCommandType : int
 	SetArmAxisJog = 32, // param1: 轴号1..5，param2: -1/0/1
 	SetArmJogParameter = 33, // param1=(轴号-1)*4+参数号，param2=值×1000
 	SetAxis4ManualJog = 34, // param1: -1=后退，0=停止，1=前进（物理语义）
-	SetForceFeedbackHold = 35, // param1: 0=关闭，1=开启；自动换手闭爪后保持200ms
+	SetForceFeedbackHold = 35, // param1: 0=关闭，1=开启；换手后保持至对应轴沿当前方向运动2mm，再平滑恢复实时值
 	SetYValveOpen = 36, // param1: 0=关闭，1=打开
 	SetInjectorManualJog = 37, // param1: 注射器1..2，param2: -1=拉，0=停止，1=推
 	EmergencyRetractDevice = 38, // 极简器械撤出：固定夹爪组合，轴3/5/6退回启动准备完成位
@@ -188,6 +190,7 @@ enum class VisCommandType : int
 	SetSelfCheckAxisPos = 46, // param1=轴号，param2=距左限位毫米×100
 	StartSelfCheck = 47,
 	// 命令号 48 已停用，保留编号。
+	SetForceFeedback = 49, // param1: 0/1；param2: 0=两侧，1=导管587，2=导丝582
 };
 
 struct VisCommand

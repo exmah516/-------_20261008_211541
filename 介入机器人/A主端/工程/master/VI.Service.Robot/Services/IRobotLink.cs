@@ -75,8 +75,10 @@ namespace MasterConsole.Services
         void SetArmAxisJog(int axis, int direction, double speedScale = 1.0);
         void KeepArmCartesianAlive();
 
-        /// <summary>力反馈开关；开启前的零点采集由从端自动完成。</summary>
-        Task<CommandResult> SetForceFeedbackAsync(bool enable);
+        /// <summary>力反馈开关：0=两侧，1=导管587，2=导丝582；尚未取零时首次开启自动取零。</summary>
+        Task<CommandResult> SetForceFeedbackAsync(bool enable, int channel = 0);
+        Task<CommandResult> ZeroForceSensorAsync();
+        Task<CommandResult> SetForceFeedbackHoldAsync(bool enable);
 
         /// <summary>电缸 1–4：engaged=true 打开，false 恢复原状态。</summary>
         Task<CommandResult> SetCylinderAsync(int index, bool engaged);

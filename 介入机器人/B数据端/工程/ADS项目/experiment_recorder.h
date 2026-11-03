@@ -87,15 +87,7 @@ struct MotionCsvRow
 	bool position_valid = false;
 	double axis_from_left_mm[7] = {};
 	bool axis1_handle_valid = false;
-	double axis1_handle_linear_raw = 0.0;
-	double axis1_handle_linear_filtered = 0.0;
-	double axis1_handle_rotation_raw = 0.0;
-	double axis1_handle_rotation_filtered = 0.0;
 	bool axis6_handle_valid = false;
-	double axis6_handle_linear_raw = 0.0;
-	double axis6_handle_linear_filtered = 0.0;
-	double axis6_handle_rotation_raw = 0.0;
-	double axis6_handle_rotation_filtered = 0.0;
 };
 
 struct ExperimentRecorderSnapshot
