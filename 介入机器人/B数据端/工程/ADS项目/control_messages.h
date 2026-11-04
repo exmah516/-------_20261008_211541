@@ -142,6 +142,10 @@ struct VisState
 	// 仅用于主端显示的轴6实际窗口，使用与axis_pos_from_left相同的坐标系。
 	double axis6_window_start_from_left_mm;
 	double axis6_window_end_from_left_mm;
+	std::uint32_t arm_cjog_state;
+	std::uint32_t arm_cjog_error;
+	bool arm_cjog_limited;
+	double arm_cjog_path_speed;
 };
 #pragma pack(pop)
 
@@ -185,7 +189,7 @@ enum class VisCommandType : int
 	SetArmCartesianJog = 41, // param1: 1=X,2=Y,3=Z,4=俯仰,5=偏航；param2=带符号速度*1000
 	ReturnArmProgramZero = 42,
 	StopArmCartesian = 43,
-	SetArmCartesianParameter = 44, // 0=升降下端mm，1=归零行程deg，2=前端偏离mm，3=转角deg
+	// 命令号44的旧定位臂参数接口已停用，保留编号。
 	KeepArmCartesianAlive = 45,
 	SetSelfCheckAxisPos = 46, // param1=轴号，param2=距左限位毫米×100
 	StartSelfCheck = 47,

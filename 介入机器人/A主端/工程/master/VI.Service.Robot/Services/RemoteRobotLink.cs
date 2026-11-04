@@ -205,13 +205,11 @@ namespace MasterConsole.Services
         public Task<CommandResult> ResetArmAxisAsync(int axis)
             => RequestAsync(ZenohCommand.ArmAxisReset, axis, 0, 0, 0, 5000);
         public Task<CommandResult> SetArmCartesianJogAsync(int mode, int speedMilli, double speedScale = 1.0)
-            => Task.FromResult(IsConnected && (speedMilli == 0 || speedScale is 0.5 or 1.0 or 2.0) &&
+            => Task.FromResult(IsConnected &&
                 SendCommand(ZenohCommand.ArmCartesianJog, mode, speedMilli, speedMilli == 0 ? 0 : speedScale, 0, "", null, null, null, 0)
                 ? CommandResult.DoneWithReason("已发送") : CommandResult.Rejected("点动命令未发送"));
         public Task<CommandResult> StopArmAsync() => RequestAsync(ZenohCommand.ArmStop, 0, 0, 0, 0, 5000);
         public Task<CommandResult> ReturnArmProgramZeroAsync() => RequestAsync(ZenohCommand.ArmProgramZero, 0, 0, 0, 0, 5000);
-        public Task<CommandResult> SetArmCartesianParameterAsync(int field, int valueMilli)
-            => RequestAsync(ZenohCommand.ArmCartesianParameter, field, valueMilli, 0, 0, 5000);
         public void SetArmAxisJog(int axis, int direction, double speedScale = 1.0)
         {
             if (direction != 0 && speedScale != 0.5 && speedScale != 1.0 && speedScale != 2.0) return;
@@ -441,7 +439,9 @@ namespace MasterConsole.Services
                     AxisPos = new[] { f.AxisPos0, f.AxisPos1, f.AxisPos2, f.AxisPos3, f.AxisPos4, f.AxisPos5, f.AxisPos6 },
                     AxisFromLeft = new[] { f.AxisFromLeft0, f.AxisFromLeft1, f.AxisFromLeft2, f.AxisFromLeft3, f.AxisFromLeft4, f.AxisFromLeft5, f.AxisFromLeft6 },
                     HasNetDistance = f.HasNetDistance, Axis1NetDistanceMm = f.Axis1NetDistanceMm, Axis6NetDistanceMm = f.Axis6NetDistanceMm,
-                    Axis6WindowStartFromLeftMm = f.Axis6WindowStartFromLeftMm, Axis6WindowEndFromLeftMm = f.Axis6WindowEndFromLeftMm
+                    Axis6WindowStartFromLeftMm = f.Axis6WindowStartFromLeftMm, Axis6WindowEndFromLeftMm = f.Axis6WindowEndFromLeftMm,
+                    ArmCjogState = f.ArmCjogState, ArmCjogError = f.ArmCjogError,
+                    ArmCjogLimited = f.ArmCjogLimited, ArmCjogPathSpeed = f.ArmCjogPathSpeed
                 };
                 if (f.EchoMainMonotonicMs != 0 && f.EchoMainMonotonicMs <= (ulong)now)
                 {

@@ -1,0 +1,55 @@
+--- B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_tests.cpp (before T11 revision)
++++ B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_tests.cpp (after T11 revision)
+@@ -14,6 +14,8 @@
+ int failures = 0;
+ double velocity_difference = 0, acceleration_difference = 0, maximum_path_acceleration_ratio = 0;
+ bool path_acceleration_ok = true;
++std::array<double, 2> nominal_bounds{};
++std::array<double, 3> peak_bounds{};
+ std::string peak_case;
+ double peak_v0=0,peak_v1=0,peak_duration=0,peak_previous_path_speed=0,peak_path_speed=0;
+ double peak_previous_nominal=0,peak_nominal=0,peak_tau=0;
+@@ -48,6 +50,7 @@
+ }
+ Gen begin(int mode, int dir, double speed, Axes p)
+ {
++    nominal_bounds = {{0,0}};
+     Gen g; g.step(true, false, mode, dir, speed, p, DT); return g;
+ }
+ void tick(Gen& g, bool held, int mode, int dir, double speed, const char* name)
+@@ -63,14 +66,23 @@
+         velocity_difference = std::max(velocity_difference, std::abs(g.v[i]-(g.p[i]-prev_p[i])/DT));
+         acceleration_difference = std::max(acceleration_difference, std::abs(g.a[i]-(g.v[i]-prev_v[i])/DT));
+     }
++    // 路径速度差分跨三个名义速度样本，使用三者所属过渡的最大上限。
++    const double current_bound = 1.5*std::abs(g.v1-g.v0)/g.duration;
++    const std::array<double, 3> bounds{{nominal_bounds[0],nominal_bounds[1],current_bound}};
++    nominal_bounds = {{nominal_bounds[1],current_bound}};
+     if (!g.limited) {
+-        const double bound = 1.5*std::abs(g.v1-g.v0)/g.duration;
++        const double bound = std::max({bounds[0],bounds[1],bounds[2]});
+         const double acceleration = std::abs((g.path_speed-previous_path_speed)/DT);
+         path_acceleration_ok = path_acceleration_ok && acceleration <= bound*1.01;
+         const double ratio = bound > 0 ? acceleration/bound : acceleration == 0 ? 0 : std::numeric_limits<double>::infinity();
+         acceleration_ratio_by_case[name] = std::max(acceleration_ratio_by_case[name], ratio);
++        if (std::strcmp(name,"T7")==0 && cycle==2201)
++            std::cout<<"T11 T7 boundary_cycle="<<cycle<<" B_k_minus_2="<<bounds[0]<<" B_k_minus_1="<<bounds[1]
++                <<" B_k="<<bounds[2]<<" max_B="<<bound<<" previous_path_speed="<<previous_path_speed
++                <<" path_speed="<<g.path_speed<<" acceleration="<<acceleration
++                <<" allowed="<<1.01*bound<<" ratio="<<ratio<<'\n';
+         if(ratio>maximum_path_acceleration_ratio){
+-            maximum_path_acceleration_ratio=ratio;peak_case=name;peak_case_cycle=cycle;
++            maximum_path_acceleration_ratio=ratio;peak_case=name;peak_case_cycle=cycle;peak_bounds=bounds;
+             peak_v0=g.v0;peak_v1=g.v1;peak_duration=g.duration;
+             peak_previous_path_speed=previous_path_speed;peak_path_speed=g.path_speed;
+             peak_previous_nominal=previous_nominal;peak_nominal=g.path_v;peak_tau=g.tau;
+@@ -311,7 +323,8 @@
+         <<" T="<<peak_duration<<" tau="<<peak_tau<<" previous_nominal="<<peak_previous_nominal<<" nominal="<<peak_nominal
+         <<" previous_path_speed="<<peak_previous_path_speed<<" path_speed="<<peak_path_speed
+         <<" acceleration="<<std::abs(peak_path_speed-peak_previous_path_speed)/DT
+-        <<" allowed="<<1.01*1.5*std::abs(peak_v1-peak_v0)/peak_duration<<'\n';
++        <<" B_k_minus_2="<<peak_bounds[0]<<" B_k_minus_1="<<peak_bounds[1]<<" B_k="<<peak_bounds[2]
++        <<" allowed="<<1.01*std::max({peak_bounds[0],peak_bounds[1],peak_bounds[2]})<<'\n';
+     result("T11",cycles_finite && velocity_difference<=1e-9 && acceleration_difference<=1e-9 && path_acceleration_ok);
+ 
+     auto shifted=config();shifted.base_offset_mm=Eigen::Vector3d(20,-30,40);

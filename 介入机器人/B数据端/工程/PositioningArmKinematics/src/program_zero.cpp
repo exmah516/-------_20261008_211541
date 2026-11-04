@@ -76,12 +76,8 @@ HomeResult PositioningArmKinematics::planProgramZeroReturn(
         result.status = HomeStatus::AlreadyAtZero;
         return result;
     }
-    if (!options.max_joint_travel.allFinite()
-        || !(options.max_joint_travel.array() > 0).all()
-        || !options.max_acceleration.allFinite()
+    if (!options.max_acceleration.allFinite()
         || !(options.max_acceleration.array() > 0).all()
-        || !positive(options.max_tip_displacement)
-        || !positive(options.max_tool_rotation)
         || !positive(options.minimum_duration)
         || !positive(options.sample_period)
         || options.max_samples < 2 || options.max_samples > 1000000
@@ -95,9 +91,8 @@ HomeResult PositioningArmKinematics::planProgramZeroReturn(
         return result;
     }
     const Eigen::Vector4d delta = (goal - current).tail<4>();
-    if (!delta.allFinite() || (delta.cwiseAbs().array()
-        > options.max_joint_travel.array()).any()) {
-        result.status = HomeStatus::TravelLimit;
+    if (!delta.allFinite()) {
+        result.status = HomeStatus::InvalidInput;
         return result;
     }
 
@@ -228,11 +223,6 @@ HomeResult PositioningArmKinematics::planProgramZeroReturn(
         previous_rotation = rotation;
         samples.push_back(sample);
     }
-    if (result.tip_displacement_bound > options.max_tip_displacement
-        || result.tool_rotation_bound > options.max_tool_rotation) {
-        result.status = HomeStatus::ToolMotionLimit;
-        return result;
-    }
     result.status = HomeStatus::Planned;
     result.target = goal;
     result.duration = duration;
@@ -248,8 +238,6 @@ const char* statusName(HomeStatus status)
     case HomeStatus::Planned: return "Planned";
     case HomeStatus::InvalidInput: return "InvalidInput";
     case HomeStatus::JointLimit: return "JointLimit";
-    case HomeStatus::TravelLimit: return "TravelLimit";
-    case HomeStatus::ToolMotionLimit: return "ToolMotionLimit";
     case HomeStatus::SamplingLimit: return "SamplingLimit";
     case HomeStatus::NumericalFailure: return "NumericalFailure";
     }

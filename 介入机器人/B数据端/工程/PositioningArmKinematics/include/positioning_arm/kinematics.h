@@ -22,6 +22,7 @@ struct ArmKinematicConfig {
     Eigen::Vector2d link_lengths = Eigen::Vector2d(0.200, 0.180);
     double lateral_offset = 0.4563;
     double tool_length = 0.5545;
+    Eigen::Vector3d base_offset_mm = Eigen::Vector3d::Zero(); // 基座平移，毫米；其余几何参数仍为米。
     // 限位可用正负无穷表示暂不设软件范围；NaN表示配置缺失。
     JointVector lower = JointVector::Constant(std::numeric_limits<double>::quiet_NaN());
     JointVector upper = JointVector::Constant(std::numeric_limits<double>::quiet_NaN());
@@ -30,18 +31,11 @@ struct ArmKinematicConfig {
 };
 
 struct SolverOptions {
-    // 保留兼容字段；当前平面点动使用解析解，不消耗迭代次数。
-    int max_iterations = 100;
     double position_tolerance = 1e-7;
-    double orientation_tolerance = 1e-7;
-    double damping = 1e-4;
-    double posture_weight = 1e-10;
     double singularity_stop = 1e-6;
     double singularity_slow = 0.03;
     double max_translation = 0.02;
     double max_rotation = 0.1;
-    double max_linear_iteration = 0.005;
-    double max_angular_iteration = 0.05;
 };
 
 struct ArmPose {
@@ -70,20 +64,15 @@ enum class HomeStatus {
     Planned,
     InvalidInput,
     JointLimit,
-    TravelLimit,
-    ToolMotionLimit,
-    SamplingLimit,
+    // 4、5原为旧归零行程/末端预算错误，保留后续错误编号。
+    SamplingLimit = 6,
     NumericalFailure
 };
 
 struct HomeOptions {
-    // 均须调用方明确提供，不把合成测试速度或运动预算当成实机参数。
-    Eigen::Vector4d max_joint_travel = Eigen::Vector4d::Constant(
-        std::numeric_limits<double>::quiet_NaN());
+    // 加速度由调用方读取设备配置，不使用合成测试值作为默认值。
     Eigen::Vector4d max_acceleration = Eigen::Vector4d::Constant(
         std::numeric_limits<double>::quiet_NaN());
-    double max_tip_displacement = std::numeric_limits<double>::quiet_NaN();
-    double max_tool_rotation = std::numeric_limits<double>::quiet_NaN();
     double sample_period = 0.02;
     double minimum_duration = 1.0;
     int max_samples = 20000;

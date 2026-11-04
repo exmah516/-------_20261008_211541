@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="ArmCartJog" Id="{69baee69-459f-48bd-8537-58d3b819fdac}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK ArmCartJog
+VAR CONSTANT
+    ALIVE_TIMEOUT : LREAL := 0.5; // 秒
+    ENABLE_TIMEOUT : LREAL := 2.0;
+END_VAR
+VAR
+    stage : INT;
+    i : INT;
+    cycle_seconds : LREAL;
+    alive_age : LREAL;
+    enable_age : LREAL;
+    last_alive : UDINT;
+    request_valid : BOOL;
+    held : BOOL;
+    drive_ready : BOOL;
+    fault_stop : BOOL;
+    all_enabled, all_disabled, all_stopped, all_released : BOOL;
+    zero_cycles : INT;
+    dir_feed : ARRAY[1..5] OF DINT;
+    gen : ArmCartJogGen;
+    fb_enable : ARRAY[1..5] OF MC_ExtSetPointGenEnable;
+    fb_disable : ARRAY[1..5] OF MC_ExtSetPointGenDisable;
+    fb_stop : ARRAY[1..5] OF MC_Stop;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[cycle_seconds := UDINT_TO_LREAL(TwinCAT_SystemInfoVarList._TaskInfo[1].CycleTime)*0.0000001;
+IF TwinCAT_SystemInfoVarList._TaskInfo[1].FirstCycle THEN
+    stage := 0;
+    G.arm_cjog_owned := FALSE;
+    G.arm_cjog_state := 0;
+    G.arm_cjog_error := 0;
+    G.arm_cjog_limited := FALSE;
+    G.arm_cjog_path_speed := 0;
+END_IF
+IF G.arm_cjog_alive <> last_alive THEN
+    last_alive := G.arm_cjog_alive;
+    alive_age := 0;
+ELSE
+    alive_age := alive_age+cycle_seconds;
+END_IF
+// ADS请求只在此边界校验；mode=0是正常松开。
+request_valid := (G.arm_cjog_mode >= 1) AND (G.arm_cjog_mode <= 5)
+    AND ((G.arm_cjog_dir = -1) OR (G.arm_cjog_dir = 1))
+    AND (G.arm_cjog_speed > 0) AND (G.arm_cjog_speed <= 100);
+held := request_valid AND (alive_age < ALIVE_TIMEOUT);
+IF (G.arm_cjog_mode <> 0) AND NOT request_valid THEN G.arm_cjog_error := 3001; END_IF
+// 与ArmCartesian的驱动就绪表达式逐项一致。
+drive_ready := G.arm_manual_enable AND NOT G.host_comm_timeout AND NOT G.estop_hold_req
+    AND (ABS(cycle_seconds-0.001) < 0.00000001);
+FOR i := 1 TO 5 DO
+    drive_ready := drive_ready AND G.arm_power_output[i].Done AND G.arm_enable_req[i]
+        AND NOT G.arm_axis[i].Status.Error AND NOT G.arm_reset_req[i]
+        AND NOT G.arm_jog_pos_req[i] AND NOT G.arm_jog_neg_req[i];
+END_FOR
+IF (stage = 0) AND held AND NOT G.arm_curve_owned
+    AND (G.arm_curve_request = G.arm_curve_ack) THEN
+    IF NOT drive_ready THEN
+        G.arm_cjog_error := 3002;
+    ELSE
+        gen(start:=TRUE, held:=FALSE, mode:=G.arm_cjog_mode, dir:=G.arm_cjog_dir,
+            speed:=G.arm_cjog_speed, seed:=G.arm_act_pos, dt:=cycle_seconds);
+        FOR i := 1 TO 5 DO dir_feed[i] := 1; END_FOR
+        G.arm_cjog_error := 0;
+        G.arm_cjog_owned := TRUE;
+        fault_stop := FALSE;
+        enable_age := 0;
+        zero_cycles := 0;
+        stage := 10;
+    END_IF
+END_IF
+IF (stage = 10 OR stage = 25) AND NOT drive_ready THEN
+    G.arm_cjog_error := 3002;
+    fault_stop := TRUE;
+    stage := 40;
+END_IF
+IF stage = 10 THEN
+    enable_age := enable_age+cycle_seconds;
+    IF enable_age > ENABLE_TIMEOUT THEN
+        G.arm_cjog_error := 3003;
+        fault_stop := TRUE;
+        stage := 40;
+    END_IF
+END_IF
+IF stage = 25 THEN
+    gen(start:=FALSE, held:=held, mode:=G.arm_cjog_mode, dir:=G.arm_cjog_dir,
+        speed:=G.arm_cjog_speed, seed:=gen.p, dt:=cycle_seconds);
+    IF (gen.path_speed = 0) AND NOT held THEN
+        zero_cycles := zero_cycles+1;
+    ELSE
+        zero_cycles := 0;
+    END_IF
+    IF zero_cycles >= 2 THEN stage := 40; END_IF
+END_IF
+all_enabled := TRUE; all_disabled := TRUE; all_stopped := TRUE; all_released := TRUE;
+FOR i := 1 TO 5 DO
+    IF gen.v[i] > 0 THEN dir_feed[i] := 1; END_IF
+    IF gen.v[i] < 0 THEN dir_feed[i] := -1; END_IF
+    IF G.arm_cjog_owned AND (stage = 10 OR stage = 25) THEN
+        MC_ExtSetPointGenFeed(Axis:=G.arm_axis[i], Position:=gen.p[i],
+            Velocity:=gen.v[i], Acceleration:=gen.a[i], Direction:=dir_feed[i]);
+    END_IF
+    fb_enable[i](Axis:=G.arm_axis[i], Execute:=(stage=10),
+        Position:=gen.p[i], PositionType:=POSITIONTYPE_ABSOLUTE);
+    fb_disable[i](Axis:=G.arm_axis[i], Execute:=(stage=40));
+    fb_stop[i](Axis:=G.arm_axis[i], Execute:=(stage=50),
+        Deceleration:=G.arm_jog_dec[i], Jerk:=G.arm_jog_jerk[i]);
+    all_enabled := all_enabled AND fb_enable[i].Enabled;
+    all_disabled := all_disabled AND NOT fb_enable[i].Enabled
+        AND NOT fb_enable[i].Busy AND NOT fb_disable[i].Busy AND NOT fb_disable[i].Error;
+    all_stopped := all_stopped AND fb_stop[i].Done AND NOT fb_stop[i].Error;
+    all_released := all_released AND NOT fb_stop[i].Busy AND NOT fb_stop[i].Error;
+    IF G.arm_cjog_owned AND (fb_enable[i].Error OR fb_disable[i].Error OR fb_stop[i].Error) THEN
+        IF fb_enable[i].Error THEN G.arm_cjog_error := fb_enable[i].ErrorID; END_IF
+        IF fb_disable[i].Error THEN G.arm_cjog_error := fb_disable[i].ErrorID; END_IF
+        IF fb_stop[i].Error THEN G.arm_cjog_error := fb_stop[i].ErrorID; END_IF
+        fault_stop := TRUE;
+        IF stage < 40 THEN stage := 40; END_IF
+    END_IF
+END_FOR
+CASE stage OF
+10:
+    IF all_enabled THEN stage := 25; END_IF
+40:
+    IF all_disabled THEN
+        IF fault_stop THEN stage := 50; ELSE stage := 60; END_IF
+    END_IF
+50:
+    IF all_stopped THEN stage := 60; END_IF
+60:
+    IF all_released THEN G.arm_cjog_owned := FALSE; stage := 0; END_IF
+END_CASE
+CASE stage OF
+0: G.arm_cjog_state := 0;
+10: G.arm_cjog_state := 1;
+25:
+    IF gen.target_speed > 0 THEN G.arm_cjog_state := 2;
+    ELSE G.arm_cjog_state := 3; END_IF
+40,50,60: G.arm_cjog_state := 4;
+END_CASE
+G.arm_cjog_limited := gen.limited;
+G.arm_cjog_path_speed := gen.path_speed;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

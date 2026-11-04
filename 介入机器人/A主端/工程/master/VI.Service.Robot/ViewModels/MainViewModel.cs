@@ -388,6 +388,17 @@ namespace MasterConsole.ViewModels
             ? "手柄 SDK 未加载（缺 FLCatheter.dll）"
             : "582 " + (_stats.Handle582Online ? "在线" : "离线") + " / 587 " + (_stats.Handle587Online ? "在线" : "离线");
         public string ArmFeedbackText => _armFeedbackText;
+        public string ArmCartesianJogStatusText => _s.ArmCjogError != 0
+            ? (_s.ArmCjogError switch
+            {
+                3001 => "末端点动参数无效",
+                3002 => "驱动未就绪（总使能/上电/轴故障/复位/单轴点动/通信超时/急停）",
+                3003 => "外部设定点发生器使能超时",
+                _ => $"NC 错误 0x{_s.ArmCjogError:X}"
+            }) + $"（错误码 {_s.ArmCjogError}）"
+            : _s.ArmCjogLimited && _s.ArmCjogState is 2 or 3
+                ? "接近奇异位形或关节限速，已自动降速" : "";
+
         public bool ArmSpeedFast { get => _armJogSpeedScale == 2.0; set { if (value) SetArmJogSpeedScale(2.0); } }
         public bool ArmSpeedMedium { get => _armJogSpeedScale == 1.0; set { if (value) SetArmJogSpeedScale(1.0); } }
         public bool ArmSpeedSlow { get => _armJogSpeedScale == 0.5; set { if (value) SetArmJogSpeedScale(0.5); } }
@@ -433,12 +444,6 @@ namespace MasterConsole.ViewModels
         {
             var result = await _link.ReturnArmProgramZeroAsync();
             await ReportArm("定位臂程序归零", result);
-            return result.Ok;
-        }
-        public async Task<bool> SetArmCartesianParameterAsync(int field, int valueMilli)
-        {
-            var result = await _link.SetArmCartesianParameterAsync(field, valueMilli);
-            await ReportArm("定位臂参数", result);
             return result.Ok;
         }
         public void KeepArmCartesianAlive() => _link.KeepArmCartesianAlive();
@@ -503,6 +508,7 @@ namespace MasterConsole.ViewModels
 
         private static readonly string[] StatusPropertyNames =
         {
+            nameof(ArmCartesianJogStatusText),
             nameof(EstopHold), nameof(ControlActive), nameof(FfEnabled), nameof(FfZeroing), nameof(YValveClosed),
             nameof(CatheterFfEnabled), nameof(GuidewireFfEnabled), nameof(ForceHoldEnabled), nameof(ForceHoldCaption),
             nameof(AdsHealthy), nameof(ModeText), nameof(PhaseText), nameof(CanStartControl),

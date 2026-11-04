@@ -17,7 +17,8 @@ namespace MasterConsole.Protocol
         PreparePosition = 4, StartControl = 5, ForceFeedback = 6,
         Cylinder = 7, ArmManualEnable = 8, ArmAxisEnable = 9,
         ArmAxisReset = 10, ArmAxisJog = 11, ArmCartesianJog = 12,
-        ArmStop = 13, ArmProgramZero = 14, ArmCartesianParameter = 15,
+        ArmStop = 13, ArmProgramZero = 14,
+        // 命令号15的旧定位臂参数接口已停用，其他编号不变。
         ArmCartesianAlive = 16, YValve = 17, ForceZero = 18, ForceHold = 19
     }
 
@@ -131,7 +132,11 @@ namespace MasterConsole.Protocol
         [Key(47)] public string EventText { get; set; } = "";
         [Key(48)] public float Axis6WindowStartFromLeftMm { get; set; }
         [Key(49)] public float Axis6WindowEndFromLeftMm { get; set; }
-        [Key(50)] public byte[] AuthTag { get; set; } = new byte[0];
+        [Key(50)] public uint ArmCjogState { get; set; }
+        [Key(51)] public uint ArmCjogError { get; set; }
+        [Key(52)] public bool ArmCjogLimited { get; set; }
+        [Key(53)] public double ArmCjogPathSpeed { get; set; }
+        [Key(54)] public byte[] AuthTag { get; set; } = new byte[0];
     }
 
     [MessagePackObject]

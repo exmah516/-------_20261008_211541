@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <iostream>
 #include <vector>
 
 namespace
@@ -13,7 +14,7 @@ namespace
 	constexpr int kReadPeriodMs = 50;
 	constexpr int kJogLeaseMs = 300;
 	constexpr DWORD kAdsTimeoutMs = 250;
-	constexpr double kKnownGoodZSpeedMmPerSec = 2.5;
+	constexpr int kCartesianJogLeaseMs = 500;
 
 	constexpr const char* kManualEnable = "G.arm_manual_enable";
 	constexpr const char* kEnableReq = "G.arm_enable_req";
@@ -171,8 +172,9 @@ void ArmManualAdsService::set_axis_enable(int axis_one_based, bool enabled)
 		}
 		if (!enabled)
 		{
+			clear_cjog_locked();
 			++cartesian_epoch_;
-			cartesian_stop_ = true;
+			cartesian_stop_ = curve_pending_ || home_requested_ || snapshot_.curve_owned;
 			desired_jog_pos_req_[index] = false;
 			desired_jog_neg_req_[index] = false;
 			jog_pos_dirty_ = true;
@@ -188,8 +190,9 @@ void ArmManualAdsService::request_reset(int axis_one_based)
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
 		desired_reset_req_[axis_one_based - 1] = true;
+		clear_cjog_locked();
 		++cartesian_epoch_;
-		cartesian_stop_ = true;
+		cartesian_stop_ = curve_pending_ || home_requested_ || snapshot_.curve_owned;
 		reset_dirty_ = true;
 	}
 	wake_cv_.notify_all();
@@ -201,7 +204,7 @@ void ArmManualAdsService::set_jog_direction(int axis_one_based, int direction, d
 	if (direction != 0 && speed_scale != 0.5 && speed_scale != 1.0 && speed_scale != 2.0) return;
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
-		if (direction != 0 && (curve_pending_ || home_requested_ || cartesian_mode_ != 0))
+		if (direction != 0 && (curve_pending_ || home_requested_ || cjog_mode_ != 0))
 			return;
 		if (direction != 0 && jog_speed_scale_ != speed_scale)
 		{
@@ -230,41 +233,39 @@ void ArmManualAdsService::set_jog_direction(int axis_one_based, int direction, d
 	wake_cv_.notify_all();
 }
 
-void ArmManualAdsService::set_cartesian_jog(int mode, double speed, double speed_scale)
+void ArmManualAdsService::set_cartesian_jog(int mode, double speed, double /*speed_scale*/)
 {
-	std::lock_guard<std::mutex> lock(mutex_);
-	if (mode < 1 || mode > 5 || !std::isfinite(speed) || speed == 0 || std::abs(speed) > 100
-		|| (speed_scale != 0.5 && speed_scale != 1.0 && speed_scale != 2.0))
+	if (mode < 1 || mode > 5 || !std::isfinite(speed) || speed == 0 || std::abs(speed) > 100)
 		return;
-	if (cartesian_blocked_ || home_requested_
-		|| (curve_pending_ && cartesian_mode_ == 0)) return;
-	if (cartesian_mode_ != 0 && (cartesian_mode_ != mode || cartesian_speed_ != speed)) {
-		cartesian_stop_ = true;
-		return;
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		if (home_requested_ || curve_pending_) return;
+		const auto dir = static_cast<std::int16_t>(speed > 0 ? 1 : -1);
+		const double magnitude = std::abs(speed);
+		if (cjog_mode_ != mode || cjog_dir_ != dir || cjog_speed_ != magnitude) {
+			cjog_mode_ = static_cast<std::int16_t>(mode);
+			cjog_dir_ = dir;
+			cjog_speed_ = magnitude;
+			cjog_dirty_ = true;
+		}
+		cjog_deadline_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(kCartesianJogLeaseMs);
 	}
-	const double acceleration_override = mode == 3
-		? desired_jog_acc_[0] * std::abs(speed) / kKnownGoodZSpeedMmPerSec
-		: 0.0;
-	if (mode == 3 && !valid_parameter(acceleration_override)) return;
-	for (double velocity : desired_jog_velocity_)
-		if (!valid_parameter(velocity * speed_scale)) return;
-	if (jog_speed_scale_ != speed_scale) {
-		jog_speed_scale_ = speed_scale;
-		params_dirty_ = true;
-	}
-	if (cartesian_acceleration_override_ != acceleration_override) {
-		cartesian_acceleration_override_ = acceleration_override;
-		params_dirty_ = true;
-	}
-	cartesian_mode_ = mode;
-	cartesian_speed_ = speed;
-	cartesian_deadline_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(kJogLeaseMs);
+	wake_cv_.notify_all();
+}
+
+void ArmManualAdsService::clear_cjog_locked()
+{
+	if (cjog_mode_ == 0) return;
+	cjog_mode_ = cjog_dir_ = 0;
+	cjog_speed_ = 0;
+	cjog_deadline_ = {};
+	cjog_dirty_ = true;
 }
 
 void ArmManualAdsService::request_program_zero()
 {
 	std::lock_guard<std::mutex> lock(mutex_);
-	if (curve_pending_ || cartesian_mode_ != 0 || home_requested_) return;
+	if (curve_pending_ || cjog_mode_ != 0 || snapshot_.cjog_owned || home_requested_) return;
 	cartesian_blocked_ = false;
 	home_requested_ = true;
 	++snapshot_.home_request_id;
@@ -275,12 +276,17 @@ void ArmManualAdsService::request_program_zero()
 
 void ArmManualAdsService::stop_cartesian()
 {
-	std::lock_guard<std::mutex> lock(mutex_);
-	++cartesian_epoch_;
-	cartesian_stop_ = true;
-	cartesian_mode_ = 0;
-	home_requested_ = false;
-	cartesian_blocked_ = false;
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		clear_cjog_locked();
+		if (home_requested_ || curve_pending_ || snapshot_.curve_owned) {
+			++cartesian_epoch_;
+			cartesian_stop_ = curve_pending_ || home_requested_ || snapshot_.curve_owned;
+		}
+		home_requested_ = false;
+		cartesian_blocked_ = false;
+	}
+	wake_cv_.notify_all();
 }
 
 void ArmManualAdsService::keep_cartesian_alive()
@@ -288,19 +294,6 @@ void ArmManualAdsService::keep_cartesian_alive()
 	std::lock_guard<std::mutex> lock(mutex_);
 	if (!cartesian_blocked_ && (curve_pending_ || home_requested_))
 		cartesian_deadline_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(kJogLeaseMs);
-}
-
-void ArmManualAdsService::set_cartesian_parameter(int field, double value)
-{
-	std::lock_guard<std::mutex> lock(mutex_);
-	if (curve_pending_ || home_requested_ || cartesian_mode_ != 0 || !std::isfinite(value)) return;
-	switch (field) {
-	case 0: cartesian_settings_.lift_min_mm = value; break;
-	case 1: cartesian_settings_.home_travel_deg = value; break;
-	case 2: cartesian_settings_.home_tip_mm = value; break;
-	case 3: cartesian_settings_.home_rotation_deg = value; break;
-	default: return;
-	}
 }
 
 void ArmManualAdsService::update_cartesian()
@@ -321,13 +314,8 @@ void ArmManualAdsService::update_cartesian()
 	auto abort = [&](int error) {
 		const bool cancel = true;
 		const bool stopped = write("G.arm_curve_cancel", sizeof(cancel), &cancel);
-		cartesian_mode_ = 0;
 		home_requested_ = false;
 		curve_pending_ = false;
-		if (cartesian_acceleration_override_ != 0.0) {
-			cartesian_acceleration_override_ = 0.0;
-			params_dirty_ = true;
-		}
 		cartesian_blocked_ = error != 0 || !stopped;
 		snapshot_.cartesian_status = error == 0 && stopped ? 4 : 5;
 		snapshot_.cartesian_error = stopped ? error : 1003;
@@ -337,7 +325,7 @@ void ArmManualAdsService::update_cartesian()
 		abort(0);
 		return;
 	}
-	if (!curve_pending_ && !home_requested_ && cartesian_mode_ == 0) return;
+	if (!curve_pending_ && !home_requested_) return;
 	if (!snapshot_.valid || now - snapshot_at_ > std::chrono::milliseconds(200)
 		|| !desired_manual_enable_ || !snapshot_.manual_enable) {
 		abort(1004); return;
@@ -345,8 +333,6 @@ void ArmManualAdsService::update_cartesian()
 	if (now > cartesian_deadline_) { abort(1005); return; }
 	for (int i = 0; i < kArmAxisCount; ++i)
 		if (std::abs(snapshot_.jog_velocity[i] - desired_jog_velocity_[i] * jog_speed_scale_) > 1e-6) return;
-	if (cartesian_mode_ == 3 &&
-		std::abs(snapshot_.jog_acc[0] - cartesian_acceleration_override_) > 1e-6) return;
 	for (int i = 0; i < 5; ++i) {
 		if (!snapshot_.power_done[i] || snapshot_.power_error[i] || snapshot_.motion_error[i]
 			|| !desired_enable_req_[i] || desired_reset_req_[i]
@@ -370,16 +356,19 @@ void ArmManualAdsService::update_cartesian()
 		curve_pending_ = false;
 		snapshot_.cartesian_status = 2;
 		snapshot_.cartesian_error = 0;
-		if (cartesian_mode_ == 0) return;
+		return;
 	}
+	std::array<double, 5> start = snapshot_.act_pos;
+	if (snapshot_.curve_owned) return;
 	for (int i = 0; i < 5; ++i) {
-		if (!std::isfinite(snapshot_.act_vel[i])) { abort(1004); return; }
-		if (snapshot_.motion_busy[i] || std::abs(snapshot_.act_vel[i]) > 0.1) return;
+		if (!std::isfinite(snapshot_.act_pos[i]) || !std::isfinite(snapshot_.act_vel[i])) {
+			abort(1004); return;
+		}
+		if (snapshot_.motion_busy[i]) return;
 	}
-	const int mode = home_requested_ ? 0 : cartesian_mode_;
 	home_requested_ = false;
-	const auto plan = plan_arm_curve(snapshot_.act_pos, snapshot_.jog_velocity,
-		snapshot_.jog_acc, cartesian_settings_, mode, cartesian_speed_);
+	const auto plan = plan_arm_curve(start, snapshot_.jog_velocity,
+		snapshot_.jog_acc, 0, 0);
 	if (plan.error != 0) { abort(plan.error); return; }
 	if (plan.already_home) {
 		snapshot_.cartesian_status = 3;
@@ -434,10 +423,10 @@ bool ArmManualAdsService::set_jog_parameter(int axis_one_based, int parameter_ki
 
 void ArmManualAdsService::clear_requests_locked(bool clear_manual_enable)
 {
-	if (curve_pending_ || home_requested_ || cartesian_mode_ != 0) {
+	clear_cjog_locked();
+	if (curve_pending_ || home_requested_ || snapshot_.curve_owned) {
 		++cartesian_epoch_;
 		cartesian_stop_ = true;
-		cartesian_mode_ = 0;
 		home_requested_ = false;
 	}
 	if (clear_manual_enable && desired_manual_enable_)
@@ -490,6 +479,7 @@ void ArmManualAdsService::expire_jog_deadman()
 {
 	const auto now = std::chrono::steady_clock::now();
 	std::lock_guard<std::mutex> lock(mutex_);
+	if (cjog_mode_ != 0 && now >= cjog_deadline_) clear_cjog_locked();
 	for (int index = 0; index < kArmAxisCount; ++index)
 	{
 		if (jog_deadline_[index] == std::chrono::steady_clock::time_point{} ||
@@ -524,7 +514,8 @@ void ArmManualAdsService::run()
 		{
 			std::lock_guard<std::mutex> lock(mutex_);
 			stopping = stop_requested_;
-			has_dirty = manual_dirty_ || enable_dirty_ || reset_dirty_ || jog_pos_dirty_ || jog_neg_dirty_ || params_dirty_;
+			if (cjog_mode_ != 0 && std::chrono::steady_clock::now() >= next_read) cjog_dirty_ = true;
+			has_dirty = manual_dirty_ || enable_dirty_ || reset_dirty_ || jog_pos_dirty_ || jog_neg_dirty_ || params_dirty_ || cjog_dirty_;
 		}
 		const bool write_ok = !has_dirty || write_dirty_request();
 		if (stopping) {
@@ -554,7 +545,7 @@ void ArmManualAdsService::run()
 		std::unique_lock<std::mutex> lock(mutex_);
 		wake_cv_.wait_until(lock, next_read, [this]()
 		{
-			return stop_requested_ || manual_dirty_ || enable_dirty_ || reset_dirty_ || jog_pos_dirty_ || jog_neg_dirty_ || params_dirty_;
+			return stop_requested_ || manual_dirty_ || enable_dirty_ || reset_dirty_ || jog_pos_dirty_ || jog_neg_dirty_ || params_dirty_ || cjog_dirty_;
 		});
 	}
 }
@@ -571,7 +562,6 @@ bool ArmManualAdsService::write_dirty_request()
 	double speed_scale = 1.0;
 	std::array<double, 5> acc{};
 	std::array<double, 5> base_acc{};
-	double acceleration_override = 0.0;
 	std::array<double, 5> dec{};
 	std::array<double, 5> jerk{};
 	bool manual_dirty = false;
@@ -580,6 +570,10 @@ bool ArmManualAdsService::write_dirty_request()
 	bool jog_pos_dirty = false;
 	bool jog_neg_dirty = false;
 	bool params_dirty = false;
+	bool cjog_dirty = false;
+	std::int16_t cjog_mode, cjog_dir;
+	double cjog_speed;
+	std::uint32_t cjog_alive;
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
 		manual_enable = desired_manual_enable_;
@@ -594,8 +588,6 @@ bool ArmManualAdsService::write_dirty_request()
 			velocity[axis] = base_velocity[axis] * speed_scale;
 		base_acc = desired_jog_acc_;
 		acc = base_acc;
-		acceleration_override = cartesian_acceleration_override_;
-		if (acceleration_override > 0.0) acc[0] = acceleration_override;
 		dec = desired_jog_dec_;
 		jerk = desired_jog_jerk_;
 		manual_dirty = manual_dirty_;
@@ -604,6 +596,12 @@ bool ArmManualAdsService::write_dirty_request()
 		jog_pos_dirty = jog_pos_dirty_;
 		jog_neg_dirty = jog_neg_dirty_;
 		params_dirty = params_dirty_;
+		cjog_dirty = cjog_dirty_;
+		cjog_mode = cjog_mode_;
+		cjog_dir = cjog_dir_;
+		cjog_speed = cjog_speed_;
+		if (cjog_dirty && cjog_mode != 0) ++cjog_alive_;
+		cjog_alive = cjog_alive_;
 	}
 
 	std::vector<const char*> symbols;
@@ -628,12 +626,20 @@ bool ArmManualAdsService::write_dirty_request()
 	// 先更新速度，再提交方向请求，避免首次按下时沿用旧档。
 	if (jog_pos_dirty) append(kJogPosReq, sizeof(jog_pos_req), jog_pos_req.data());
 	if (jog_neg_dirty) append(kJogNegReq, sizeof(jog_neg_req), jog_neg_req.data());
+	if (cjog_dirty) {
+		append("G.arm_cjog_mode", sizeof(cjog_mode), &cjog_mode);
+		append("G.arm_cjog_dir", sizeof(cjog_dir), &cjog_dir);
+		append("G.arm_cjog_speed", sizeof(cjog_speed), &cjog_speed);
+		append("G.arm_cjog_alive", sizeof(cjog_alive), &cjog_alive);
+	}
 	if (symbols.empty()) return true;
 	const bool ok = ads_service_.write_sum(
 		symbols.data(), lengths.data(), inputs.data(), static_cast<unsigned long>(symbols.size()), kAdsTimeoutMs);
 	if (!ok) return false;
 
 	std::lock_guard<std::mutex> lock(mutex_);
+	if (cjog_dirty && cjog_mode_ == cjog_mode && cjog_dir_ == cjog_dir && cjog_speed_ == cjog_speed
+		&& cjog_alive_ == cjog_alive) cjog_dirty_ = false;
 	if (manual_dirty && desired_manual_enable_ == manual_enable) manual_dirty_ = false;
 	if (enable_dirty && desired_enable_req_ == enable_req) enable_dirty_ = false;
 	if (reset_dirty && desired_reset_req_ == reset_req)
@@ -644,7 +650,7 @@ bool ArmManualAdsService::write_dirty_request()
 	if (jog_pos_dirty && desired_jog_pos_req_ == jog_pos_req) jog_pos_dirty_ = false;
 	if (jog_neg_dirty && desired_jog_neg_req_ == jog_neg_req) jog_neg_dirty_ = false;
 	if (params_dirty && desired_jog_velocity_ == base_velocity && jog_speed_scale_ == speed_scale &&
-		desired_jog_acc_ == base_acc && cartesian_acceleration_override_ == acceleration_override &&
+		desired_jog_acc_ == base_acc &&
 		desired_jog_dec_ == dec && desired_jog_jerk_ == jerk)
 	{
 		params_dirty_ = false;
@@ -681,7 +687,14 @@ bool ArmManualAdsService::read_snapshot()
 	append("G.arm_curve_ack", sizeof(next.curve_sequence), &next.curve_sequence);
 	append("G.arm_curve_state", sizeof(next.curve_state), &next.curve_state);
 	append("G.arm_curve_error", sizeof(next.curve_error), &next.curve_error);
+	append("G.arm_curve_owned", sizeof(next.curve_owned), &next.curve_owned);
 	append("G.arm_curve_progress", sizeof(next.curve_progress), &next.curve_progress);
+	append("G.arm_cjog_owned", sizeof(next.cjog_owned), &next.cjog_owned);
+	append("G.arm_cjog_state", sizeof(next.cjog_state), &next.cjog_state);
+	append("G.arm_cjog_error", sizeof(next.cjog_error), &next.cjog_error);
+	append("G.arm_cjog_limited", sizeof(next.cjog_limited), &next.cjog_limited);
+	append("G.arm_cjog_path_speed", sizeof(next.cjog_path_speed), &next.cjog_path_speed);
+	append("G.arm_cjog_if_version", sizeof(next.cjog_if_version), &next.cjog_if_version);
 	for (int axis = 1; axis <= kArmAxisCount; ++axis)
 	{
 		const int index = axis - 1;
@@ -700,6 +713,11 @@ bool ArmManualAdsService::read_snapshot()
 		symbols.data(), lengths.data(), outputs.data(), static_cast<unsigned long>(symbols.size()), kAdsTimeoutMs);
 	std::lock_guard<std::mutex> lock(mutex_);
 	if (next.valid) {
+		if (!cjog_version_logged_) {
+			std::cout << "定位臂末端点动接口版本: " << next.cjog_if_version << std::endl;
+			if (next.cjog_if_version != 1) std::cerr << "警告：定位臂末端点动接口版本应为1" << std::endl;
+			cjog_version_logged_ = true;
+		}
 		next.cartesian_status = snapshot_.cartesian_status;
 		next.cartesian_error = snapshot_.cartesian_error;
 		next.home_request_id = snapshot_.home_request_id;

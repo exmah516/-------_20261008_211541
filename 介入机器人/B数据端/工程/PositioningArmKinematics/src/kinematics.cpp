@@ -38,6 +38,7 @@ ArmKinematicConfig validate(ArmKinematicConfig config, const SolverOptions& opti
         "两根连杆长度必须为正");
     require(positive(config.lateral_offset) && positive(config.tool_length),
         "L形工具尺寸必须为正");
+    require(config.base_offset_mm.allFinite(), "基座平移偏移必须为有限毫米值");
     for (int i = 0; i < AxisCount; ++i) {
         require(!std::isnan(config.lower[i]) && !std::isnan(config.upper[i])
             && config.lower[i] < config.upper[i],
@@ -51,18 +52,13 @@ ArmKinematicConfig validate(ArmKinematicConfig config, const SolverOptions& opti
             && (calibration.direction == -1 || calibration.direction == 1),
             "编码器标定参数无效");
     }
-    require(options.max_iterations > 0 && options.max_iterations <= 10000,
-        "迭代次数无效");
-    for (double value : {options.position_tolerance, options.orientation_tolerance,
-        options.damping, options.singularity_stop, options.singularity_slow,
-        options.max_translation, options.max_rotation, options.max_linear_iteration,
-        options.max_angular_iteration}) {
+    for (double value : {options.position_tolerance,
+        options.singularity_stop, options.singularity_slow,
+        options.max_translation, options.max_rotation}) {
         require(positive(value), "求解器参数必须为正");
     }
-    require(std::isfinite(options.posture_weight) && options.posture_weight >= 0,
-        "姿态保持权重无效");
     require(options.singularity_stop < options.singularity_slow
-        && options.max_rotation < Pi && options.max_angular_iteration < Pi,
+        && options.max_rotation < Pi,
         "奇异阈值或角度步长无效");
     return config;
 }
@@ -84,7 +80,7 @@ ArmPose PositioningArmKinematics::forward(const JointVector& joints) const
     require(checkLimits(joints), "轴位置无效或超出限位");
 
     ArmPose result;
-    // 省略固定高度，位置Z仅用于增量计算，不代表相对地面高度。
+    // 基座平移只改变原点；轴1的Z符号受归零逐位回归约束，见交付报告。
     result.position << 0, 0, joints[0];
 
     const double first_link_yaw = joints[1];
@@ -101,6 +97,7 @@ ArmPose PositioningArmKinematics::forward(const JointVector& joints) const
         * Eigen::Quaterniond(Eigen::AngleAxisd(joints[4], Eigen::Vector3d::UnitX()));
     result.position += wrist_rotation
         * Eigen::Vector3d(config_.lateral_offset, -config_.tool_length, 0);
+    result.position += config_.base_offset_mm * 0.001;
     result.quaternion = normalized(wrist_rotation);
     if (result.quaternion.w() < 0) result.quaternion.coeffs() *= -1;
     return result;
@@ -116,7 +113,8 @@ FrameJacobian PositioningArmKinematics::computeFrameJacobian(
     result.block<3, 1>(0, 0) = Eigen::Vector3d::UnitZ();
 
     const double z = joints[0];
-    Eigen::Vector3d joint_origin(0, 0, z);
+    Eigen::Vector3d joint_origin = config_.base_offset_mm * 0.001;
+    joint_origin.z() += z;
     double yaw = 0;
     for (int i = 0; i < 3; ++i) {
         const Eigen::Vector3d axis = Eigen::Vector3d::UnitZ();
@@ -273,8 +271,8 @@ IkResult PositioningArmKinematics::solveCartesianJog(
         + config_.tool_length * std::cos(pitch) * std::sin(target_yaw);
     const double tool_y = config_.lateral_offset * std::sin(target_yaw)
         - config_.tool_length * std::cos(pitch) * std::cos(target_yaw);
-    const double wrist_x = target.position.x() - tool_x;
-    const double wrist_y = target.position.y() - tool_y;
+    const double wrist_x = target.position.x() - config_.base_offset_mm.x() * 0.001 - tool_x;
+    const double wrist_y = target.position.y() - config_.base_offset_mm.y() * 0.001 - tool_y;
     const double radius = std::hypot(wrist_x, wrist_y);
     const double minimum_radius = std::abs(config_.link_lengths[0]
         - config_.link_lengths[1]);

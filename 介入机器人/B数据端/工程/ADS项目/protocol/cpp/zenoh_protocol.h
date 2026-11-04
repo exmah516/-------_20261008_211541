@@ -15,7 +15,7 @@ namespace vi_protocol
     constexpr std::size_t kHandleFields = 24;
     constexpr std::size_t kCommandFields = 15;
     constexpr std::size_t kCommandResultFields = 3;
-    constexpr std::size_t kStateFields = 51;
+    constexpr std::size_t kStateFields = 55;
     constexpr std::size_t kForceFields = 13;
     constexpr std::size_t kMaxResults = 32;
 
@@ -25,7 +25,8 @@ namespace vi_protocol
         PreparePosition = 4, StartControl = 5, ForceFeedback = 6,
         Cylinder = 7, ArmManualEnable = 8, ArmAxisEnable = 9,
         ArmAxisReset = 10, ArmAxisJog = 11, ArmCartesianJog = 12,
-        ArmStop = 13, ArmProgramZero = 14, ArmCartesianParameter = 15,
+        ArmStop = 13, ArmProgramZero = 14,
+        // 命令号15的旧定位臂参数接口已停用，其他编号不变。
         ArmCartesianAlive = 16, YValve = 17, ForceZero = 18, ForceHold = 19
     };
 
@@ -97,6 +98,9 @@ namespace vi_protocol
         std::uint8_t start_task_state{}; std::int32_t start_task_command_id{};
         std::vector<CommandResult> results; std::string event_text;
         float axis6_window_start_from_left_mm{}, axis6_window_end_from_left_mm{};
+        std::uint32_t arm_cjog_state{}, arm_cjog_error{};
+        bool arm_cjog_limited{};
+        double arm_cjog_path_speed{};
         std::vector<std::uint8_t> auth_tag;
         MSGPACK_DEFINE(version, session_id, sequence, auth_state, nonce_server, echo_main_monotonic_ms,
             flags, mode, phase, self_check_status, ads_state, cylinder1, cylinder2, cylinder3,
@@ -107,7 +111,8 @@ namespace vi_protocol
             axis_from_left4, axis_from_left5, axis_from_left6, has_net_distance,
             axis1_net_distance_mm, axis6_net_distance_mm, prepare_task_state,
             prepare_task_command_id, start_task_state, start_task_command_id, results,
-            event_text, axis6_window_start_from_left_mm, axis6_window_end_from_left_mm, auth_tag);
+            event_text, axis6_window_start_from_left_mm, axis6_window_end_from_left_mm,
+            arm_cjog_state, arm_cjog_error, arm_cjog_limited, arm_cjog_path_speed, auth_tag);
     };
 
     struct ForceFrame

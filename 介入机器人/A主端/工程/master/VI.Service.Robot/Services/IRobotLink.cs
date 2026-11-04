@@ -71,7 +71,6 @@ namespace MasterConsole.Services
         Task<CommandResult> SetArmCartesianJogAsync(int mode, int speedMilli, double speedScale = 1.0);
         Task<CommandResult> StopArmAsync();
         Task<CommandResult> ReturnArmProgramZeroAsync();
-        Task<CommandResult> SetArmCartesianParameterAsync(int field, int valueMilli);
         void SetArmAxisJog(int axis, int direction, double speedScale = 1.0);
         void KeepArmCartesianAlive();
 

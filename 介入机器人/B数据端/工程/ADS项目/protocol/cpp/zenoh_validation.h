@@ -86,7 +86,9 @@ namespace vi_protocol
         if (!detail::boolean(p[39]) || !detail::f64(p[40]) || !detail::f64(p[41]) || !detail::uint(p[42], 3) ||
             !detail::uint(p[43], INT32_MAX) || !detail::uint(p[44], 3) || !detail::uint(p[45], INT32_MAX) ||
             p[46].type != msgpack::type::ARRAY || p[46].via.array.size > kMaxResults || !detail::text(p[47]) ||
-            !detail::f32(p[48]) || !detail::f32(p[49]) || !detail::optional_bin(p[50], 16)) return false;
+            !detail::f32(p[48]) || !detail::f32(p[49]) || !detail::uint(p[50], UINT32_MAX) ||
+            !detail::uint(p[51], UINT32_MAX) || !detail::boolean(p[52]) || !detail::f64(p[53]) ||
+            !detail::optional_bin(p[54], 16)) return false;
         for (std::uint32_t i = 0; i < p[46].via.array.size; ++i)
             if (!validate_object(p[46].via.array.ptr[i], static_cast<const CommandResult*>(nullptr))) return false;
         return true;

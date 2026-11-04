@@ -68,7 +68,7 @@
 | 13 | byte[] | Proof |
 | 14 | byte[] | AuthTag |
 
-## StateFrame（51 项）
+## StateFrame（55 项）
 
 | 索引 | 类型 | 字段 |
 |---|---|---|
@@ -122,7 +122,13 @@
 | 47 | string | EventText |
 | 48 | float32 | Axis6WindowStartFromLeftMm（距左限位，仅显示） |
 | 49 | float32 | Axis6WindowEndFromLeftMm（距左限位，仅显示） |
-| 50 | byte[] | AuthTag |
+| 50 | uint | ArmCjogState |
+| 51 | uint | ArmCjogError |
+| 52 | bool | ArmCjogLimited |
+| 53 | float64 | ArmCjogPathSpeed（mm/s 或 °/s） |
+| 54 | byte[] | AuthTag |
+
+末端点动状态沿用版本 1 的字段扩展惯例；主端和数据端须同步部署。严格解码只接受 55 项，不兼容旧长度。命令格式未改变。
 
 ## ForceFrame（13 项）
 
@@ -152,7 +158,7 @@
 
 ## 命令及状态语义
 
-`ZenohCommand`：0 Hello，1 Authenticate，2 Acquire，3 Release，4 PreparePosition，5 StartControl，6 ForceFeedback，7 Cylinder，8 ArmManualEnable，9 ArmAxisEnable，10 ArmAxisReset，11 ArmAxisJog，12 ArmCartesianJog，13 ArmStop，14 ArmProgramZero，15 ArmCartesianParameter，16 ArmCartesianAlive，17 YValve，18 ForceZero，19 ForceHold。没有软件急停命令；ArmStop 仅停止定位臂，PLC 急停继续走原独立路径。
+`ZenohCommand`：0 Hello，1 Authenticate，2 Acquire，3 Release，4 PreparePosition，5 StartControl，6 ForceFeedback，7 Cylinder，8 ArmManualEnable，9 ArmAxisEnable，10 ArmAxisReset，11 ArmAxisJog，12 ArmCartesianJog，13 ArmStop，14 ArmProgramZero，15 保留（旧定位臂参数接口已停用），16 ArmCartesianAlive，17 YValve，18 ForceZero，19 ForceHold。没有软件急停命令；ArmStop 仅停止定位臂，PLC 急停继续走原独立路径。
 
 PreparePosition 的两个 double 是导管与导丝准备位置；Cylinder 的 Param1 为 1..4，Param2 为打开/恢复；YValve Param1 表示关闭；定位臂轴号 1..5；ArmAxisJog 的 Param2 为方向 -1/0/1，Value1 为统一速度倍率：快=2.0、中=1.0、慢=0.5，旧消息的 0 按中档处理，停止不受倍率影响。倍率随每次点动/保活发送，按各轴原基准速度计算，不累乘；默认中档。末端点动速度和参数继续沿用现有 ×1000 整数单位。ForceFeedback Param1=0/1 为关闭/开启，Param2=0 为两侧、1 为导管手柄587、2 为导丝手柄582；只有尚未取零时首次开启才自动取零。ForceZero 显式采集连续3帧ADS零点，Param1/Param2均为0，不改变两侧开关；ForceHold Param1=0/1 关闭/开启换手力反馈保持。开启时在换手触发时立即锁存相关手柄当前输出的轴向力和扭矩，跨越回退、重新递送与夹爪恢复阶段；最终重同步完成后，导管/导丝各自对应轴1/6沿自己的递送/撤出方向运动2 mm，再用100 ms线性平滑恢复实时值。保持默认开启。
 

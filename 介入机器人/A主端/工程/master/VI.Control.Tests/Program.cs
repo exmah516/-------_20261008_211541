@@ -206,11 +206,56 @@ internal static class Program
                 holdVm.SetArmAxisJog(armAxis, 0);
             }
         }
-        ((TextBox)holdArm.FindName("ArmLiftMin")!).Text = "0";
         Invoke(holdArm, "ArmCartesian_Down", holdArm.FindName("CartesianForward")!, MouseArgs(axis));
-        Check(recordingLink.LastArmCartesianJog == (1, 15000), "Cartesian X jog uses the selected medium rate");
+        Check(recordingLink.LastArmCartesianJog == (1, 15000), "Cartesian X jog uses medium rate without parameter input");
+        int stopsBeforeStale = recordingLink.StopArmCount;
+        int commandsBeforeStale = recordingLink.ArmCartesianJogCount;
+        recordingLink.StatusAgeMs = ProtocolConstants.StatusTimeoutMs;
+        Invoke(holdVm, "RefreshStats");
+        Pump();
+        Check(!holdVm.CanOperate && ((Button)holdArm.FindName("CartesianForward")!).IsEnabled &&
+            ((Button)holdArm.FindName("CartesianReverse")!).IsEnabled,
+            "Cartesian hold buttons remain enabled when status becomes stale");
+        Invoke(holdArm, "KeepaliveTimer_Tick", null!, EventArgs.Empty);
+        Check(recordingLink.StopArmCount == stopsBeforeStale &&
+            recordingLink.ArmCartesianJogCount == commandsBeforeStale + 1 &&
+            recordingLink.LastArmCartesianJog == (1, 15000),
+            "stale status preserves the held Cartesian request and sends keepalive");
+        recordingLink.StatusAgeMs = 0;
+        Invoke(holdVm, "RefreshStats");
+        int statusChanges = 0;
+        holdVm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(MainViewModel.ArmCartesianJogStatusText)) statusChanges++; };
+        foreach (uint error in new uint[] { 3001, 3002, 3003, 0x4B00 })
+        {
+            recordingLink.PublishCartJog(2, error, true, 1.25);
+            Pump();
+            string expectedText = error switch
+            {
+                3001 => "末端点动参数无效",
+                3002 => "驱动未就绪（总使能/上电/轴故障/复位/单轴点动/通信超时/急停）",
+                3003 => "外部设定点发生器使能超时",
+                _ => "NC 错误 0x4B00"
+            };
+            Check(holdVm.ArmCartesianJogStatusText == expectedText + $"（错误码 {error}）",
+                $"Cartesian error {error} displays its code and Chinese reason before the limit hint");
+        }
+        foreach (uint state in new uint[] { 0, 1, 2, 3, 4 })
+        {
+            recordingLink.PublishCartJog(state, 0, true, 1.25);
+            Pump();
+            Check(holdVm.ArmCartesianJogStatusText == (state is 2 or 3
+                ? "接近奇异位形或关节限速，已自动降速" : ""),
+                $"Cartesian limit hint follows state {state}");
+        }
+        recordingLink.PublishCartJog(2, 0, false, 5);
+        Pump();
+        Check(statusChanges == 10 && holdVm.ArmCartesianJogStatusText == "",
+            "Cartesian status property notifies and clears after the condition ends");
         Invoke(holdArm, "ArmCartesian_Up", holdArm.FindName("CartesianForward")!,
             new RoutedEventArgs(UIElement.PreviewMouseLeftButtonUpEvent));
+        Invoke(holdArm, "ArmProgramZero_Click", holdArm.FindName("ProgramHome")!, new RoutedEventArgs());
+        Check(recordingLink.ArmProgramZeroCount == 1, "Program home sends directly without parameter input");
+        Invoke(holdArm, "ArmStop_Click", holdArm.FindName("ProgramHome")!, new RoutedEventArgs());
         Invoke(holdArm, "ArmJogButton_Down", axis, MouseArgs(axis));
         Invoke(holdArm, "ArmJogButton_Up", axis, new RoutedEventArgs(UIElement.PreviewMouseLeftButtonUpEvent));
         Check(recordingLink.LastArmJog == (1, 0), "arm mouse release sends zero jog");
@@ -352,6 +397,17 @@ public class RecordingRobotLink : DispatchProxy
     }
     public (int Axis, int Direction) LastArmJog { get; private set; }
     public (int Mode, int SpeedMilli) LastArmCartesianJog { get; private set; }
+    public int ArmProgramZeroCount { get; private set; }
+    public int ArmCartesianJogCount { get; private set; }
+    public void PublishCartJog(uint state, uint error, bool limited, double speed)
+    {
+        _events.TryGetValue("StatusReceived", out Delegate? handler);
+        ((EventHandler<StatusFrame>?)handler)?.Invoke(this, new StatusFrame
+        {
+            Flags = StatusFlags.LeaseHeld, AxisPos = new float[7], AxisFromLeft = new float[7],
+            ArmCjogState = state, ArmCjogError = error, ArmCjogLimited = limited, ArmCjogPathSpeed = speed
+        });
+    }
     public double LastArmCartesianSpeedScale { get; private set; }
     public double LastArmSpeedScale { get; private set; }
     public Dictionary<int, int> ArmJogDirections { get; } = new();
@@ -425,10 +481,12 @@ public class RecordingRobotLink : DispatchProxy
         }
         if (name == "SetArmCartesianJogAsync")
         {
+            ArmCartesianJogCount++;
             LastArmCartesianJog = ((int)args![0]!, (int)args[1]!);
             LastArmCartesianSpeedScale = (double)args[2]!;
             return Task.FromResult(CommandResult.Done());
         }
+        if (name == "ReturnArmProgramZeroAsync") { ArmProgramZeroCount++; return Task.FromResult(CommandResult.Done()); }
         if (name == "SetForceFeedbackAsync") { LastForce = ((bool)args![0]!, (int)args[1]!); return Task.FromResult(CommandResult.Done()); }
         if (name == "SetForceFeedbackHoldAsync") { LastForceHold = (bool)args![0]!; return Task.FromResult(CommandResult.Done()); }
         if (name == "ZeroForceSensorAsync") { ForceZeroCount++; return Task.FromResult(CommandResult.Done()); }

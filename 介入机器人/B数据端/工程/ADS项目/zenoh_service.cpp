@@ -931,22 +931,14 @@ void ZenohService::consume_command_locked(const vi_protocol::CommandFrame& recei
         enqueue(VisCommandType::SetArmAxisJog, frame.param1, frame.param2, false,
             frame.param2 == 0 || frame.value1 == 0 ? 1.0 : frame.value1); break;
     case vi_protocol::Command::ArmCartesianJog:
-        if (frame.param1 < 1 || frame.param1 > 5 || frame.param2 < -100000 || frame.param2 > 100000 ||
-            (frame.param2 != 0 && frame.value1 != 0 && frame.value1 != 0.5 &&
-                frame.value1 != 1.0 && frame.value1 != 2.0))
-        { add_result_locked(frame.command_id, 1, "Invalid Cartesian jog."); return; }
-        enqueue(VisCommandType::SetArmCartesianJog, frame.param1, frame.param2, false,
-            frame.param2 == 0 || frame.value1 == 0 ? 1.0 : frame.value1); break;
+        // 点动参数由set_cartesian_jog在进程入口统一校验，倍率不参与末端运动。
+        enqueue(VisCommandType::SetArmCartesianJog, frame.param1, frame.param2, false, frame.value1); break;
     case vi_protocol::Command::ArmStop:
         enqueue(VisCommandType::StopArmCartesian, 0, 0, false);
         for (int axis = 1; axis <= 5; ++axis) enqueue(VisCommandType::SetArmAxisJog, axis, 0, axis == 5);
         break;
     case vi_protocol::Command::ArmProgramZero:
         enqueue(VisCommandType::ReturnArmProgramZero); break;
-    case vi_protocol::Command::ArmCartesianParameter:
-        if (frame.param1 < 0 || frame.param1 > 3 || frame.param2 < -100000 || frame.param2 > 100000)
-        { add_result_locked(frame.command_id, 1, "Invalid Cartesian parameter."); return; }
-        enqueue(VisCommandType::SetArmCartesianParameter, frame.param1, frame.param2); break;
     case vi_protocol::Command::ArmCartesianAlive:
         enqueue(VisCommandType::KeepArmCartesianAlive, 0, 0, false); break;
     case vi_protocol::Command::YValve:
@@ -1094,6 +1086,10 @@ void ZenohService::publish_state_frame()
             ? static_cast<float>(state_.axis6_window_start_from_left_mm) : 0.0f;
         frame.axis6_window_end_from_left_mm = std::isfinite(static_cast<float>(state_.axis6_window_end_from_left_mm))
             ? static_cast<float>(state_.axis6_window_end_from_left_mm) : 0.0f;
+        frame.arm_cjog_state = state_.arm_cjog_state;
+        frame.arm_cjog_error = state_.arm_cjog_error;
+        frame.arm_cjog_limited = state_.arm_cjog_limited;
+        frame.arm_cjog_path_speed = state_.arm_cjog_path_speed;
         authed = authenticated_ && frame.auth_state == 2; key = session_key_;
     }
     if (authed)

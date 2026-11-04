@@ -17,7 +17,14 @@ struct ArmManualSnapshot
 	std::uint32_t curve_sequence = 0;
 	std::uint32_t curve_state = 0;
 	std::uint32_t curve_error = 0;
+	bool curve_owned = false;
 	double curve_progress = 0;
+	bool cjog_owned = false;
+	std::uint32_t cjog_state = 0;
+	std::uint32_t cjog_error = 0;
+	bool cjog_limited = false;
+	double cjog_path_speed = 0;
+	std::uint32_t cjog_if_version = 0;
 	int cartesian_status = 0;
 	int cartesian_error = 0;
 	bool at_program_zero = false;
@@ -67,7 +74,6 @@ public:
 	void request_program_zero();
 	void stop_cartesian();
 	void keep_cartesian_alive();
-	void set_cartesian_parameter(int field, double value);
 
 private:
 	void run();
@@ -77,6 +83,7 @@ private:
 	void update_auto_enable_gate();
 	void expire_jog_deadman();
 	void update_cartesian();
+	void clear_cjog_locked();
 
 	AdsCommunicationService& ads_service_;
 	mutable std::mutex mutex_;
@@ -95,7 +102,6 @@ private:
 	std::array<double, 5> desired_jog_velocity_{ { 5.0, 5.0, 5.0, 5.0, 5.0 } };
 	double jog_speed_scale_ = 1.0;
 	std::array<double, 5> desired_jog_acc_{ { 50.0, 50.0, 50.0, 50.0, 50.0 } };
-	double cartesian_acceleration_override_ = 0.0;
 	std::array<double, 5> desired_jog_dec_{ { 50.0, 50.0, 50.0, 50.0, 50.0 } };
 	std::array<double, 5> desired_jog_jerk_{ { 500.0, 500.0, 500.0, 500.0, 500.0 } };
 	bool manual_dirty_ = true;
@@ -105,9 +111,13 @@ private:
 	bool jog_neg_dirty_ = true;
 	bool params_dirty_ = true;
 	ArmManualSnapshot snapshot_{};
-	ArmCartesianSettings cartesian_settings_;
-	int cartesian_mode_ = 0;
-	double cartesian_speed_ = 0;
+	std::int16_t cjog_mode_ = 0;
+	std::int16_t cjog_dir_ = 0;
+	double cjog_speed_ = 0;
+	std::chrono::steady_clock::time_point cjog_deadline_{};
+	std::uint32_t cjog_alive_ = 0;
+	bool cjog_dirty_ = false;
+	bool cjog_version_logged_ = false;
 	bool home_requested_ = false;
 	bool cartesian_stop_ = false;
 	bool cartesian_blocked_ = false;

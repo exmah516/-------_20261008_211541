@@ -4559,6 +4559,10 @@ int main()
 			vs.arm_curve_state = arm_snapshot.curve_state;
 			vs.arm_curve_progress = arm_snapshot.curve_progress;
 			vs.arm_home_request_id = arm_snapshot.home_request_id;
+			vs.arm_cjog_state = arm_snapshot.cjog_state;
+			vs.arm_cjog_error = arm_snapshot.cjog_error;
+			vs.arm_cjog_limited = arm_snapshot.cjog_limited;
+			vs.arm_cjog_path_speed = arm_snapshot.cjog_path_speed;
 			vs.arm_manual_enable = arm_snapshot.manual_enable;
 			for (int i = 0; i < 5; ++i)
 			{
@@ -4888,9 +4892,6 @@ int main()
 					break;
 				case VisCommandType::StopArmCartesian:
 					arm_manual_ads.stop_cartesian();
-					break;
-				case VisCommandType::SetArmCartesianParameter:
-					arm_manual_ads.set_cartesian_parameter(vcmd.param1, vcmd.param2 / 1000.0);
 					break;
 				case VisCommandType::KeepArmCartesianAlive:
 					arm_manual_ads.keep_cartesian_alive();

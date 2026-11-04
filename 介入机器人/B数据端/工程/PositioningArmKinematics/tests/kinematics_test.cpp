@@ -50,12 +50,9 @@ JointVector outside()
 }
 HomeOptions homeOptions()
 {
-    // 所有预算均为测试值，不能用于实机执行。
+    // 加速度仅为测试值，不能用于实机执行。
     HomeOptions o;
-    o.max_joint_travel.setConstant(20 * Degree);
     o.max_acceleration.setConstant(0.4);
-    o.max_tip_displacement = 0.2;
-    o.max_tool_rotation = 0.5;
     return o;
 }
 void samePose(const ArmPose& a, const ArmPose& b, double tolerance = 2e-7)
@@ -87,8 +84,6 @@ void verifyHome(PositioningArmKinematics& arm, const ArmKinematicConfig& config,
     check(result.samples.front().acceleration.norm() == 0
         && result.samples.back().acceleration.norm() == 0, "Nonzero endpoint acceleration");
     check(result.optimized_cost <= result.baseline_cost + 1e-12, "Optimization worsened cost");
-    check(result.tip_displacement_bound <= options.max_tip_displacement
-        && result.tool_rotation_bound <= options.max_tool_rotation, "Motion budgets exceeded");
     check(result.tip_displacement_bound + 1e-12 >= result.sampled_tip_displacement
         && result.tool_rotation_bound + 1e-12 >= result.sampled_tool_rotation, "Invalid bound");
     const auto initial = arm.forward(q);
@@ -309,9 +304,9 @@ int main()
             const auto aligned = PositioningArmKinematics::continuousQuaternion(negative, initial.quaternion);
             check(aligned.dot(initial.quaternion) > 1 - 1e-12, "Sign normalization failed");
         }},
-        {"Unreachable preserves state and analytic IK ignores iteration count", [] {
+        {"Unreachable preserves state and reachable IK is analytic", [] {
             auto c = fixture(); c.max_velocity.setConstant(100);
-            SolverOptions o; o.max_translation = 0.6; o.max_iterations = 1;
+            SolverOptions o; o.max_translation = 0.6;
             PositioningArmKinematics arm(c, o);
             auto q = start();
             CartesianJog unreachable; unreachable.translation.x() = 0.5;
@@ -319,7 +314,7 @@ int main()
             rejected(arm.solveCartesianJog(q, unreachable), q);
             const auto r = arm.solveJog(q, {JogAxis::X, 0.004, 0.05});
             check(r.success() && r.iterations == 0,
-                "IK depends on the legacy iteration-count option");
+                "Analytic IK failed or iterated");
         }},
         {"Home windows include exact boundaries without motion", [] {
             PositioningArmKinematics arm(fixture());
@@ -342,7 +337,7 @@ int main()
             PositioningArmKinematics arm(fixture());
             auto q = home(); q[2] += 2 * Pi;
             check(!arm.isAtProgramZero(q), "Wrapped angle accepted");
-            rejected(arm.planProgramZeroReturn(q, homeOptions()), q, HomeStatus::TravelLimit);
+            verifyHome(arm, fixture(), q, homeOptions(), arm.planProgramZeroReturn(q, homeOptions()));
             q = home(); q[2] += 2 * Degree;
             check(std::abs(arm.toProgramCoordinates(q)[2] - 2 * Degree) < 1e-12,
                 "Within tolerance incorrectly reset to zero");
@@ -366,16 +361,10 @@ int main()
                 verifyHome(arm, c, q, homeOptions(), arm.planProgramZeroReturn(q, homeOptions()));
             }
         }},
-        {"Home fails closed without budgets or with excessive tool motion", [] {
+        {"Home rejects missing dynamics and invalid sampling", [] {
             PositioningArmKinematics arm(fixture()); const auto q = outside();
             rejected(arm.planProgramZeroReturn(q, {}), q, HomeStatus::InvalidInput);
-            auto o = homeOptions(); o.max_joint_travel.setConstant(Degree);
-            rejected(arm.planProgramZeroReturn(q, o), q, HomeStatus::TravelLimit);
-            o = homeOptions(); o.max_tip_displacement = 0.00001;
-            rejected(arm.planProgramZeroReturn(q, o), q, HomeStatus::ToolMotionLimit);
-            o = homeOptions(); o.max_tool_rotation = 0.00001;
-            rejected(arm.planProgramZeroReturn(q, o), q, HomeStatus::ToolMotionLimit);
-            o = homeOptions(); o.max_samples = 2;
+            auto o = homeOptions(); o.max_samples = 2;
             rejected(arm.planProgramZeroReturn(q, o), q, HomeStatus::SamplingLimit);
             o = homeOptions(); o.max_acceleration[0] = 0;
             rejected(arm.planProgramZeroReturn(q, o), q, HomeStatus::InvalidInput);
@@ -383,7 +372,7 @@ int main()
         {"Home checks initial and final joint limits", [] {
             auto c = fixture(); c.lower[2] = Degree;
             PositioningArmKinematics arm(c);
-            auto final_out_of_range = home(); final_out_of_range[2] = 2 * Degree;
+            auto final_out_of_range = home(); final_out_of_range[2] = 4 * Degree;
             rejected(arm.planProgramZeroReturn(final_out_of_range, homeOptions()),
                 final_out_of_range, HomeStatus::JointLimit);
             c = fixture(); c.lower[1] = 0; PositioningArmKinematics normal(c);

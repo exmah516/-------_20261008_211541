@@ -71,8 +71,8 @@ END_VAR
 	G.arm_power_output[i].ErrorID := fb_power[i].ErrorID;
 
 	IF G.arm_reset_req[i] AND NOT reset_exec[i] THEN
-		IF G.arm_curve_owned THEN
-			G.arm_curve_cancel := TRUE;
+		IF G.arm_curve_owned OR G.arm_cjog_owned THEN
+			IF G.arm_curve_owned THEN G.arm_curve_cancel := TRUE; END_IF
 		ELSE
 		reset_exec[i] := TRUE;
 		move_exec[i] := FALSE;
@@ -115,6 +115,7 @@ END_VAR
 
 	allow_jog := G.arm_manual_enable
 		AND NOT G.arm_curve_owned
+		AND NOT G.arm_cjog_owned
 		AND G.arm_power_output[i].Done
 		AND NOT reset_exec[i]
 		AND NOT G.arm_cmd_conflict[i]

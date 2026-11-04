@@ -1,0 +1,167 @@
+B数据端/工程/PositioningArmKinematics/include/positioning_arm/kinematics.h
+15: struct AxisCalibration {
+22: Eigen::Vector2d link_lengths = Eigen::Vector2d(0.200, 0.180);
+25: Eigen::Vector3d base_offset_mm = Eigen::Vector3d::Zero(); // 基座平移，毫米；其余几何参数仍为米。
+30: std::array<AxisCalibration, AxisCount> calibration;
+
+B数据端/工程/PositioningArmKinematics/src/kinematics.cpp
+41: require(config.base_offset_mm.allFinite(), "基座平移偏移必须为有限毫米值");
+78: ArmPose PositioningArmKinematics::forward(const JointVector& joints) const
+84: result.position << 0, 0, joints[0];
+86: const double first_link_yaw = joints[1];
+88: * Eigen::Vector3d(std::sin(first_link_yaw), -std::cos(first_link_yaw), 0);
+91: const double second_link_yaw = first_link_yaw + joints[2] + Pi;
+93: * Eigen::Vector3d(std::sin(second_link_yaw), -std::cos(second_link_yaw), 0);
+95: const double tool_yaw = joints[1] + joints[2] + joints[3] - Pi / 2;
+97: * Eigen::Quaterniond(Eigen::AngleAxisd(joints[4], Eigen::Vector3d::UnitX()));
+100: result.position += config_.base_offset_mm * 0.001;
+106: FrameJacobian PositioningArmKinematics::computeFrameJacobian(
+113: result.block<3, 1>(0, 0) = Eigen::Vector3d::UnitZ();
+116: Eigen::Vector3d joint_origin = config_.base_offset_mm * 0.001;
+117: joint_origin.z() += z;
+120: const Eigen::Vector3d axis = Eigen::Vector3d::UnitZ();
+121: result.block<3, 1>(0, i + 1) = axis.cross(pose.position - joint_origin);
+125: joint_origin += config_.link_lengths[0]
+128: joint_origin += config_.link_lengths[1]
+136: pitch_axis_world.cross(pose.position - joint_origin);
+225: next[0] += command.translation.z();
+226: next[4] -= command.pitch;
+274: const double wrist_x = target.position.x() - config_.base_offset_mm.x() * 0.001 - tool_x;
+275: const double wrist_y = target.position.y() - config_.base_offset_mm.y() * 0.001 - tool_y;
+376: case JogAxis::Z: jog.translation.z() = displacement; break;
+385: auto result = solveCartesianJog(current, jog);
+
+B数据端/工程/PositioningArmKinematics/src/program_zero.cpp
+65: HomeResult PositioningArmKinematics::planProgramZeroReturn(
+99: const auto initial_pose = forward(current);
+112: const auto pose = forward(q);
+115: residual.head<3>() = (pose.position - initial_pose.position) / length;
+119: const auto full = computeFrameJacobian(q);
+208: const auto pose = forward(sample.position);
+209: const double displacement = (pose.position - initial_pose.position).norm();
+
+B数据端/工程/ADS项目/arm_cartesian_motion.h
+19: inline ArmCurvePlan plan_arm_curve(const std::array<double, 5>& actual,
+26: if (mode != 0 || !std::isfinite(speed)) {
+44: c.calibration[i] = {0, scale, 1};
+54: if (mode == 0) {
+57: const auto r = arm.planProgramZeroReturn(current, options);
+
+C从端/250902/Untitled2/POUs/ArmCartJogGen.TcPOU
+23: VAR CONSTANT
+24: PI : LREAL := 3.14159265358979323846;
+25: RAD : LREAL := PI / 180.0;
+26: L1 : LREAL := 200.0; // 毫米，kinematics.h默认两连杆
+27: L2 : LREAL := 180.0;
+28: T_ACC : LREAL := 1.0; // 秒
+29: T_DEC : LREAL := 0.5;
+30: Q3_MARGIN : LREAL := 0.5; // 有效肘角，度
+31: JOINT_VCAP : ARRAY[1..5] OF LREAL := [10,10,10,10,10]; // 缺少NC最大速度，待用户按NC参数填写
+38: duration : LREAL := T_ACC;
+50: <ST><![CDATA[// A 初始化；纯计算，不访问轴或全局变量。
+55: path_v := 0; v0 := 0; v1 := 0; tau := 0; duration := T_ACC;
+59: // B 三次速度过渡。
+64: IF v1 > v0 THEN duration := T_ACC; ELSE duration := T_DEC; END_IF
+70: // C 换模式或反向必须等当前路径速度归零，再原地锚定。
+87: // D Z正向为轴1负向，俯仰正向为轴5负向，偏航正向为轴4正向。
+91: IF path_v > 0 THEN k := MIN(1.0, JOINT_VCAP[j]/path_v); END_IF
+100: // E 当前指令点的单位路径雅可比逆，弧度换为度。
+112: // F 三个平面关节等比限速，路径方向不变。
+115: IF g[i] <> 0 THEN k := MIN(k, JOINT_VCAP[i]/(ABS(g[i])*path_v)); END_IF
+122: r_min2 := L1*L1+L2*L2-2.0*L1*L2*COS(Q3_MARGIN*RAD);
+123: r_max2 := L1*L1+L2*L2+2.0*L1*L2*COS(Q3_MARGIN*RAD);
+124: // G 超出可达环带时保留上一指令点，不写错误。
+129: // H 闭式逆解；L1大于L2，第二个反正切的分母恒正。
+137: // I 各关节独立展开到上一周期附近，保持多圈连续。
+150: // J 实际路径速度及逐周期关节加速度。
+
+B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_reference.h
+8: static constexpr double PI = 3.14159265358979323846;
+9: static constexpr double RAD = PI / 180.0;
+10: static constexpr double L1 = 200.0, L2 = 180.0;
+11: static constexpr double T_ACC = 1.0, T_DEC = 0.5, Q3_MARGIN = 0.5;
+12: static constexpr std::array<double, 5> JOINT_VCAP{{10,10,10,10,10}};
+18: bool limited = false, boundary = false;
+20: void step(bool start, bool held, int mode, int dir, double speed,
+23: bool reanchor = start;
+31: target_speed = 0;
+41: if (path_v == 0 && v1 == 0 && held
+51: limited = false; boundary = false;
+52: if (start) { path_speed = 0; target_speed = 0; return; }
+55: if (latched_mode >= 3) {
+66: const double q2 = p[1]*RAD, effective_q3 = p[2]*RAD+PI;
+78: if (path_v > 0) {
+89: if (r2 < r_min2 || r2 > r_max2) {
+93: const double radius2 = wx*wx+wy*wy;
+100: while (next_q2-p[1] > 180.0) next_q2 -= 360.0;
+101: while (next_q2-p[1] < -180.0) next_q2 += 360.0;
+112: limited = k < 1.0 || boundary;
+113: for (int i = 0; i < 5; ++i) a[i] = (v[i]-previous_v[i])/dt;
+
+C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU
+6: ALIVE_TIMEOUT : LREAL := 0.5; // 秒
+7: ENABLE_TIMEOUT : LREAL := 2.0;
+21: zero_cycles : INT;
+45: request_valid := (G.arm_cjog_mode >= 1) AND (G.arm_cjog_mode <= 5)
+48: held := request_valid AND (alive_age < ALIVE_TIMEOUT);
+51: drive_ready := G.arm_manual_enable AND NOT G.host_comm_timeout AND NOT G.estop_hold_req
+54: drive_ready := drive_ready AND G.arm_power_output[i].Done AND G.arm_enable_req[i]
+58: IF (stage = 0) AND held AND NOT G.arm_curve_owned
+70: zero_cycles := 0;
+81: IF enable_age > ENABLE_TIMEOUT THEN
+87: IF stage = 25 THEN
+91: zero_cycles := zero_cycles+1;
+93: zero_cycles := 0;
+95: IF zero_cycles >= 2 THEN stage := 40; END_IF
+102: MC_ExtSetPointGenFeed(Axis:=G.arm_axis[i], Position:=gen.p[i],
+123: CASE stage OF
+135: CASE stage OF
+
+C从端/250902/Untitled2/POUs/ArmCartesian.TcPOU
+63: drive_ready := G.arm_manual_enable AND NOT G.host_comm_timeout AND NOT G.estop_hold_req
+66: drive_ready := drive_ready AND G.arm_power_output[i].Done AND G.arm_enable_req[i]
+88: OR (incoming[16] <> 0.0) THEN
+93: IF G.arm_cjog_owned THEN reject_error := 2001; END_IF
+186: u := MIN(1.0, elapsed/curve[15]);
+187: path_progress := u*u*u*(10.0+u*(-15.0+6.0*u));
+193: p[i] := curve[i-1]+path_progress*delta+4.0*path_progress*(1.0-path_progress)*bend;
+247: 10:
+249: 30:
+251: 40:
+255: 50:
+257: 60:
+
+C从端/250902/Untitled2/POUs/ArmManual.TcPOU
+74: IF G.arm_curve_owned OR G.arm_cjog_owned THEN
+118: AND NOT G.arm_cjog_owned
+
+C从端/250902/Untitled2/POUs/MAIN.TcPOU
+95: arm_cartesian_();
+96: arm_cart_jog_();
+
+B数据端/工程/ADS项目/arm_manual_ads_service.cpp
+17: constexpr int kCartesianJogLeaseMs = 500;
+236: void ArmManualAdsService::set_cartesian_jog(int mode, double speed, double /*speed_scale*/)
+251: cjog_deadline_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(kCartesianJogLeaseMs);
+277: void ArmManualAdsService::stop_cartesian()
+460: void ArmManualAdsService::update_auto_enable_gate()
+510: update_auto_enable_gate();
+629: if (cjog_dirty) {
+697: append("G.arm_cjog_if_version", sizeof(next.cjog_if_version), &next.cjog_if_version);
+717: std::cout << "定位臂末端点动接口版本: " << next.cjog_if_version << std::endl;
+718: if (next.cjog_if_version != 1) std::cerr << "警告：定位臂末端点动接口版本应为1" << std::endl;
+
+A主端/工程/master/VI.Service.Robot/ViewModels/MainViewModel.cs
+391: public string ArmCartesianJogStatusText => _s.ArmCjogError != 0
+406: public double GetArmCartesianJogSpeed(int mode) => (mode, _armJogSpeedScale) switch
+408: (1 or 2, 2.0) => 30.0,
+411: (3, 2.0) => 3.0,
+413: (3, _) => 1.25,
+414: (4 or 5, 2.0) => 1.2,
+511: nameof(ArmCartesianJogStatusText),
+
+A主端/工程/master/VI.Module.PositioningArm/PositioningArmPanel.xaml.cs
+24: _keepaliveTimer.Tick += KeepaliveTimer_Tick;
+108: private async void ArmCartesian_Down(object sender, MouseButtonEventArgs e)
+157: private void KeepaliveTimer_Tick(object? sender, EventArgs e)
+159: if (!_viewModel.CanOperate && (_jogAxis != 0 || _programReturnActive))

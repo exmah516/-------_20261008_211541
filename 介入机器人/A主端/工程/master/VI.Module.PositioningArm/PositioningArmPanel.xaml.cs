@@ -125,10 +125,11 @@ public partial class PositioningArmPanel : UserControl
         int version = ++_holdVersion;
         button.CaptureMouse();
         e.Handled = true;
-        if (!await SendCartesianParametersAsync(false) || version != _holdVersion || !_viewModel.CanOperate) return;
+        if (version != _holdVersion || !_viewModel.CanOperate) return;
         _cartesianMode = mode;
         _cartesianSpeedMilli = direction * (int)Math.Round(speed * 1000.0);
-        if (!await _viewModel.SetArmCartesianJogAsync(_cartesianMode, _cartesianSpeedMilli))
+        bool sent = await _viewModel.SetArmCartesianJogAsync(_cartesianMode, _cartesianSpeedMilli);
+        if (version == _holdVersion && !sent)
             _cartesianMode = _cartesianSpeedMilli = 0;
     }
 
@@ -146,37 +147,16 @@ public partial class PositioningArmPanel : UserControl
         if (!_viewModel.CanOperate || _cartesianMode != 0 || _jogAxis != 0) return;
         ArmCartesianError.Text = "";
         int version = ++_holdVersion;
-        if (!await SendCartesianParametersAsync(true) || version != _holdVersion) return;
+        _programReturnActive = true;
         bool started = await _viewModel.ReturnArmProgramZeroAsync();
         if (version == _holdVersion) _programReturnActive = started;
-    }
-
-    private async Task<bool> SendCartesianParametersAsync(bool home)
-    {
-        TextBox[] inputs = [ArmLiftMin, ArmHomeTravel, ArmHomeTip, ArmHomeRotation];
-        int count = home ? inputs.Length : 1;
-        for (int i = 0; i < count; i++)
-        {
-            if (!double.TryParse(inputs[i].Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double value) ||
-                !double.IsFinite(value) || Math.Abs(value) > 100000 || (i != 0 && value <= 0))
-            {
-                ArmCartesianError.Text = home ? "归零需要填写轴1下端、正数行程、位移和转角上限。" : "末端点动需要填写轴1下端读数。";
-                return false;
-            }
-            if (!await _viewModel.SetArmCartesianParameterAsync(i, (int)Math.Round(value * 1000.0)))
-            {
-                ArmCartesianError.Text = "定位臂参数发送失败。";
-                return false;
-            }
-        }
-        return true;
     }
 
     private void ArmStop_Click(object sender, RoutedEventArgs e) => StopHoldActions();
 
     private void KeepaliveTimer_Tick(object? sender, EventArgs e)
     {
-        if (!_viewModel.CanOperate && (_jogAxis != 0 || _cartesianMode != 0 || _programReturnActive))
+        if (!_viewModel.CanOperate && (_jogAxis != 0 || _programReturnActive))
         {
             StopHoldActions();
             return;

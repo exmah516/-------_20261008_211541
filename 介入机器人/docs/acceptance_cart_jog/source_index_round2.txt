@@ -1,0 +1,1270 @@
+
+C从端/250902/Untitled2/POUs/ArmCartJogGen.TcPOU
+1: <?xml version="1.0" encoding="utf-8"?>
+2: <TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+3:   <POU Name="ArmCartJogGen" Id="{721fd06a-290f-4fa0-98ad-8295ece245f4}" SpecialFunc="None">
+4:     <Declaration><![CDATA[FUNCTION_BLOCK ArmCartJogGen
+5: VAR_INPUT
+6:     start : BOOL;
+7:     held : BOOL;
+8:     mode : INT;
+9:     dir : INT;
+10:     speed : LREAL;
+11:     seed : ARRAY[1..5] OF LREAL;
+12:     dt : LREAL;
+13: END_VAR
+14: VAR_OUTPUT
+15:     p : ARRAY[1..5] OF LREAL;
+16:     v : ARRAY[1..5] OF LREAL;
+17:     a : ARRAY[1..5] OF LREAL;
+18:     path_speed : LREAL;
+19:     target_speed : LREAL;
+20:     limited : BOOL;
+21: END_VAR
+22: VAR CONSTANT
+23:     PI : LREAL := 3.14159265358979323846;
+24:     RAD : LREAL := PI / 180.0;
+25:     L1 : LREAL := 200.0; // 毫米，取自kinematics.h
+26:     L2 : LREAL := 180.0;
+27:     T_ACC : LREAL := 1.0; // 秒
+28:     T_DEC : LREAL := 0.5;
+29:     INITIAL_BRANCH : INT := 1;
+30:     BISECTION_COUNT : INT := 12;
+31:     JOINT_VCAP : ARRAY[1..5] OF LREAL := [24,10,10,10,10]; // 毫米/秒、度/秒
+32: END_VAR
+33: VAR
+34:     anchor : ARRAY[1..5] OF LREAL;
+35:     position_before, velocity_before : ARRAY[1..5] OF LREAL;
+36:     path_v, path_v_previous, v0, v1, tau, sigma : LREAL;
+37:     duration : LREAL := T_ACC;
+38:     wx, wy : LREAL;
+39:     latched_mode, latched_dir : INT;
+40:     branch : INT := INITIAL_BRANCH;
+41:     reanchor, trial_ok : BOOL;
+42:     i, j : INT;
+43:     u, delta_sigma_des, delta_sigma, lower_step, upper_step : LREAL;
+44:     best_step, trial_step, axis_sign, s, ex, ey : LREAL;
+45:     candidate_wx, candidate_wy, best_wx, best_wy : LREAL;
+46:     candidate_radius, candidate_cosine, candidate_elbow : LREAL;
+47:     candidate_azimuth, azimuth_denominator : LREAL;
+48:     candidate_q2, candidate_q3, candidate_q4 : LREAL;
+49:     best_q2, best_q3, best_q4, branch_q3 : LREAL;
+50: END_VAR]]></Declaration>
+51:     <Implementation>
+52:       <ST><![CDATA[// 输入速度采用平滑曲线，路径增量用相邻周期速度的梯形积分。
+53: reanchor := start;
+54: IF start THEN
+55:     p := seed;
+56:     FOR i := 1 TO 5 DO v[i] := 0; a[i] := 0; END_FOR
+57:     path_v := 0; v0 := 0; v1 := 0; tau := 0; duration := T_ACC;
+58:     latched_mode := mode; latched_dir := dir;
+59: END_IF
+60: position_before := p; velocity_before := v; path_v_previous := path_v;
+61: target_speed := 0;
+62: IF held AND (mode = latched_mode) AND (dir = latched_dir) THEN target_speed := speed; END_IF
+63: IF target_speed <> v1 THEN
+64:     v0 := path_v; v1 := target_speed;
+65:     IF v1 > v0 THEN duration := T_ACC; ELSE duration := T_DEC; END_IF
+66:     tau := 0;
+67: END_IF
+68: IF NOT start THEN tau := tau + dt; END_IF
+69: u := MIN(1.0, tau / duration);
+70: path_v := v0 + (v1-v0)*(3.0*u*u-2.0*u*u*u);
+71: // 模式或方向变化在曲线零速点重新锚定。
+72: IF (path_v = 0) AND (v1 = 0) AND held
+73:     AND ((mode <> latched_mode) OR (dir <> latched_dir)) THEN reanchor := TRUE; END_IF
+74: IF reanchor THEN
+75:     anchor := p; latched_mode := mode; latched_dir := dir; sigma := 0;
+76:     branch_q3 := anchor[3];
+77:     WHILE branch_q3 > 180.0 DO branch_q3 := branch_q3-360.0; END_WHILE
+78:     WHILE branch_q3 < -180.0 DO branch_q3 := branch_q3+360.0; END_WHILE
+79:     IF (branch_q3 <> 0.0) AND (branch_q3 <> 180.0) AND (branch_q3 <> -180.0) THEN
+80:         IF branch_q3 < 0 THEN branch := 1; ELSE branch := -1; END_IF
+81:     END_IF
+82:     wx := L1*SIN(anchor[2]*RAD)+L2*SIN((anchor[2]+anchor[3])*RAD+PI);
+83:     wy := -L1*COS(anchor[2]*RAD)-L2*COS((anchor[2]+anchor[3])*RAD+PI);
+84: END_IF
+85: limited := FALSE;
+86: IF start THEN path_speed := 0; target_speed := 0; RETURN; END_IF
+87: delta_sigma_des := 0.5*(path_v_previous+path_v)*dt;
+88: IF latched_mode >= 3 THEN
+89:     // Z正向为轴1减小；俯仰正向为轴5减小；偏航正向为轴4增大。
+90:     IF latched_mode = 3 THEN j := 1;
+91:     ELSIF latched_mode = 4 THEN j := 5;
+92:     ELSE j := 4; END_IF
+93:     delta_sigma := MIN(delta_sigma_des, JOINT_VCAP[j]*dt);
+94:     s := latched_dir*(sigma+delta_sigma);
+95:     p := anchor;
+96:     IF latched_mode = 5 THEN axis_sign := 1.0; ELSE axis_sign := -1.0; END_IF
+97:     p[j] := anchor[j]+axis_sign*s;
+98: ELSE
+99:     // X/Y试探直线步长；环带与三关节步长共同决定可接受步长。
+100:     IF latched_mode = 1 THEN ex := 1.0; ey := 0.0;
+101:     ELSE ex := 0.0; ey := 1.0; END_IF
+102:     best_step := 0; lower_step := 0; upper_step := delta_sigma_des;
+103:     FOR i := 0 TO BISECTION_COUNT DO
+104:         IF i = 0 THEN trial_step := delta_sigma_des;
+105:         ELSE trial_step := (lower_step+upper_step)/2.0; END_IF
+106:         candidate_wx := wx+latched_dir*trial_step*ex;
+107:         candidate_wy := wy+latched_dir*trial_step*ey;
+108:         candidate_radius := SQRT(candidate_wx*candidate_wx+candidate_wy*candidate_wy);
+109:         trial_ok := FALSE;
+110:         IF (candidate_radius >= L1-L2) AND (candidate_radius <= L1+L2) THEN
+111:             candidate_cosine := (candidate_radius*candidate_radius-L1*L1-L2*L2)/(2.0*L1*L2);
+112:             IF candidate_cosine > 1.0 THEN candidate_cosine := 1.0;
+113:             ELSIF candidate_cosine < -1.0 THEN candidate_cosine := -1.0; END_IF
+114:             candidate_elbow := branch*ACOS(candidate_cosine);
+115:             azimuth_denominator := -candidate_wy;
+116:             IF azimuth_denominator > 0 THEN candidate_azimuth := ATAN(candidate_wx/azimuth_denominator);
+117:             ELSIF azimuth_denominator < 0 THEN
+118:                 IF candidate_wx >= 0 THEN candidate_azimuth := ATAN(candidate_wx/azimuth_denominator)+PI;
+119:                 ELSE candidate_azimuth := ATAN(candidate_wx/azimuth_denominator)-PI; END_IF
+120:             ELSE
+121:                 IF candidate_wx > 0 THEN candidate_azimuth := PI/2.0;
+122:                 ELSE candidate_azimuth := -PI/2.0; END_IF
+123:             END_IF
+124:             candidate_q2 := (candidate_azimuth-ATAN(L2*SIN(candidate_elbow)/(L1+L2*COS(candidate_elbow))))/RAD;
+125:             candidate_q3 := (candidate_elbow-PI)/RAD;
+126:             WHILE candidate_q2-p[2] > 180.0 DO candidate_q2 := candidate_q2-360.0; END_WHILE
+127:             WHILE candidate_q2-p[2] < -180.0 DO candidate_q2 := candidate_q2+360.0; END_WHILE
+128:             WHILE candidate_q3-p[3] > 180.0 DO candidate_q3 := candidate_q3-360.0; END_WHILE
+129:             WHILE candidate_q3-p[3] < -180.0 DO candidate_q3 := candidate_q3+360.0; END_WHILE
+130:             candidate_q4 := anchor[4]+(anchor[2]+anchor[3])-(candidate_q2+candidate_q3);
+131:             trial_ok := (ABS(candidate_q2-p[2]) <= JOINT_VCAP[2]*dt)
+132:                 AND (ABS(candidate_q3-p[3]) <= JOINT_VCAP[3]*dt)
+133:                 AND (ABS(candidate_q4-p[4]) <= JOINT_VCAP[4]*dt);
+134:         END_IF
+135:         IF trial_ok THEN
+136:             lower_step := trial_step; best_step := trial_step;
+137:             best_wx := candidate_wx; best_wy := candidate_wy;
+138:             best_q2 := candidate_q2; best_q3 := candidate_q3; best_q4 := candidate_q4;
+139:             IF i = 0 THEN EXIT; END_IF
+140:         ELSE
+141:             upper_step := trial_step;
+142:         END_IF
+143:     END_FOR
+144:     delta_sigma := best_step;
+145:     IF delta_sigma > 0 THEN
+146:         wx := best_wx; wy := best_wy;
+147:         p[1] := anchor[1]; p[5] := anchor[5];
+148:         p[2] := best_q2; p[3] := best_q3; p[4] := best_q4;
+149:     END_IF
+150: END_IF
+151: sigma := sigma+delta_sigma;
+152: path_speed := delta_sigma/dt;
+153: limited := delta_sigma < delta_sigma_des;
+154: FOR i := 1 TO 5 DO
+155:     v[i] := (p[i]-position_before[i])/dt;
+156:     a[i] := (v[i]-velocity_before[i])/dt;
+157: END_FOR]]></ST>
+158:     </Implementation>
+159:   </POU>
+160: </TcPlcObject>
+
+B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_reference.h
+1: #pragma once
+2: #include <array>
+3: #include <algorithm>
+4: #include <cmath>
+5: 
+6: // 与ArmCartJogGen同名变量、同一语句顺序；位置为毫米/度，时间为秒。
+7: struct ArmCartJogReference {
+8:     static constexpr double PI = 3.14159265358979323846;
+9:     static constexpr double RAD = PI / 180.0;
+10:     static constexpr double L1 = 200.0, L2 = 180.0;
+11:     static constexpr double T_ACC = 1.0, T_DEC = 0.5;
+12:     static constexpr int INITIAL_BRANCH = 1, BISECTION_COUNT = 12;
+13:     static constexpr std::array<double, 5> JOINT_VCAP{{24,10,10,10,10}};
+14:     std::array<double, 5> p{}, v{}, a{}, anchor{};
+15:     double path_speed = 0, target_speed = 0, path_v = 0;
+16:     double v0 = 0, v1 = 0, duration = T_ACC, tau = 0, sigma = 0;
+17:     double wx = 0, wy = 0;
+18:     int latched_mode = 0, latched_dir = 0, branch = INITIAL_BRANCH;
+19:     bool limited = false;
+20: 
+21:     void step(bool start, bool held, int mode, int dir, double speed,
+22:         const std::array<double, 5>& seed, double dt)
+23:     {
+24:         bool reanchor = start;
+25:         if (start) {
+26:             p = seed;
+27:             for (int i = 0; i < 5; ++i) { v[i] = 0; a[i] = 0; }
+28:             path_v = 0; v0 = 0; v1 = 0; tau = 0; duration = T_ACC;
+29:             latched_mode = mode; latched_dir = dir;
+30:         }
+31:         const auto position_before = p, velocity_before = v;
+32:         const double path_v_previous = path_v;
+33:         target_speed = 0;
+34:         if (held && mode == latched_mode && dir == latched_dir) target_speed = speed;
+35:         if (target_speed != v1) {
+36:             v0 = path_v; v1 = target_speed;
+37:             if (v1 > v0) duration = T_ACC; else duration = T_DEC;
+38:             tau = 0;
+39:         }
+40:         if (!start) tau += dt;
+41:         const double u = std::min(1.0, tau / duration);
+42:         path_v = v0 + (v1-v0)*(3.0*u*u-2.0*u*u*u);
+43:         if (path_v == 0 && v1 == 0 && held
+44:             && (mode != latched_mode || dir != latched_dir)) reanchor = true;
+45:         if (reanchor) {
+46:             anchor = p; latched_mode = mode; latched_dir = dir; sigma = 0;
+47:             double branch_q3 = anchor[2];
+48:             while (branch_q3 > 180.0) branch_q3 -= 360.0;
+49:             while (branch_q3 < -180.0) branch_q3 += 360.0;
+50:             if (branch_q3 != 0.0 && branch_q3 != 180.0 && branch_q3 != -180.0) {
+51:                 if (branch_q3 < 0) branch = 1; else branch = -1;
+52:             }
+53:             wx = L1*std::sin(anchor[1]*RAD)+L2*std::sin((anchor[1]+anchor[2])*RAD+PI);
+54:             wy = -L1*std::cos(anchor[1]*RAD)-L2*std::cos((anchor[1]+anchor[2])*RAD+PI);
+55:         }
+56:         limited = false;
+57:         if (start) { path_speed = 0; target_speed = 0; return; }
+58:         const double delta_sigma_des = 0.5*(path_v_previous+path_v)*dt;
+59:         double delta_sigma;
+60:         if (latched_mode >= 3) {
+61:             const int j = latched_mode == 3 ? 0 : latched_mode == 4 ? 4 : 3;
+62:             delta_sigma = std::min(delta_sigma_des, JOINT_VCAP[j]*dt);
+63:             const double s = latched_dir*(sigma+delta_sigma);
+64:             p = anchor;
+65:             const double axis_sign = latched_mode == 5 ? 1.0 : -1.0;
+66:             p[j] = anchor[j]+axis_sign*s;
+67:         } else {
+68:             const double ex = latched_mode == 1 ? 1.0 : 0.0;
+69:             const double ey = latched_mode == 1 ? 0.0 : 1.0;
+70:             double best_step = 0, lower_step = 0, upper_step = delta_sigma_des;
+71:             double best_wx = 0, best_wy = 0, best_q2 = 0, best_q3 = 0, best_q4 = 0;
+72:             for (int i = 0; i <= BISECTION_COUNT; ++i) {
+73:                 const double trial_step = i == 0 ? delta_sigma_des : (lower_step+upper_step)/2.0;
+74:                 const double candidate_wx = wx+latched_dir*trial_step*ex;
+75:                 const double candidate_wy = wy+latched_dir*trial_step*ey;
+76:                 const double candidate_radius = std::sqrt(candidate_wx*candidate_wx+candidate_wy*candidate_wy);
+77:                 bool trial_ok = false;
+78:                 double candidate_q2 = 0, candidate_q3 = 0, candidate_q4 = 0;
+79:                 if (candidate_radius >= L1-L2 && candidate_radius <= L1+L2) {
+80:                     double candidate_cosine = (candidate_radius*candidate_radius-L1*L1-L2*L2)/(2.0*L1*L2);
+81:                     if (candidate_cosine > 1.0) candidate_cosine = 1.0;
+82:                     else if (candidate_cosine < -1.0) candidate_cosine = -1.0;
+83:                     const double candidate_elbow = branch*std::acos(candidate_cosine);
+84:                     const double azimuth_denominator = -candidate_wy;
+85:                     double candidate_azimuth;
+86:                     if (azimuth_denominator > 0) candidate_azimuth = std::atan(candidate_wx/azimuth_denominator);
+87:                     else if (azimuth_denominator < 0) {
+88:                         if (candidate_wx >= 0) candidate_azimuth = std::atan(candidate_wx/azimuth_denominator)+PI;
+89:                         else candidate_azimuth = std::atan(candidate_wx/azimuth_denominator)-PI;
+90:                     } else {
+91:                         if (candidate_wx > 0) candidate_azimuth = PI/2.0;
+92:                         else candidate_azimuth = -PI/2.0;
+93:                     }
+94:                     candidate_q2 = (candidate_azimuth-std::atan(L2*std::sin(candidate_elbow)/(L1+L2*std::cos(candidate_elbow))))/RAD;
+95:                     candidate_q3 = (candidate_elbow-PI)/RAD;
+96:                     while (candidate_q2-p[1] > 180.0) candidate_q2 -= 360.0;
+97:                     while (candidate_q2-p[1] < -180.0) candidate_q2 += 360.0;
+98:                     while (candidate_q3-p[2] > 180.0) candidate_q3 -= 360.0;
+99:                     while (candidate_q3-p[2] < -180.0) candidate_q3 += 360.0;
+100:                     candidate_q4 = anchor[3]+(anchor[1]+anchor[2])-(candidate_q2+candidate_q3);
+101:                     trial_ok = std::abs(candidate_q2-p[1]) <= JOINT_VCAP[1]*dt
+102:                         && std::abs(candidate_q3-p[2]) <= JOINT_VCAP[2]*dt
+103:                         && std::abs(candidate_q4-p[3]) <= JOINT_VCAP[3]*dt;
+104:                 }
+105:                 if (trial_ok) {
+106:                     lower_step = trial_step; best_step = trial_step;
+107:                     best_wx = candidate_wx; best_wy = candidate_wy;
+108:                     best_q2 = candidate_q2; best_q3 = candidate_q3; best_q4 = candidate_q4;
+109:                     if (i == 0) break;
+110:                 } else {
+111:                     upper_step = trial_step;
+112:                 }
+113:             }
+114:             delta_sigma = best_step;
+115:             if (delta_sigma > 0) {
+116:                 wx = best_wx; wy = best_wy;
+117:                 p[0] = anchor[0]; p[4] = anchor[4];
+118:                 p[1] = best_q2; p[2] = best_q3; p[3] = best_q4;
+119:             }
+120:         }
+121:         sigma += delta_sigma;
+122:         path_speed = delta_sigma/dt;
+123:         limited = delta_sigma < delta_sigma_des;
+124:         for (int i = 0; i < 5; ++i) {
+125:             v[i] = (p[i]-position_before[i])/dt;
+126:             a[i] = (v[i]-velocity_before[i])/dt;
+127:         }
+128:     }
+129: };
+
+B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_tests.cpp
+1: #include "arm_cart_jog_reference.h"
+2: #include "positioning_arm/kinematics.h"
+3: #include <cstring>
+4: #include <iomanip>
+5: #include <iostream>
+6: #include <limits>
+7: #include <map>
+8: #include <random>
+9: #include <string>
+10: 
+11: using Gen = ArmCartJogReference;
+12: using Axes = std::array<double, 5>;
+13: constexpr double DT = 0.001;
+14: int failures = 0;
+15: double velocity_difference = 0, acceleration_difference = 0, maximum_path_acceleration_ratio = 0;
+16: bool path_acceleration_ok = true;
+17: std::array<double, 2> nominal_bounds{};
+18: std::array<double, 3> peak_bounds{};
+19: std::string peak_case;
+20: double peak_v0=0,peak_v1=0,peak_duration=0,peak_previous_path_speed=0,peak_path_speed=0;
+21: double peak_previous_nominal=0,peak_nominal=0,peak_tau=0;
+22: int peak_case_cycle=0;
+23: std::map<std::string,int> cycle_count;
+24: std::map<std::string,double> acceleration_ratio_by_case;
+25: bool cycles_finite = true;
+26: 
+27: positioning_arm::ArmKinematicConfig config()
+28: {
+29:     positioning_arm::ArmKinematicConfig c;
+30:     c.lower.setConstant(-std::numeric_limits<double>::infinity());
+31:     c.upper.setConstant(std::numeric_limits<double>::infinity());
+32:     c.lower[4] = -60*Gen::RAD; c.upper[4] = 60*Gen::RAD;
+33:     for (int i = 0; i < 5; ++i) {
+34:         c.calibration[i] = {0, i == 0 ? 0.001 : Gen::RAD, 1};
+35:         c.max_velocity[i] = Gen::JOINT_VCAP[i]*(i == 0 ? 0.001 : Gen::RAD);
+36:     }
+37:     return c;
+38: }
+39: positioning_arm::JointVector joints(const Axes& p)
+40: {
+41:     positioning_arm::JointVector q;
+42:     for (int i = 0; i < 5; ++i) q[i] = p[i]*(i == 0 ? 0.001 : Gen::RAD);
+43:     return q;
+44: }
+45: Axes seed(int mode, double effective_elbow)
+46: {
+47:     const double e = effective_elbow*Gen::RAD;
+48:     const double q2 = -std::atan(Gen::L2*std::sin(e)/(Gen::L1+Gen::L2*std::cos(e)))/Gen::RAD;
+49:     return {{100, q2+(mode == 2 ? 90.0 : 0.0), effective_elbow-180, 37, 12}};
+50: }
+51: Gen begin(int mode, int dir, double speed, Axes p)
+52: {
+53:     nominal_bounds = {{0,0}};
+54:     Gen g; g.step(true, false, mode, dir, speed, p, DT); return g;
+55: }
+56: void tick(Gen& g, bool held, int mode, int dir, double speed, const char* name)
+57: {
+58:     const auto prev_p = g.p, prev_v = g.v;
+59:     const double previous_path_speed = g.path_speed, previous_nominal = g.path_v;
+60:     const int cycle=++cycle_count[name];
+61:     g.step(false, held, mode, dir, speed, g.p, DT);
+62:     for (int i = 0; i < 5; ++i)
+63:         cycles_finite = cycles_finite && std::isfinite(g.p[i]) && std::isfinite(g.v[i]) && std::isfinite(g.a[i]);
+64:     cycles_finite = cycles_finite && std::isfinite(g.path_speed);
+65:     for (int i = 0; i < 5; ++i) {
+66:         velocity_difference = std::max(velocity_difference, std::abs(g.v[i]-(g.p[i]-prev_p[i])/DT));
+67:         acceleration_difference = std::max(acceleration_difference, std::abs(g.a[i]-(g.v[i]-prev_v[i])/DT));
+68:     }
+69:     // 路径速度差分跨三个名义速度样本，使用三者所属过渡的最大上限。
+70:     const double current_bound = 1.5*std::abs(g.v1-g.v0)/g.duration;
+71:     const std::array<double, 3> bounds{{nominal_bounds[0],nominal_bounds[1],current_bound}};
+72:     nominal_bounds = {{nominal_bounds[1],current_bound}};
+73:     if (!g.limited) {
+74:         const double bound = std::max({bounds[0],bounds[1],bounds[2]});
+75:         const double acceleration = std::abs((g.path_speed-previous_path_speed)/DT);
+76:         path_acceleration_ok = path_acceleration_ok && acceleration <= bound*1.01;
+77:         const double ratio = bound > 0 ? acceleration/bound : acceleration == 0 ? 0 : std::numeric_limits<double>::infinity();
+78:         acceleration_ratio_by_case[name] = std::max(acceleration_ratio_by_case[name], ratio);
+79:         if (std::strcmp(name,"T7")==0 && cycle==2201)
+80:             std::cout<<"T11 T7 boundary_cycle="<<cycle<<" B_k_minus_2="<<bounds[0]<<" B_k_minus_1="<<bounds[1]
+81:                 <<" B_k="<<bounds[2]<<" max_B="<<bound<<" previous_path_speed="<<previous_path_speed
+82:                 <<" path_speed="<<g.path_speed<<" acceleration="<<acceleration
+83:                 <<" allowed="<<1.01*bound<<" ratio="<<ratio<<'\n';
+84:         if(ratio>maximum_path_acceleration_ratio){
+85:             maximum_path_acceleration_ratio=ratio;peak_case=name;peak_case_cycle=cycle;peak_bounds=bounds;
+86:             peak_v0=g.v0;peak_v1=g.v1;peak_duration=g.duration;
+87:             peak_previous_path_speed=previous_path_speed;peak_path_speed=g.path_speed;
+88:             peak_previous_nominal=previous_nominal;peak_nominal=g.path_v;peak_tau=g.tau;
+89:         }
+90:     }
+91: }
+92: void result(const char* id, bool ok, const std::string& detail = "")
+93: {
+94:     std::cout << (ok ? "PASS " : "FAIL ") << id << " " << detail << '\n';
+95:     if (!ok) ++failures;
+96: }
+97: double angle_error(double a, double b) { return std::abs(std::remainder(a-b, 2*Gen::PI)); }
+98: double pitch(const positioning_arm::ArmPose& p)
+99: {
+100:     const Eigen::Vector3d axis = p.quaternion*Eigen::Vector3d(0,-1,0);
+101:     return std::atan2(axis.z(), std::hypot(axis.x(), axis.y()));
+102: }
+103: double yaw(const positioning_arm::ArmPose& p)
+104: {
+105:     const Eigen::Vector3d axis = p.quaternion*Eigen::Vector3d::UnitX();
+106:     return std::atan2(axis.y(), axis.x());
+107: }
+108: int main()
+109: {
+110:     std::cout << std::setprecision(12);
+111:     positioning_arm::PositioningArmKinematics truth(config());
+112:     std::mt19937 random(20261104);
+113:     double wrist_error = 0, inverse_error = 0; bool t1_finite = true;
+114:     for (int n = 0; n < 1000; ++n) {
+115:         auto uniform = [&]() { return static_cast<double>(random())/4294967295.0; };
+116:         Axes p{{100, -1080+2160*uniform(), (n%2 ? -1 : 1)*(1+178*uniform()), -1080+2160*uniform(), 12}};
+117:         Gen g = begin(1, 1, 5, p);
+118:         const auto fk = truth.forward(joints(p));
+119:         const Eigen::Vector3d tool = fk.quaternion*Eigen::Vector3d(config().lateral_offset,-config().tool_length,0);
+120:         wrist_error = std::max(wrist_error, std::hypot(g.wx-(fk.position.x()-tool.x())*1000,
+121:             g.wy-(fk.position.y()-tool.y())*1000));
+122:         // 独立atan2逆解验证原点回代，再验证发生器实际非零步的逆解。
+123:         const auto inverse = [&](double wx, double wy) {
+124:             const double cosine = std::clamp((wx*wx+wy*wy-Gen::L1*Gen::L1-Gen::L2*Gen::L2)/(2*Gen::L1*Gen::L2),-1.0,1.0);
+125:             const double alpha = g.branch*std::acos(cosine);
+126:             return std::array<double,2>{{std::atan2(wx,-wy)-std::atan(Gen::L2*std::sin(alpha)/(Gen::L1+Gen::L2*std::cos(alpha))), alpha-Gen::PI}};
+127:         };
+128:         const auto roundtrip = inverse(g.wx,g.wy);
+129:         inverse_error = std::max(inverse_error,std::max(angle_error(roundtrip[0],p[1]*Gen::RAD),angle_error(roundtrip[1],p[2]*Gen::RAD)));
+130:         tick(g,true,1,1,5,"T1");
+131:         const auto moved_inverse = inverse(g.wx,g.wy);
+132:         inverse_error = std::max(inverse_error,std::max(angle_error(moved_inverse[0],g.p[1]*Gen::RAD),angle_error(moved_inverse[1],g.p[2]*Gen::RAD)));
+133:         t1_finite = t1_finite && std::isfinite(g.p[1]) && std::isfinite(g.p[2]) && g.path_speed>0;
+134:     }
+135:     std::cout << "T1 wrist_mm=" << wrist_error << " inverse_rad=" << inverse_error << '\n';
+136:     result("T1", t1_finite && wrist_error <= 1e-6 && inverse_error <= 1e-9);
+137: 
+138:     bool t2 = true; double line_error = 0, invariants = 0;
+139:     for (int mode : {1,2}) for (double speed : {30.,15.,5.}) for (double elbow : {30.,90.,150.}) {
+140:         const auto p = seed(mode, elbow); auto g = begin(mode,1,speed,p);
+141:         const auto initial = truth.forward(joints(p));
+142:         for (int n = 1; n <= 3501; ++n) {
+143:             tick(g,n<=3000,mode,1,speed,"T2");
+144:             const auto fk = truth.forward(joints(g.p));
+145:             line_error = std::max(line_error,std::abs(fk.position[mode == 1 ? 1 : 0]
+146:                 - initial.position[mode == 1 ? 1 : 0])*1000);
+147:             invariants = std::max(invariants,std::max({std::abs(fk.position.z()-initial.position.z())*1000,
+148:                 angle_error(yaw(fk),yaw(initial))/Gen::RAD, std::abs(pitch(fk)-pitch(initial))/Gen::RAD}));
+149:             t2 = t2 && std::hypot(g.wx,g.wy)>=Gen::L1-Gen::L2
+150:                 && std::hypot(g.wx,g.wy)<=Gen::L1+Gen::L2 && std::memcmp(&g.p[0],&p[0],sizeof(double)) == 0
+151:                 && std::memcmp(&g.p[4],&p[4],sizeof(double)) == 0;
+152:         }
+153:     }
+154:     std::cout << "T2 line_mm=" << line_error << " invariant_max=" << invariants << '\n';
+155:     result("T2",t2 && line_error<=0.01 && invariants<=1e-6);
+156: 
+157:     auto g = begin(1,1,5,seed(1,90));
+158:     double peak = 0, prev = 0; bool monotonic = true; int acc_ticks = 0, stop_ticks = 0;
+159:     for (int n=1;n<=2000;++n) {
+160:         tick(g,true,1,1,5,"T3"); monotonic = monotonic && g.path_speed >= prev;
+161:         peak = std::max(peak,(g.path_speed-prev)/DT); prev = g.path_speed;
+162:         if (g.path_speed == 5 && acc_ticks == 0) acc_ticks=n;
+163:     }
+164:     const double sigma0=g.sigma;
+165:     for (int n=1;n<=501;++n) {
+166:         tick(g,false,0,0,0,"T3");
+167:         if (g.path_speed==0 && stop_ticks==0) stop_ticks=n;
+168:     }
+169:     const double stopping=g.sigma-sigma0;
+170:     std::cout<<"T3 acc_s="<<acc_ticks*DT<<" stop_s="<<stop_ticks*DT<<" peak_mm_s2="<<peak<<" stop_mm="<<stopping<<'\n';
+171:     result("T3",monotonic && std::abs(acc_ticks-1000)<=1 && std::abs(stop_ticks-500)<=1
+172:         && std::abs(peak-7.5)<=0.075 && std::abs(stopping-1.25)<=1.25*0.005);
+173: 
+174:     bool t4=true;
+175:     for (int mode=1;mode<=5;++mode) {
+176:         const Axes speeds = mode<=2 ? Axes{{30,15,5,0,0}} : mode==3 ? Axes{{3,2.5,1.25,0,0}} : Axes{{1.2,.8,.4,0,0}};
+177:         for (int tier=0;tier<3;++tier) {
+178:             g=begin(mode,1,speeds[tier],seed(mode,90));
+179:             for(int n=0;n<2000;++n) tick(g,true,mode,1,speeds[tier],"T4");
+180:             const double start=g.sigma;
+181:             for(int n=0;n<501;++n) tick(g,false,0,0,0,"T4");
+182:             const double distance=g.sigma-start;
+183:             std::cout<<"T4 mode="<<mode<<" tier="<<tier<<" stop_distance="<<distance<<'\n';
+184:             t4=t4 && (mode>3 || distance<=15);
+185:         }
+186:     }
+187:     result("T4",t4);
+188: 
+189:     g=begin(1,1,15,seed(1,90)); bool positive=true; int up=0,down=0;
+190:     for(int n=1;n<=5000;++n) {
+191:         const double speed=n<=2000?15:n<=4000?30:5;
+192:         tick(g,true,1,1,speed,"T5"); positive=positive && g.path_speed>0;
+193:         if(n>2000 && n<=4000 && g.path_speed==30 && up==0) up=n-2000;
+194:         if(n>4000 && g.path_speed==5 && down==0) down=n-4000;
+195:     }
+196:     std::cout<<"T5 up_s="<<up*DT<<" down_s="<<down*DT<<'\n';
+197:     result("T5",positive && std::abs(up-1000)<=1 && std::abs(down-500)<=1);
+198: 
+199:     g=begin(1,1,15,seed(1,90)); int switched=0; bool switched_at_zero=false;
+200:     for(int n=1;n<=4000;++n) {
+201:         tick(g,true,n<=2000?1:2,1,15,"T6");
+202:         if(g.latched_mode==2 && switched==0) { switched=n-2000; switched_at_zero=g.path_v==0; }
+203:     }
+204:     std::cout<<"T6 switch_after_s="<<switched*DT<<" path_speed="<<g.path_speed<<'\n';
+205:     result("T6",switched_at_zero && std::abs(switched-500)<=1 && g.path_speed>0,
+206:         "Gen only; stage 25 ownership checked in ST static audit");
+207: 
+208:     g=begin(1,1,5,seed(1,90)); double minimum=5; double at_repress=0;
+209:     for(int n=1;n<=4000;++n) {
+210:         tick(g,n<=2000 || n>2200,1,1,5,"T7");
+211:         if(n==2200)at_repress=g.path_speed;
+212:         if(n>2000)minimum=std::min(minimum,g.path_speed);
+213:     }
+214:     std::cout<<"T7 minimum="<<minimum<<" repressed="<<at_repress<<" final="<<g.path_speed<<'\n';
+215:     result("T7",minimum>0 && g.path_speed==5);
+216: 
+217:     g=begin(1,1,5,seed(1,90)); double alive_age=0,at_timeout=0;int timeout_tick=0;
+218:     for(int n=1;n<=3100;++n) {
+219:         if(n<=2000)alive_age=0;else alive_age+=DT;
+220:         const bool held=alive_age<0.5;
+221:         if(!held && timeout_tick==0){timeout_tick=n-2000;at_timeout=g.sigma;}
+222:         tick(g,held,1,1,5,"T8");
+223:     }
+224:     std::cout<<"T8 age_cycles="<<timeout_tick<<" stop_mm="<<g.sigma-at_timeout<<'\n';
+225:     result("T8",timeout_tick==500 && g.path_speed==0 && std::abs(g.sigma-at_timeout-1.25)<=1.25*.005,
+226:         "alive-age predicate matches ArmCartJog; no error path");
+227: 
+228:     // 有效肘角10度、腕点朝+X；慢档径向伸直3秒，再反向3秒。
+229:     const auto radial=seed(2,10);g=begin(1,1,5,radial);
+230:     bool cap=true,flag=true,finite=true,near_straight=false,branch_unchanged=true;
+231:     double max_joint=0,min_radius=std::hypot(g.wx,g.wy),max_radius=min_radius,outward_final_speed=0;
+232:     double outward_elbow=0,reverse_full_speed_s=0;
+233:     const int old_branch=g.branch;
+234:     for(int n=1;n<=6000;++n){
+235:         const auto before=g.p;
+236:         const double previous_nominal_speed=g.path_v;
+237:         tick(g,true,1,n<=3000?1:-1,5,n<=3000?"T9":"T9 reverse");
+238:         for(int i=0;i<5;++i){
+239:             const double joint_speed=std::abs(g.p[i]-before[i])/DT;
+240:             max_joint=std::max(max_joint,joint_speed);
+241:             cap=cap && joint_speed<=Gen::JOINT_VCAP[i]*(1+1e-9);
+242:             finite=finite && std::isfinite(g.p[i]) && std::isfinite(g.v[i]) && std::isfinite(g.a[i]);
+243:         }
+244:         const double radius=std::hypot(g.wx,g.wy);
+245:         min_radius=std::min(min_radius,radius);max_radius=std::max(max_radius,radius);
+246:         flag=flag && (g.path_speed*DT>=0.5*(g.path_v+previous_nominal_speed)*DT || g.limited);
+247:         branch_unchanged=branch_unchanged && g.branch==old_branch;
+248:         if(n==3000){outward_final_speed=g.path_speed;near_straight=g.limited;
+249:             outward_elbow=std::abs(std::remainder(g.p[2]+180,360.));}
+250:         if(n>3000 && g.path_speed==5 && reverse_full_speed_s==0)reverse_full_speed_s=(n-3000)*DT;
+251:     }
+252:     std::cout<<"T9 max_joint_deg_s="<<max_joint<<" radius_min_mm="<<min_radius<<" radius_max_mm="<<max_radius
+253:         <<" outward_final_speed="<<outward_final_speed<<" outward_effective_elbow_deg="<<outward_elbow
+254:         <<" reverse_full_speed_s="<<reverse_full_speed_s<<" reverse_final_speed="<<g.path_speed<<'\n';
+255:     result("T9",cap && flag && finite && near_straight && outward_final_speed<.001
+256:         && min_radius>=Gen::L1-Gen::L2 && max_radius<=Gen::L1+Gen::L2
+257:         && reverse_full_speed_s>0 && reverse_full_speed_s<=3 && g.path_speed==5 && branch_unchanged);
+258: 
+259:     bool t10=true;
+260:     for(int mode=3;mode<=5;++mode){
+261:         const double speed=mode==3?3:1.2; const auto p=seed(mode,90);
+262:         g=begin(mode,1,speed,p); const auto before=truth.forward(joints(p));
+263:         for(int n=0;n<2000;++n)tick(g,true,mode,1,speed,"T10");
+264:         const int j=mode==3?0:mode==4?4:3; bool others=true;
+265:         for(int i=0;i<5;++i)if(i!=j)others=others && std::memcmp(&g.p[i],&p[i],sizeof(double))==0;
+266:         const auto after=truth.forward(joints(g.p));
+267:         const double integral_error=std::abs(std::abs(g.p[j]-p[j])-1.5*speed);
+268:         const bool sign=mode==3?g.p[0]<p[0]:mode==4?pitch(after)>pitch(before):std::remainder(yaw(after)-yaw(before),2*Gen::PI)>0;
+269:         std::cout<<"T10 mode="<<mode<<" distance="<<std::abs(g.p[j]-p[j])<<" analytic_integral_error="<<integral_error<<'\n';
+270:         t10=t10 && others && sign && integral_error<=1e-4;
+271:     }
+272:     result("T10",t10,"trapezoidal step versus continuous cubic integral, tolerance 1e-4");
+273:     bool t12=true;
+274:     for(double s:{3.,2.5,1.25})t12=t12 && s<=Gen::JOINT_VCAP[0];
+275:     for(double s:{1.2,.8,.4})t12=t12 && s<=Gen::JOINT_VCAP[3] && s<=Gen::JOINT_VCAP[4];
+276:     result("T12",t12,"UI speed table checked separately");
+277: 
+278:     bool branch_retained=true;
+279:     for(double known_q3:{-90.,90.}){
+280:         g=begin(1,1,5,Axes{{100,0,known_q3,0,0}});
+281:         const int prior_branch=g.branch;
+282:         for(double ambiguous_q3:{0.,180.,-180.,360.,-360.,540.,-540.}){
+283:             g.step(true,false,1,1,5,Axes{{100,0,ambiguous_q3,0,0}},DT);
+284:             branch_retained=branch_retained && g.branch==prior_branch;
+285:         }
+286:     }
+287:     result("BRANCH",branch_retained,"folded/straight and multi-turn equivalents retain both previous branches");
+288: 
+289:     bool t13=true;
+290:     for(int mode:{1,2})for(int dir:{1,-1}){
+291:         const Axes zero{{100,0,0,0,0}};g=begin(mode,dir,5,zero);
+292:         const auto initial=truth.forward(joints(zero));
+293:         double straight_error=0,max_increment_speed=0;bool finite=true,limited_seen=false,negative_bend=true;
+294:         for(int n=0;n<2000;++n){
+295:             const auto previous=g.p;
+296:             tick(g,true,mode,dir,5,"T13");
+297:             const auto fk=truth.forward(joints(g.p));
+298:             straight_error=std::max(straight_error,std::abs(fk.position[mode==1?1:0]-initial.position[mode==1?1:0])*1000);
+299:             for(int i=0;i<5;++i){
+300:                 const double joint_speed=std::abs(g.p[i]-previous[i])/DT;
+301:                 max_increment_speed=std::max(max_increment_speed,joint_speed);
+302:                 t13=t13 && joint_speed<=Gen::JOINT_VCAP[i]*(1+1e-9);
+303:                 finite=finite && std::isfinite(g.p[i]) && std::isfinite(g.v[i]) && std::isfinite(g.a[i]);
+304:             }
+305:             finite=finite && std::isfinite(g.path_speed);
+306:             limited_seen=limited_seen || g.limited;
+307:             negative_bend=negative_bend && g.p[2]<=0 && g.branch==Gen::INITIAL_BRANCH;
+308:         }
+309:         const double displacement=(truth.forward(joints(g.p)).position-initial.position).norm()*1000;
+310:         const bool inward=mode==2 && dir==1;
+311:         std::cout<<"T13 mode="<<mode<<" dir="<<dir<<" displacement_mm="<<displacement
+312:             <<" final_path_speed="<<g.path_speed<<" line_mm="<<straight_error<<" max_joint_deg_s="<<max_increment_speed
+313:             <<" q3_deg="<<g.p[2]<<" limited="<<g.limited<<'\n';
+314:         t13=t13 && finite && negative_bend && straight_error<=.01 && (inward?limited_seen:displacement>0);
+315:     }
+316:     result("T13",t13,"program zero wrist=(0,-20 mm); Y+ is toward axis2 pivot; Gen has no error output");
+317: 
+318:     for(const auto& item:acceleration_ratio_by_case)
+319:         std::cout<<"T11 case="<<item.first<<" path_acceleration_ratio="<<item.second<<'\n';
+320:     std::cout<<"T11 velocity_difference="<<velocity_difference<<" acceleration_difference="<<acceleration_difference
+321:         <<" maximum_path_acceleration_ratio="<<maximum_path_acceleration_ratio<<'\n';
+322:     std::cout<<"T11 peak_case="<<peak_case<<" cycle="<<peak_case_cycle<<" v0="<<peak_v0<<" v1="<<peak_v1
+323:         <<" T="<<peak_duration<<" tau="<<peak_tau<<" previous_nominal="<<peak_previous_nominal<<" nominal="<<peak_nominal
+324:         <<" previous_path_speed="<<peak_previous_path_speed<<" path_speed="<<peak_path_speed
+325:         <<" acceleration="<<std::abs(peak_path_speed-peak_previous_path_speed)/DT
+326:         <<" B_k_minus_2="<<peak_bounds[0]<<" B_k_minus_1="<<peak_bounds[1]<<" B_k="<<peak_bounds[2]
+327:         <<" allowed="<<1.01*std::max({peak_bounds[0],peak_bounds[1],peak_bounds[2]})<<'\n';
+328:     result("T11",cycles_finite && velocity_difference<=1e-9 && acceleration_difference<=1e-9 && path_acceleration_ok);
+329: 
+330:     auto shifted=config();shifted.base_offset_mm=Eigen::Vector3d(20,-30,40);
+331:     positioning_arm::PositioningArmKinematics translated(shifted);auto p=seed(1,90);
+332:     const auto base=truth.forward(joints(p)), moved=translated.forward(joints(p));
+333:     const auto j=translated.computeFrameJacobian(joints(p)),j0=truth.computeFrameJacobian(joints(p));
+334:     const auto ik0=truth.solveCartesianJog(joints(p),{{.0001,0,0},0,0,.05});
+335:     const auto ik1=translated.solveCartesianJog(joints(p),{{.0001,0,0},0,0,.05});
+336:     result("OFFSET",(moved.position-base.position-shifted.base_offset_mm*.001).norm()<1e-12
+337:         && (j-j0).norm()<1e-12 && ik0.success() && ik1.success() && (ik0.target-ik1.target).norm()<1e-12);
+338:     result("FINITE",cycles_finite);
+339:     std::cout<<"TOTAL failures="<<failures<<'\n';
+340:     return failures?1:0;
+341: }
+
+B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_equivalence.cpp
+1: #include "arm_cart_jog_reference.h"
+2: #include "arm_cart_jog_st_generated.h"
+3: #include <iostream>
+4: #include <iomanip>
+5: 
+6: int main()
+7: {
+8:     static_assert(StCartJog::T_ACC == ArmCartJogReference::T_ACC);
+9:     static_assert(StCartJog::T_DEC == ArmCartJogReference::T_DEC);
+10:     static_assert(StCartJog::INITIAL_BRANCH == ArmCartJogReference::INITIAL_BRANCH);
+11:     static_assert(StCartJog::BISECTION_COUNT == ArmCartJogReference::BISECTION_COUNT);
+12:     static_assert(StCartJog::L1 == ArmCartJogReference::L1);
+13:     static_assert(StCartJog::L2 == ArmCartJogReference::L2);
+14:     static_assert(StCartJog::PI == ArmCartJogReference::PI);
+15:     static_assert(StCartJog::RAD == ArmCartJogReference::RAD);
+16:     for (int i=0;i<5;++i) if(StCartJog::JOINT_VCAP[i+1]!=ArmCartJogReference::JOINT_VCAP[i]) return 1;
+17:     double difference=0;
+18:     int cycles=0;
+19:     for (int branch : {-2,-1,0,1,2}) for (int first_mode=1;first_mode<=5;++first_mode) for(int initial_dir:{-1,1}) {
+20:         ArmCartJogReference ref;
+21:         StCartJog st;
+22:         const std::array<double,5> seed = branch==0 ? std::array<double,5>{{100,0,0,0,0}}
+23:             : std::array<double,5>{{100,37,branch*90.0,720,12}};
+24:         const std::array<double,6> st_seed{{0,seed[0],seed[1],seed[2],seed[3],seed[4]}};
+25:         ref.step(true,false,first_mode,initial_dir,5,seed,.001);
+26:         st.step(true,false,first_mode,initial_dir,5,st_seed,.001);
+27:         for(int n=0;n<12000;++n) {
+28:             const bool held=n<11000 && !(n>=7000 && n<7200);
+29:             const int mode=n<5000?first_mode:first_mode%5+1;
+30:             const int dir=n<8500?initial_dir:-initial_dir;
+31:             const double speed=n<2000?5:n<4000?15:n<6000?30:5;
+32:             ref.step(false,held,mode,dir,speed,seed,.001);
+33:             st.step(false,held,mode,dir,speed,st_seed,.001);
+34:             for(int i=0;i<5;++i) {
+35:                 if (!std::isfinite(ref.p[i]) || !std::isfinite(st.p[i+1])
+36:                     || !std::isfinite(ref.v[i]) || !std::isfinite(st.v[i+1])
+37:                     || !std::isfinite(ref.a[i]) || !std::isfinite(st.a[i+1])) return 1;
+38:                 difference=std::max(difference,std::abs(ref.p[i]-st.p[i+1]));
+39:                 difference=std::max(difference,std::abs(ref.v[i]-st.v[i+1]));
+40:                 difference=std::max(difference,std::abs(ref.a[i]-st.a[i+1]));
+41:             }
+42:             for(const auto& pair : {std::pair<double,double>{ref.path_v,st.path_v},
+43:                 {ref.v0,st.v0},{ref.v1,st.v1},{ref.tau,st.tau},{ref.duration,st.duration},
+44:                 {ref.sigma,st.sigma},{ref.wx,st.wx},{ref.wy,st.wy}})
+45:                 difference=std::max(difference,std::abs(pair.first-pair.second));
+46:             if (!std::isfinite(ref.path_speed) || !std::isfinite(st.path_speed)
+47:                 || !std::isfinite(ref.target_speed) || !std::isfinite(st.target_speed)) return 1;
+48:             difference=std::max(difference,std::abs(ref.path_speed-st.path_speed));
+49:             difference=std::max(difference,std::abs(ref.target_speed-st.target_speed));
+50:             if(ref.limited!=st.limited
+51:                 || ref.branch!=st.branch || ref.latched_mode!=st.latched_mode || ref.latched_dir!=st.latched_dir) return 1;
+52:             ++cycles;
+53:         }
+54:     }
+55:     std::cout<<std::setprecision(17)<<(difference==0?"PASS":"FAIL")
+56:         <<" ST translated statements versus handwritten reference, cycles="<<cycles
+57:         <<", max_position_velocity_acceleration_path_difference="<<difference<<'\n';
+58:     return difference==0?0:1;
+59: }
+
+B数据端/工程/PositioningArmKinematics/src/kinematics.cpp
+1: #include "positioning_arm/kinematics.h"
+2: 
+3: #include <Eigen/SVD>
+4: #include <algorithm>
+5: #include <cmath>
+6: #include <limits>
+7: #include <stdexcept>
+8: 
+9: namespace positioning_arm {
+10: namespace {
+11: constexpr double Pi = 3.14159265358979323846;
+12: 
+13: void require(bool condition, const char* message)
+14: {
+15:     if (!condition) throw std::invalid_argument(message);
+16: }
+17: 
+18: bool positive(double value)
+19: {
+20:     return std::isfinite(value) && value > 0;
+21: }
+22: 
+23: Eigen::Quaterniond normalized(Eigen::Quaterniond value)
+24: {
+25:     require(value.coeffs().allFinite() && positive(value.norm()), "四元数无效");
+26:     value.normalize();
+27:     return value;
+28: }
+29: 
+30: Eigen::Quaterniond rotationZ(double angle)
+31: {
+32:     return Eigen::Quaterniond(Eigen::AngleAxisd(angle, Eigen::Vector3d::UnitZ()));
+33: }
+34: 
+35: ArmKinematicConfig validate(ArmKinematicConfig config, const SolverOptions& options)
+36: {
+37:     require(config.link_lengths.allFinite() && (config.link_lengths.array() > 0).all(),
+38:         "两根连杆长度必须为正");
+39:     require(positive(config.lateral_offset) && positive(config.tool_length),
+40:         "L形工具尺寸必须为正");
+41:     require(config.base_offset_mm.allFinite(), "基座平移偏移必须为有限毫米值");
+42:     for (int i = 0; i < AxisCount; ++i) {
+43:         require(!std::isnan(config.lower[i]) && !std::isnan(config.upper[i])
+44:             && config.lower[i] < config.upper[i],
+45:             "轴限位必须有序；使用正负无穷表示不设软件限位");
+46:     }
+47:     require(config.max_velocity.allFinite()
+48:         && (config.max_velocity.array() > 0).all(),
+49:         "五轴速度限位必须为正");
+50:     for (const auto& calibration : config.calibration) {
+51:         require(std::isfinite(calibration.zero) && positive(calibration.scale)
+52:             && (calibration.direction == -1 || calibration.direction == 1),
+53:             "编码器标定参数无效");
+54:     }
+55:     for (double value : {options.position_tolerance,
+56:         options.singularity_stop, options.singularity_slow,
+57:         options.max_translation, options.max_rotation}) {
+58:         require(positive(value), "求解器参数必须为正");
+59:     }
+60:     require(options.singularity_stop < options.singularity_slow
+61:         && options.max_rotation < Pi,
+62:         "奇异阈值或角度步长无效");
+63:     return config;
+64: }
+65: } // namespace
+66: 
+67: PositioningArmKinematics::PositioningArmKinematics(
+68:     const ArmKinematicConfig& config, const SolverOptions& options)
+69:     : config_(validate(config, options)), options_(options)
+70: {
+71:     characteristic_length_ = config_.link_lengths.sum()
+72:         + std::hypot(config_.lateral_offset, config_.tool_length);
+73:     require(positive(characteristic_length_), "特征长度无效");
+74: }
+75: 
+76: PositioningArmKinematics::~PositioningArmKinematics() = default;
+77: 
+78: ArmPose PositioningArmKinematics::forward(const JointVector& joints) const
+79: {
+80:     require(checkLimits(joints), "轴位置无效或超出限位");
+81: 
+82:     ArmPose result;
+83:     // 基座平移只改变原点；轴1的Z符号受归零逐位回归约束，见交付报告。
+84:     result.position << 0, 0, joints[0];
+85: 
+86:     const double first_link_yaw = joints[1];
+87:     result.position += config_.link_lengths[0]
+88:         * Eigen::Vector3d(std::sin(first_link_yaw), -std::cos(first_link_yaw), 0);
+89: 
+90:     // 轴3机械零位使第二根连杆反向；工具偏置仍按轴2+轴3+轴4定义。
+91:     const double second_link_yaw = first_link_yaw + joints[2] + Pi;
+92:     result.position += config_.link_lengths[1]
+93:         * Eigen::Vector3d(std::sin(second_link_yaw), -std::cos(second_link_yaw), 0);
+94: 
+95:     const double tool_yaw = joints[1] + joints[2] + joints[3] - Pi / 2;
+96:     const Eigen::Quaterniond wrist_rotation = rotationZ(tool_yaw)
+97:         * Eigen::Quaterniond(Eigen::AngleAxisd(joints[4], Eigen::Vector3d::UnitX()));
+98:     result.position += wrist_rotation
+99:         * Eigen::Vector3d(config_.lateral_offset, -config_.tool_length, 0);
+100:     result.position += config_.base_offset_mm * 0.001;
+101:     result.quaternion = normalized(wrist_rotation);
+102:     if (result.quaternion.w() < 0) result.quaternion.coeffs() *= -1;
+103:     return result;
+104: }
+105: 
+106: FrameJacobian PositioningArmKinematics::computeFrameJacobian(
+107:     const JointVector& joints) const
+108: {
+109:     require(checkLimits(joints), "轴位置无效或超出限位");
+110: 
+111:     const ArmPose pose = forward(joints);
+112:     FrameJacobian result = FrameJacobian::Zero();
+113:     result.block<3, 1>(0, 0) = Eigen::Vector3d::UnitZ();
+114: 
+115:     const double z = joints[0];
+116:     Eigen::Vector3d joint_origin = config_.base_offset_mm * 0.001;
+117:     joint_origin.z() += z;
+118:     double yaw = 0;
+119:     for (int i = 0; i < 3; ++i) {
+120:         const Eigen::Vector3d axis = Eigen::Vector3d::UnitZ();
+121:         result.block<3, 1>(0, i + 1) = axis.cross(pose.position - joint_origin);
+122:         result.block<3, 1>(3, i + 1) = axis;
+123:         yaw += joints[i + 1];
+124:         if (i == 0) {
+125:             joint_origin += config_.link_lengths[0]
+126:                 * Eigen::Vector3d(std::sin(yaw), -std::cos(yaw), 0);
+127:         } else if (i == 1) {
+128:             joint_origin += config_.link_lengths[1]
+129:                 * Eigen::Vector3d(std::sin(yaw + Pi), -std::cos(yaw + Pi), 0);
+130:         }
+131:     }
+132: 
+133:     const Eigen::Vector3d pitch_axis_world =
+134:         rotationZ(yaw - Pi / 2) * Eigen::Vector3d::UnitX();
+135:     result.block<3, 1>(0, 4) =
+136:         pitch_axis_world.cross(pose.position - joint_origin);
+137:     result.block<3, 1>(3, 4) = pitch_axis_world;
+138:     return result;
+139: }
+140: 
+141: bool PositioningArmKinematics::checkLimits(const JointVector& joints) const
+142: {
+143:     return joints.allFinite()
+144:         && (joints.array() >= config_.lower.array()).all()
+145:         && (joints.array() <= config_.upper.array()).all();
+146: }
+147: 
+148: bool PositioningArmKinematics::isNearSingularity(const JointVector& joints) const
+149: {
+150:     require(checkLimits(joints), "轴位置无效或超出限位");
+151: 
+152:     // 平面机构在轴3伸直或折叠时，优先按机械结构直接判定。
+153:     if (std::abs(std::sin(joints[2])) < options_.singularity_slow) return true;
+154: 
+155:     const auto full = computeFrameJacobian(joints);
+156:     Eigen::Matrix3d jacobian;
+157:     jacobian.topRows<2>() = full.block<2, 3>(0, 1) / characteristic_length_;
+158:     jacobian.bottomRows<1>().setOnes();
+159:     return Eigen::JacobiSVD<Eigen::Matrix3d>(jacobian)
+160:         .singularValues().minCoeff() < options_.singularity_slow;
+161: }
+162: 
+163: JointVector PositioningArmKinematics::fromEncoder(const JointVector& encoder) const
+164: {
+165:     require(encoder.allFinite(), "编码器位置无效");
+166:     JointVector joints;
+167:     for (int i = 0; i < AxisCount; ++i) {
+168:         const auto& calibration = config_.calibration[i];
+169:         joints[i] = (encoder[i] - calibration.zero)
+170:             * calibration.scale * calibration.direction;
+171:     }
+172:     require(checkLimits(joints), "编码器换算后超出轴限位");
+173:     return joints;
+174: }
+175: 
+176: JointVector PositioningArmKinematics::toEncoder(const JointVector& joints) const
+177: {
+178:     require(checkLimits(joints), "轴位置无效或超出限位");
+179:     JointVector encoder;
+180:     for (int i = 0; i < AxisCount; ++i) {
+181:         const auto& calibration = config_.calibration[i];
+182:         encoder[i] = joints[i]
+183:             / (calibration.scale * calibration.direction) + calibration.zero;
+184:     }
+185:     require(encoder.allFinite(), "编码器换算结果无效");
+186:     return encoder;
+187: }
+188: 
+189: Eigen::Quaterniond PositioningArmKinematics::continuousQuaternion(
+190:     Eigen::Quaterniond value, const Eigen::Quaterniond& reference)
+191: {
+192:     value = normalized(value);
+193:     if (value.dot(normalized(reference)) < 0) value.coeffs() *= -1;
+194:     return value;
+195: }
+196: 
+197: IkResult PositioningArmKinematics::solveCartesianJog(
+198:     const JointVector& current, const CartesianJog& command) const
+199: {
+200:     IkResult result;
+201:     result.target = current;
+202:     if (!current.allFinite() || !command.translation.allFinite()
+203:         || !std::isfinite(command.yaw) || !std::isfinite(command.pitch)
+204:         || !positive(command.duration) || command.duration > 1) {
+205:         return result;
+206:     }
+207:     if (!checkLimits(current)) {
+208:         result.status = IkStatus::JointLimit;
+209:         return result;
+210:     }
+211:     const ArmPose current_pose = forward(current);
+212:     result.pose = current_pose;
+213:     const auto active = (command.translation.array() != 0).count()
+214:         + (command.yaw != 0) + (command.pitch != 0);
+215:     if (active > 1) return result;
+216:     if (command.translation.norm() > options_.max_translation
+217:         || std::abs(command.yaw) + std::abs(command.pitch) > options_.max_rotation) {
+218:         result.status = IkStatus::StepLimit;
+219:         return result;
+220:     }
+221: 
+222:     // 升降、抬头和静止命令不经过平面逆解，也不受平面机械奇异影响。
+223:     if (active == 0 || command.translation.z() != 0 || command.pitch != 0) {
+224:         JointVector next = current;
+225:         next[0] += command.translation.z();
+226:         next[4] -= command.pitch;
+227:         if (!checkLimits(next)) {
+228:             result.status = IkStatus::JointLimit;
+229:             return result;
+230:         }
+231:         if (((next - current).cwiseAbs().array()
+232:             > (config_.max_velocity * command.duration).array()).any()) {
+233:             result.status = IkStatus::StepLimit;
+234:             return result;
+235:         }
+236:         result.status = IkStatus::Success;
+237:         result.target = next;
+238:         result.pose = forward(next);
+239:         result.pose.quaternion = continuousQuaternion(result.pose.quaternion, current_pose.quaternion);
+240:         result.position_error = result.orientation_error = 0;
+241:         return result;
+242:     }
+243: 
+244:     ArmPose target = current_pose;
+245:     target.position += command.translation;
+246:     target.quaternion = normalized(
+247:         rotationZ(command.yaw) * current_pose.quaternion);
+248:     target.quaternion = continuousQuaternion(target.quaternion, current_pose.quaternion);
+249: 
+250:     const JointVector travel = config_.max_velocity * command.duration;
+251:     if (!travel.allFinite()) return result;
+252: 
+253:     const auto planar_sigma = [&](const JointVector& joints) {
+254:         const auto full = computeFrameJacobian(joints);
+255:         Eigen::Matrix3d planar;
+256:         planar.topRows<2>() = full.block<2, 3>(0, 1) / characteristic_length_;
+257:         planar.bottomRows<1>().setOnes();
+258:         return (std::min)(std::abs(std::sin(joints[2])),
+259:             Eigen::JacobiSVD<Eigen::Matrix3d>(planar).singularValues().minCoeff());
+260:     };
+261:     if (planar_sigma(current) < options_.singularity_stop) {
+262:         result.status = IkStatus::NearSingularity;
+263:         return result;
+264:     }
+265: 
+266:     // 解析解只处理平面三轴：先扣除工具偏置，再解轴2、3两连杆，最后由总偏航角解轴4。
+267:     const double target_yaw = current[1] + current[2] + current[3]
+268:         - Pi / 2 + command.yaw;
+269:     const double pitch = current[4];
+270:     const double tool_x = config_.lateral_offset * std::cos(target_yaw)
+271:         + config_.tool_length * std::cos(pitch) * std::sin(target_yaw);
+272:     const double tool_y = config_.lateral_offset * std::sin(target_yaw)
+273:         - config_.tool_length * std::cos(pitch) * std::cos(target_yaw);
+274:     const double wrist_x = target.position.x() - config_.base_offset_mm.x() * 0.001 - tool_x;
+275:     const double wrist_y = target.position.y() - config_.base_offset_mm.y() * 0.001 - tool_y;
+276:     const double radius = std::hypot(wrist_x, wrist_y);
+277:     const double minimum_radius = std::abs(config_.link_lengths[0]
+278:         - config_.link_lengths[1]);
+279:     const double maximum_radius = config_.link_lengths.sum();
+280:     const double tolerance = (std::max)(options_.position_tolerance, 1e-12);
+281:     if (!std::isfinite(radius)
+282:         || radius < minimum_radius - tolerance
+283:         || radius > maximum_radius + tolerance) {
+284:         result.status = IkStatus::NoConvergence;
+285:         return result;
+286:     }
+287: 
+288:     const double cosine_q3 = (std::max)(-1.0, (std::min)(1.0,
+289:         (radius * radius - config_.link_lengths[0] * config_.link_lengths[0]
+290:             - config_.link_lengths[1] * config_.link_lengths[1])
+291:         / (2 * config_.link_lengths[0] * config_.link_lengths[1])));
+292:     const double elbow = std::acos(cosine_q3);
+293:     const double current_branch = std::sin(current[2]);
+294:     if (std::abs(current_branch) < options_.singularity_stop) {
+295:         result.status = IkStatus::NearSingularity;
+296:         return result;
+297:     }
+298: 
+299:     const auto nearest_equivalent = [](double principal, double reference) {
+300:         return reference + std::remainder(
+301:             principal - std::remainder(reference, 2 * Pi), 2 * Pi);
+302:     };
+303:     JointVector best = current;
+304:     double best_cost = std::numeric_limits<double>::infinity();
+305:     IkStatus blocked = IkStatus::NoConvergence;
+306:     for (double branch : {1.0, -1.0}) {
+307:         const double effective_q3 = branch * elbow;
+308:         const double q3 = effective_q3 - Pi;
+309:         const double q2 = std::atan2(wrist_x, -wrist_y)
+310:             - std::atan2(config_.link_lengths[1] * std::sin(effective_q3),
+311:                 config_.link_lengths[0] + config_.link_lengths[1] * std::cos(effective_q3));
+312:         JointVector candidate = current;
+313:         candidate[1] = nearest_equivalent(q2, current[1]);
+314:         candidate[2] = nearest_equivalent(q3, current[2]);
+315:         candidate[3] = nearest_equivalent(
+316:             target_yaw + Pi / 2 - candidate[1] - candidate[2], current[3]);
+317: 
+318:         if (current_branch * std::sin(candidate[2]) <= 0) {
+319:             blocked = IkStatus::NearSingularity;
+320:             continue;
+321:         }
+322:         if (!checkLimits(candidate)) {
+323:             blocked = IkStatus::JointLimit;
+324:             continue;
+325:         }
+326:         if (((candidate - current).cwiseAbs().array() > travel.array()).any()) {
+327:             blocked = IkStatus::StepLimit;
+328:             continue;
+329:         }
+330:         if (planar_sigma(candidate) < options_.singularity_stop) {
+331:             blocked = IkStatus::NearSingularity;
+332:             continue;
+333:         }
+334: 
+335:         const double cost = (candidate.tail<4>() - current.tail<4>()).squaredNorm();
+336:         if (cost < best_cost) {
+337:             best = candidate;
+338:             best_cost = cost;
+339:         }
+340:     }
+341:     if (!std::isfinite(best_cost)) {
+342:         result.status = blocked;
+343:         return result;
+344:     }
+345: 
+346:     // 解析求解成功后直接返回请求姿态；不再用一次正运动学迭代复核。
+347:     result.status = IkStatus::Success;
+348:     result.target = best;
+349:     result.pose = target;
+350:     result.position_error = result.orientation_error = 0;
+351:     return result;
+352: }
+353: 
+354: IkResult PositioningArmKinematics::solveJog(
+355:     const JointVector& current, const JogCommand& command) const
+356: {
+357:     CartesianJog jog;
+358:     jog.duration = command.duration;
+359:     double scale = 1;
+360:     if (checkLimits(current) && (command.axis == JogAxis::X
+361:         || command.axis == JogAxis::Y || command.axis == JogAxis::Yaw)) {
+362:         const auto full = computeFrameJacobian(current);
+363:         Eigen::Matrix3d planar;
+364:         planar.topRows<2>() = full.block<2, 3>(0, 1) / characteristic_length_;
+365:         planar.bottomRows<1>().setOnes();
+366:         const double sigma = (std::min)(std::abs(std::sin(current[2])),
+367:             Eigen::JacobiSVD<Eigen::Matrix3d>(planar).singularValues().minCoeff());
+368:         // 硬停止区保留非零命令，让逆解明确报告奇异，而非伪装成静止成功。
+369:         if (sigma >= options_.singularity_stop)
+370:             scale = std::min(1.0, sigma / options_.singularity_slow);
+371:     }
+372:     const double displacement = command.speed * command.duration * scale;
+373:     switch (command.axis) {
+374:     case JogAxis::X: jog.translation.x() = displacement; break;
+375:     case JogAxis::Y: jog.translation.y() = displacement; break;
+376:     case JogAxis::Z: jog.translation.z() = displacement; break;
+377:     case JogAxis::Pitch: jog.pitch = displacement; break;
+378:     case JogAxis::Yaw: jog.yaw = displacement; break;
+379:     default: {
+380:         IkResult result;
+381:         result.target = current;
+382:         return result;
+383:     }
+384:     }
+385:     auto result = solveCartesianJog(current, jog);
+386:     result.speed_scale = scale;
+387:     return result;
+388: }
+389: 
+390: const char* statusName(IkStatus status)
+391: {
+392:     switch (status) {
+393:     case IkStatus::Success: return "Success";
+394:     case IkStatus::InvalidInput: return "InvalidInput";
+395:     case IkStatus::JointLimit: return "JointLimit";
+396:     case IkStatus::StepLimit: return "StepLimit";
+397:     case IkStatus::NearSingularity: return "NearSingularity";
+398:     case IkStatus::NoConvergence: return "NoConvergence";
+399:     }
+400:     return "Unknown";
+401: }
+402: } // namespace positioning_arm
+
+B数据端/工程/PositioningArmKinematics/include/positioning_arm/kinematics.h
+1: #pragma once
+2: 
+3: #include <Eigen/Core>
+4: #include <Eigen/Geometry>
+5: #include <array>
+6: #include <limits>
+7: #include <vector>
+8: 
+9: namespace positioning_arm {
+10: 
+11: constexpr int AxisCount = 5;
+12: using JointVector = Eigen::Matrix<double, AxisCount, 1>;
+13: using FrameJacobian = Eigen::Matrix<double, 6, AxisCount>;
+14: 
+15: struct AxisCalibration {
+16:     double zero = std::numeric_limits<double>::quiet_NaN();
+17:     double scale = std::numeric_limits<double>::quiet_NaN();
+18:     int direction = 0;
+19: };
+20: 
+21: struct ArmKinematicConfig {
+22:     Eigen::Vector2d link_lengths = Eigen::Vector2d(0.200, 0.180);
+23:     double lateral_offset = 0.4563;
+24:     double tool_length = 0.5545;
+25:     Eigen::Vector3d base_offset_mm = Eigen::Vector3d::Zero(); // 基座平移，毫米；其余几何参数仍为米。
+26:     // 限位可用正负无穷表示暂不设软件范围；NaN表示配置缺失。
+27:     JointVector lower = JointVector::Constant(std::numeric_limits<double>::quiet_NaN());
+28:     JointVector upper = JointVector::Constant(std::numeric_limits<double>::quiet_NaN());
+29:     JointVector max_velocity = JointVector::Constant(std::numeric_limits<double>::quiet_NaN());
+30:     std::array<AxisCalibration, AxisCount> calibration;
+31: };
+32: 
+33: struct SolverOptions {
+34:     double position_tolerance = 1e-7;
+35:     double singularity_stop = 1e-6;
+36:     double singularity_slow = 0.03;
+37:     double max_translation = 0.02;
+38:     double max_rotation = 0.1;
+39: };
+40: 
+41: struct ArmPose {
+42:     Eigen::Vector3d position = Eigen::Vector3d::Zero();
+43:     Eigen::Quaterniond quaternion = Eigen::Quaterniond::Identity();
+44: };
+45: 
+46: struct CartesianJog {
+47:     // 只允许一个非零分量；俯仰抬头为正，只移动轴5，不保持前端位置。
+48:     Eigen::Vector3d translation = Eigen::Vector3d::Zero();
+49:     double yaw = 0;
+50:     double pitch = 0;
+51:     double duration = 0.05;
+52: };
+53: 
+54: enum class JogAxis { X, Y, Z, Pitch, Yaw };
+55: 
+56: struct JogCommand {
+57:     JogAxis axis = JogAxis::X;
+58:     double speed = 0; // 平移为米/秒，转动为弧度/秒。
+59:     double duration = 0.05;
+60: };
+61: 
+62: enum class HomeStatus {
+63:     AlreadyAtZero,
+64:     Planned,
+65:     InvalidInput,
+66:     JointLimit,
+67:     // 4、5原为旧归零行程/末端预算错误，保留后续错误编号。
+68:     SamplingLimit = 6,
+69:     NumericalFailure
+70: };
+71: 
+72: struct HomeOptions {
+73:     // 加速度由调用方读取设备配置，不使用合成测试值作为默认值。
+74:     Eigen::Vector4d max_acceleration = Eigen::Vector4d::Constant(
+75:         std::numeric_limits<double>::quiet_NaN());
+76:     double sample_period = 0.02;
+77:     double minimum_duration = 1.0;
+78:     int max_samples = 20000;
+79:     int optimization_iterations = 30;
+80: };
+81: 
+82: struct HomeSample {
+83:     double time = 0;
+84:     JointVector position = JointVector::Zero();
+85:     JointVector velocity = JointVector::Zero();
+86:     JointVector acceleration = JointVector::Zero();
+87: };
+88: 
+89: struct HomeResult {
+90:     HomeStatus status = HomeStatus::InvalidInput;
+91:     JointVector target = JointVector::Zero();
+92:     std::vector<HomeSample> samples;
+93:     double duration = 0;
+94:     double sampled_tip_displacement = 0;
+95:     double sampled_tool_rotation = 0;
+96:     double tip_displacement_bound = 0;
+97:     double tool_rotation_bound = 0;
+98:     double baseline_cost = 0;
+99:     double optimized_cost = 0;
+100:     Eigen::Vector4d bend = Eigen::Vector4d::Zero();
+101:     bool success() const {
+102:         return status == HomeStatus::AlreadyAtZero || status == HomeStatus::Planned;
+103:     }
+104: };
+105: 
+106: enum class IkStatus {
+107:     Success,
+108:     InvalidInput,
+109:     JointLimit,
+110:     StepLimit,
+111:     NearSingularity,
+112:     NoConvergence
+113: };
+114: 
+115: struct IkResult {
+116:     IkStatus status = IkStatus::InvalidInput;
+117:     JointVector target = JointVector::Zero();
+118:     ArmPose pose;
+119:     int iterations = 0;
+120:     double position_error = std::numeric_limits<double>::infinity();
+121:     double orientation_error = std::numeric_limits<double>::infinity();
+122:     double speed_scale = 1; // solveJog接近平面奇异位时施加的命令速度比例。
+123:     bool success() const { return status == IkStatus::Success; }
+124: };
+125: 
+126: // 纯数学模块，由ADS后台调用；不直接通信，也不代替实机端点和速度标定。
+127: class PositioningArmKinematics {
+128: public:
+129:     explicit PositioningArmKinematics(
+130:         const ArmKinematicConfig& config, const SolverOptions& options = {});
+131:     ~PositioningArmKinematics();
+132:     PositioningArmKinematics(const PositioningArmKinematics&) = delete;
+133:     PositioningArmKinematics& operator=(const PositioningArmKinematics&) = delete;
+134: 
+135:     ArmPose forward(const JointVector& joints) const;
+136:     ArmPose computePose(const JointVector& joints) const { return forward(joints); }
+137:     FrameJacobian computeFrameJacobian(const JointVector& joints) const;
+138:     bool checkLimits(const JointVector& joints) const;
+139:     bool isNearSingularity(const JointVector& joints) const;
+140:     IkResult solveCartesianJog(const JointVector& current, const CartesianJog& command) const;
+141:     IkResult solveJog(const JointVector& current, const JogCommand& command) const;
+142: 
+143:     // 输入、输出始终是机械坐标；轴1不参与程序回位，角度不做取模。
+144:     bool isAtProgramZero(const JointVector& mechanical) const;
+145:     JointVector toProgramCoordinates(const JointVector& mechanical) const;
+146:     JointVector fromProgramCoordinates(const JointVector& program) const;
+147:     HomeResult planProgramZeroReturn(
+148:         const JointVector& mechanical, const HomeOptions& options) const;
+149: 
+150:     JointVector fromEncoder(const JointVector& encoder) const;
+151:     JointVector toEncoder(const JointVector& joints) const;
+152:     int degreesOfFreedom() const { return AxisCount; }
+153: 
+154:     // 无隐藏的上一次姿态状态；调用方需要连续显示时显式传入参考四元数。
+155:     static Eigen::Quaterniond continuousQuaternion(
+156:         Eigen::Quaterniond value, const Eigen::Quaterniond& reference);
+157: 
+158: private:
+159:     ArmKinematicConfig config_;
+160:     SolverOptions options_;
+161:     double characteristic_length_ = 1;
+162: };
+163: 
+164: const char* statusName(IkStatus status);
+165: const char* statusName(HomeStatus status);
+166: 
+167: } // namespace positioning_arm
