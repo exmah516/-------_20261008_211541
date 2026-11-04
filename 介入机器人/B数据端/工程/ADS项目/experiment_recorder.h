@@ -27,8 +27,20 @@ enum class ExperimentRecordingError : int
 	OpenMotionCsvFailed = 4,
 	ForceWriterFailed = 5,
 	MotionWriterFailed = 6,
-	StopThreadFailed = 7
+	StopThreadFailed = 7,
+	OpenEventsCsvFailed = 8,
+	EventsWriterFailed = 9
 };
+
+// 低频事件只记录真实生效的状态变化，不记录每拍手柄采样。
+enum class ExperimentEventCode : int
+{
+	ModeSwitch = 1,
+	SpacingRecoveryStart = 2
+};
+
+// ModeSwitch value follows ModeSelection: 1=导管递送, 2=导管撤出,
+// 3=导丝递送, 4=导丝撤出. SpacingRecoveryStart value is 1.
 
 struct ExperimentStartInfo
 {
@@ -90,6 +102,14 @@ struct MotionCsvRow
 	bool axis6_handle_valid = false;
 };
 
+struct EventCsvRow
+{
+	std::uint64_t event_index = 0;
+	std::uint64_t elapsed_us = 0;
+	int event_code = 0;
+	int value = 0;
+};
+
 struct ExperimentRecorderSnapshot
 {
 	ExperimentRecordingState state = ExperimentRecordingState::Idle;
@@ -97,6 +117,7 @@ struct ExperimentRecorderSnapshot
 	std::uint64_t elapsed_us = 0;
 	std::uint64_t force_dropped = 0;
 	std::uint64_t motion_dropped = 0;
+	std::uint64_t events_dropped = 0;
 	// 保留 wire 字段：force_missed 是会话内 ADS 100 Hz 超期数；motion 无独立调度器，固定为 0。
 	std::uint64_t force_missed = 0;
 	std::uint64_t motion_missed = 0;
@@ -117,6 +138,7 @@ public:
 
 	bool enqueue_force(const ForceCsvRow& row);
 	bool enqueue_motion(const MotionCsvRow& row);
+	bool enqueue_event(ExperimentEventCode code, int value, std::int64_t source_qpc_ticks = 0);
 
 	void update_ads_communication_stats(const AdsCommunicationStats& stats);
 
@@ -127,6 +149,7 @@ public:
 private:
 	static bool write_force_row(std::FILE* fp, const ForceCsvRow& row);
 	static bool write_motion_row(std::FILE* fp, const MotionCsvRow& row);
+	static bool write_event_row(std::FILE* fp, const EventCsvRow& row);
 	static void normalize_force_row(ForceCsvRow& row);
 	static void normalize_motion_row(MotionCsvRow& row);
 	static std::wstring sanitize_experiment_name(const std::wstring& raw_name);
@@ -160,9 +183,11 @@ private:
 	std::wstring session_directory_;
 	std::wstring force_path_;
 	std::wstring motion_path_;
+	std::wstring events_path_;
 	std::wstring metadata_path_;
 	std::uint64_t force_sample_index_ = 0;
 	std::uint64_t motion_sample_index_ = 0;
+	std::uint64_t event_index_ = 0;
 	std::atomic<std::uint64_t> stop_elapsed_us_{ 0 };
 	std::uint64_t force_first_ads_sequence_ = 0;
 	std::uint64_t force_last_ads_sequence_ = 0;
@@ -193,5 +218,6 @@ private:
 
 	AsyncCsvWriter<ForceCsvRow> force_writer_;
 	AsyncCsvWriter<MotionCsvRow> motion_writer_;
+	AsyncCsvWriter<EventCsvRow> events_writer_;
 	std::thread stop_thread_;
 };

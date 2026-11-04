@@ -936,6 +936,10 @@ int main()
 		std::cout << "实验记录默认开启：records/日期/时间_auto，退出程序时保存完成。" << std::endl;
 	else
 		std::cerr << "实验记录启动失败，错误码：" << static_cast<int>(experiment_recorder.snapshot().error) << std::endl;
+	auto record_experiment_event = [&](ExperimentEventCode code, int value)
+	{
+		(void)experiment_recorder.enqueue_event(code, value, experiment_recorder.clock().now_qpc());
+	};
 
 	while (true)
 	{
@@ -1563,6 +1567,11 @@ int main()
 
 		if (!single_handle_mode && axis1_reverse_pressed != axis1_reverse_pressed_prev)
 		{
+			record_experiment_event(
+				ExperimentEventCode::ModeSwitch,
+				axis1_reverse_pressed
+					? static_cast<int>(ModeSelection::CatheterRetraction)
+					: static_cast<int>(ModeSelection::CatheterDelivery));
 			// 丢弃切换前的滤波尾量，避免换向本身触发换手。
 			axis1_handle_filter.axis0_filtered = axis1_input_handle->fJoints2[0];
 			axis6_handle_filter.axis0_filtered = axis6_input_handle->fJoints2[0];
@@ -1591,6 +1600,11 @@ int main()
 				{
 					std::cout << "轴1导管回退模式：" << (axis1_reverse_pressed ? "开启" : "关闭") << std::endl;
 				}
+				record_experiment_event(
+					ExperimentEventCode::ModeSwitch,
+					axis1_reverse_pressed
+						? static_cast<int>(ModeSelection::CatheterRetraction)
+						: static_cast<int>(ModeSelection::CatheterDelivery));
 			}
 
 			if ((guidewire_mode == GuidewireMode::Independent) &&
@@ -1617,6 +1631,11 @@ int main()
 				{
 					std::cout << (axis6_effective_reverse_pressed ? "导丝模式：反向取出。" : "导丝模式：正向输送。") << std::endl;
 				}
+				record_experiment_event(
+					ExperimentEventCode::ModeSwitch,
+					axis6_effective_reverse_pressed
+						? static_cast<int>(ModeSelection::GuidewireRetraction)
+						: static_cast<int>(ModeSelection::GuidewireDelivery));
 			}
 		}
 		axis1_reverse_pressed_prev = axis1_reverse_pressed;
@@ -1679,6 +1698,11 @@ int main()
 						if (exit_guidewire_mode_to_normal())
 						{
 							std::cout << "导丝模式：关闭。" << std::endl;
+							record_experiment_event(
+								ExperimentEventCode::ModeSwitch,
+								axis1_reverse_pressed
+									? static_cast<int>(ModeSelection::CatheterRetraction)
+									: static_cast<int>(ModeSelection::CatheterDelivery));
 						}
 						else
 						{
@@ -1750,6 +1774,11 @@ int main()
 						{
 							clear_cylinder_manual_overrides();
 							guidewire_mode = GuidewireMode::Independent;
+							record_experiment_event(
+								ExperimentEventCode::ModeSwitch,
+								axis6_effective_reverse_pressed
+									? static_cast<int>(ModeSelection::GuidewireRetraction)
+									: static_cast<int>(ModeSelection::GuidewireDelivery));
 							// 入口已按当前实际位置和当前手柄姿态重建基准，
 							// 同步首拍方向电平，避免把模式切换误判成反向切换。
 							axis6_effective_reverse_prev = axis6_effective_reverse_pressed;
@@ -3074,6 +3103,7 @@ int main()
 						cylinder_manual_mode[cylinder_index] = CylinderManualMode::Automatic;
 					}
 					spacing_recovery.phase = SpacingRecoveryPhase::ClampWait;
+					record_experiment_event(ExperimentEventCode::SpacingRecoveryStart, 1);
 					spacing_recovery.phase_t0 = now_ms;
 					spacing_recovery.last_motion_tick = now_ms;
 					spacing_recovery.pending_delta_mm = 0.0;
@@ -4721,7 +4751,9 @@ int main()
 					ff.clamp_hold_enabled = vcmd.param1 != 0;
 					ff.clear_clamp_holds();
 					std::cout << "UI：力反馈-保持："
-						<< (ff.clamp_hold_enabled ? "开启（换手后保持至对应轴运动 2 mm，再平滑恢复）" : "关闭")
+						<< (ff.clamp_hold_enabled
+							? "开启（低通、虚拟阻尼及换手保持）"
+							: "关闭（旁路低通与虚拟阻尼）")
 						<< std::endl;
 					break;
 				case VisCommandType::SetReverseMode:

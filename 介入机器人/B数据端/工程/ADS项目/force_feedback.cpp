@@ -25,6 +25,8 @@ void process_force_feedback(
 
 	if (output_enabled)
 	{
+		const bool filtered_feedback_enabled = ff.clamp_hold_enabled;
+		if (!filtered_feedback_enabled) ff.reset_force_filters();
 		const CalibratedForce pair_1 = calibrate_force(
 			sample.fn_1_value_v, sample.ft_1_value_v, sample.axis2_pos_rel,
 			cal_cfg, cal_state);
@@ -55,17 +57,23 @@ void process_force_feedback(
 			}
 			return filtered;
 		};
-		const double filtered_582_f = apply_force_filter(
-			theory_582_f, ff.force_582_filtered_f, ff.force_582_filter_initialized);
-		const double filtered_587_f = apply_force_filter(
-			theory_587_f, ff.force_587_filtered_f, ff.force_587_filter_initialized);
+		const double filtered_582_f = filtered_feedback_enabled
+			? apply_force_filter(theory_582_f, ff.force_582_filtered_f, ff.force_582_filter_initialized)
+			: theory_582_f;
+		const double filtered_587_f = filtered_feedback_enabled
+			? apply_force_filter(theory_587_f, ff.force_587_filtered_f, ff.force_587_filter_initialized)
+			: theory_587_f;
 		const auto apply_damping = [&](double force, double velocity)
 		{
 			const double safe_velocity = std::isfinite(velocity) ? velocity : 0.0;
 			return force - cfg.force_feedback_damping_n_per_velocity * safe_velocity;
 		};
-		const double display_582_f = apply_damping(filtered_582_f, handle_582.fVels2[0]);
-		const double display_587_f = apply_damping(filtered_587_f, handle_587.fVels2[0]);
+		const double display_582_f = filtered_feedback_enabled
+			? apply_damping(filtered_582_f, handle_582.fVels2[0])
+			: theory_582_f;
+		const double display_587_f = filtered_feedback_enabled
+			? apply_damping(filtered_587_f, handle_587.fVels2[0])
+			: theory_587_f;
 		ff.force_582_theory_f = display_582_f;
 		ff.force_582_theory_n = theory_582_n;
 		ff.observe_clamp_hold_motion(2, axis6_abs, position_valid, now_ms);

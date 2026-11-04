@@ -511,6 +511,7 @@ struct ForceFeedbackState
 			hold_587 = HandoffHold{};
 		}
 	}
+	// 此开关同时控制换手保持、轴向力低通和虚拟阻尼。
 	bool clamp_hold_enabled = true;
 	// 当前输出命令缓存（用于调试和换手保持）。
 	double force_582_f = 0.0;

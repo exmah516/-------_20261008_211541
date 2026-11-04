@@ -62,7 +62,7 @@
             </WrapPanel>
             <WrapPanel>
                 <Button x:Name="ForceZero" Content="力反馈取零点" Command="{Binding ForceZeroCommand}" ToolTip="器械保持空载，取当前连续3帧ADS数据的平均值"/>
-                <ToggleButton x:Name="ForceHold" Content="{Binding ForceHoldCaption}" Command="{Binding ForceHoldCommand}" IsChecked="{Binding ForceHoldEnabled, Mode=OneWay}" ToolTip="触发换手时锁存当前力和扭矩；换手后各自对应的轴运动2 mm，再平滑恢复实时反馈"/>
+                <ToggleButton x:Name="ForceHold" Content="{Binding ForceHoldCaption}" Command="{Binding ForceHoldCommand}" IsChecked="{Binding ForceHoldEnabled, Mode=OneWay}" ToolTip="开启时启用轴向力低通、虚拟阻尼和换手保持；关闭时旁路低通与阻尼。保持期间锁存当前力和扭矩，换手完成后对应轴沿当前方向运动2 mm，再平滑恢复实时反馈"/>
             </WrapPanel>
             <TextBlock Text="{Binding FfCaption}" Style="{StaticResource Hint}"/>
             <TextBlock Text="电缸：点击打开，再点恢复从端原状态" Style="{StaticResource Hint}" Margin="0,8,0,4"/>

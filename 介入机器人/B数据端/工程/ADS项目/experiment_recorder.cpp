@@ -26,6 +26,8 @@ namespace
 		"axis1_from_left_mm,axis2_from_left_mm,axis3_from_left_mm,axis4_from_left_mm,"
 		"axis5_from_left_mm,axis6_from_left_mm,axis7_from_left_mm,"
 		"axis1_handle_valid,axis6_handle_valid\n";
+	constexpr const char* kEventsHeader =
+		"event_index,elapsed_us,event_code,value\n";
 
 	bool directory_exists(const std::wstring& path)
 	{
@@ -294,6 +296,17 @@ bool ExperimentRecorder::write_motion_row(std::FILE* fp, const MotionCsvRow& row
 		normalized.axis1_handle_valid ? 1 : 0, normalized.axis6_handle_valid ? 1 : 0) >= 0;
 }
 
+bool ExperimentRecorder::write_event_row(std::FILE* fp, const EventCsvRow& row)
+{
+	return std::fprintf(
+		fp,
+		"%llu,%llu,%d,%d\n",
+		static_cast<unsigned long long>(row.event_index),
+		static_cast<unsigned long long>(row.elapsed_us),
+		row.event_code,
+		row.value) >= 0;
+}
+
 std::wstring ExperimentRecorder::utf8_to_wide(const std::string& text)
 {
 	if (text.empty())
@@ -427,6 +440,7 @@ bool ExperimentRecorder::create_session_paths(const std::wstring& cleaned_name)
 			session_directory_ = candidate;
 			force_path_ = join_path(candidate, L"force.csv");
 			motion_path_ = join_path(candidate, L"motion.csv");
+			events_path_ = join_path(candidate, L"events.csv");
 			metadata_path_ = join_path(candidate, L"session.json");
 			return true;
 		}
@@ -474,6 +488,7 @@ bool ExperimentRecorder::start(const std::string& experiment_name_utf8, const Ex
 	clock_.reset();
 	force_sample_index_ = 0;
 	motion_sample_index_ = 0;
+	event_index_ = 0;
 	stop_elapsed_us_.store(0, std::memory_order_relaxed);
 	force_first_ads_sequence_ = 0;
 	force_last_ads_sequence_ = 0;
@@ -518,6 +533,13 @@ bool ExperimentRecorder::start(const std::string& experiment_name_utf8, const Ex
 		state_.store(ExperimentRecordingState::Error, std::memory_order_release);
 		return false;
 	}
+	if (!events_writer_.start(events_path_, kEventsHeader, &ExperimentRecorder::write_event_row))
+	{
+		error_.store(ExperimentRecordingError::OpenEventsCsvFailed, std::memory_order_release);
+		rollback_failed_start();
+		state_.store(ExperimentRecordingState::Error, std::memory_order_release);
+		return false;
+	}
 
 	write_session_json(false, std::string());
 	state_.store(ExperimentRecordingState::Recording, std::memory_order_release);
@@ -527,8 +549,10 @@ bool ExperimentRecorder::start(const std::string& experiment_name_utf8, const Ex
 void ExperimentRecorder::rollback_failed_start()
 {
 	motion_writer_.stop();
+	events_writer_.stop();
 	force_writer_.stop();
 	if (!motion_path_.empty()) DeleteFileW(motion_path_.c_str());
+	if (!events_path_.empty()) DeleteFileW(events_path_.c_str());
 	if (!force_path_.empty()) DeleteFileW(force_path_.c_str());
 	if (!metadata_path_.empty()) DeleteFileW(metadata_path_.c_str());
 	if (!session_directory_.empty()) RemoveDirectoryW(session_directory_.c_str());
@@ -580,6 +604,8 @@ void ExperimentRecorder::stop_worker(std::string reason)
 	catch (...) { cleanup_failed = true; }
 	try { motion_writer_.stop(); }
 	catch (...) { cleanup_failed = true; }
+	try { events_writer_.stop(); }
+	catch (...) { cleanup_failed = true; }
 	try { write_session_json(true, reason); }
 	catch (...) { cleanup_failed = true; }
 	if (cleanup_failed)
@@ -605,6 +631,11 @@ void ExperimentRecorder::poll_health()
 	{
 		error_.store(ExperimentRecordingError::MotionWriterFailed, std::memory_order_release);
 		stop_async("motion_writer_error");
+	}
+	else if (events_writer_.has_error())
+	{
+		error_.store(ExperimentRecordingError::EventsWriterFailed, std::memory_order_release);
+		stop_async("events_writer_error");
 	}
 }
 
@@ -712,6 +743,28 @@ bool ExperimentRecorder::enqueue_motion(const MotionCsvRow& row)
 	return motion_writer_.try_enqueue(indexed);
 }
 
+bool ExperimentRecorder::enqueue_event(
+	ExperimentEventCode code,
+	int value,
+	std::int64_t source_qpc_ticks)
+{
+	if (!is_recording()) return false;
+	if (source_qpc_ticks == 0)
+	{
+		source_qpc_ticks = clock_.now_qpc();
+	}
+	if (source_qpc_ticks < clock_.anchor_qpc())
+	{
+		return false;
+	}
+	EventCsvRow row{};
+	row.event_index = event_index_++;
+	row.elapsed_us = clock_.elapsed_us(source_qpc_ticks);
+	row.event_code = static_cast<int>(code);
+	row.value = value;
+	return events_writer_.try_enqueue(row);
+}
+
 void ExperimentRecorder::update_ads_communication_stats(const AdsCommunicationStats& stats)
 {
 	std::lock_guard<std::mutex> lock(ads_stats_mutex_);
@@ -783,6 +836,7 @@ ExperimentRecorderSnapshot ExperimentRecorder::snapshot() const
 	}
 	result.force_dropped = force_writer_.dropped_count();
 	result.motion_dropped = motion_writer_.dropped_count();
+	result.events_dropped = events_writer_.dropped_count();
 	{
 		std::lock_guard<std::mutex> lock(ads_stats_mutex_);
 		const bool use_session_end = result.state != ExperimentRecordingState::Recording &&
@@ -844,7 +898,7 @@ void ExperimentRecorder::write_session_json(bool final, const std::string& stop_
 		: 0;
 	std::ostringstream json;
 	json << "{\n";
-	json << "  \"schema_version\": 6,\n";
+	json << "  \"schema_version\": 7,\n";
 	json << "  \"experiment_name_raw\": \"" << json_escape(raw_name_utf8_) << "\",\n";
 	json << "  \"experiment_name_cleaned\": \"" << json_escape(wide_to_utf8(cleaned_name_)) << "\",\n";
 	json << "  \"utc_start\": \"" << format_utc_filetime(clock_.utc_start_filetime_100ns()) << "\",\n";
@@ -861,6 +915,7 @@ void ExperimentRecorder::write_session_json(bool final, const std::string& stop_
 	json << "  \"single_handle_mode\": " << (start_info_.single_handle_mode ? "true" : "false") << ",\n";
 	json << "  \"force_writer_dropped\": " << force_writer_.dropped_count() << ",\n";
 	json << "  \"motion_writer_dropped\": " << motion_writer_.dropped_count() << ",\n";
+	json << "  \"events_writer_dropped\": " << events_writer_.dropped_count() << ",\n";
 	json << "  \"force_schedule_missed\": ";
 	if (ads_session_counters_available) json << ads_missed_deadlines_during_session;
 	else json << "null";

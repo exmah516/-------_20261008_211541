@@ -40,6 +40,8 @@ static void recording()
     const auto info = recording_info;
     assert(recorder.is_recording());
     assert(!recorder.start("auto", info));
+    assert(recorder.enqueue_event(ExperimentEventCode::ModeSwitch, 1));
+    assert(recorder.enqueue_event(ExperimentEventCode::SpacingRecoveryStart, 1));
     for (unsigned i = 1; i <= 100; ++i)
     {
         ForceCsvRow force;
@@ -71,9 +73,13 @@ static void recording()
     for (const auto& file : fs::recursive_directory_iterator("records"))
         if (file.path().filename() == "session.json") session = file.path().parent_path();
     assert(!session.empty());
-    const auto force = csv(session / "force.csv"), motion = csv(session / "motion.csv");
+    const auto force = csv(session / "force.csv"), motion = csv(session / "motion.csv"), events = csv(session / "events.csv");
     assert(force.size() == 101 && force[0].size() == 16);
     assert(motion.size() == 51 && motion[0].size() == 12);
+    assert(events.size() == 3 && events[0].size() == 4);
+    assert(events[0][2] == "event_code" && events[0][3] == "value");
+    assert(events[1][2] == "1" && events[1][3] == "1");
+    assert(events[2][2] == "2" && events[2][3] == "1");
     assert(motion[0][10] == "axis1_handle_valid" && motion[0][11] == "axis6_handle_valid");
     for (const auto& row : motion) assert(row.size() == 12);
     assert(force[1][2] == "1" && force[1][3] == "0" && std::stod(force[1][4]) == 1.25 && std::isnan(std::stod(force[1][8])));
@@ -85,7 +91,7 @@ static void recording()
     assert(motion[25][10] == "1" && motion[25][11] == "1" && std::stod(motion[25][8]) == 15);
     std::ifstream metadata(session / "session.json");
     std::string json((std::istreambuf_iterator<char>(metadata)), {});
-    assert(json.find("\"schema_version\": 6") != std::string::npos && json.find("test_complete") != std::string::npos);
+    assert(json.find("\"schema_version\": 7") != std::string::npos && json.find("test_complete") != std::string::npos);
     assert(recorder.start("auto", info)); recorder.stop_and_wait("second");
     int sessions = 0;
     for (const auto& file : fs::recursive_directory_iterator("records"))
@@ -96,7 +102,7 @@ static void recording()
     { std::ofstream file("records"); file << "not a directory"; }
     assert(!recorder.start("auto", info) && recorder.snapshot().error == ExperimentRecordingError::CreateDirectoryFailed);
     fs::current_path(original);
-    std::cout << "PASS: recorder actual CSV writes, 100/50 samples, validity, NaN, drain, duplicate rejection, schema6, separate sessions, I/O failure.\n";
+    std::cout << "PASS: recorder actual CSV writes, 100/50 samples, events, validity, NaN, drain, duplicate rejection, schema7, separate sessions, I/O failure.\n";
 }
 static bool close(double a, double b) { return std::abs(a-b) < 1e-9; }
 static void handoff_holds()
@@ -320,6 +326,17 @@ static void feedback()
     tick(5230); assert(close(state.force_582_f,1) && !state.hold_582.active);
     capture_hold(1, false); tick(6000);
     state.clamp_hold_enabled = false; state.clear_clamp_holds(); tick(6010);
+    assert(close(state.force_582_f,1) && close(state.force_587_f,1));
+    cfg.force_feedback_force_filter_alpha = .25;
+    cfg.force_feedback_damping_n_per_velocity = .1;
+    wire.fVels2[0] = 2.0; catheter.fVels2[0] = -3.0;
+    sample.fn_1_value_v *= 2; sample.fn_2_value_v *= 2;
+    tick(6020);
+    assert(close(state.force_582_f,2) && close(state.force_587_f,2));
+    assert(!state.force_582_filter_initialized && !state.force_587_filter_initialized);
+    sample.fn_1_value_v /= 2; sample.fn_2_value_v /= 2;
+    wire.fVels2[0] = catheter.fVels2[0] = 0.0;
+    tick(6030);
     assert(close(state.force_582_f,1) && close(state.force_587_f,1));
     tick(7000);
     sample.fn_1_value_v *= 2; sample.fn_2_value_v *= 2;
