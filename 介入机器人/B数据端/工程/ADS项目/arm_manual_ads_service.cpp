@@ -13,6 +13,7 @@ namespace
 	constexpr int kReadPeriodMs = 50;
 	constexpr int kJogLeaseMs = 300;
 	constexpr DWORD kAdsTimeoutMs = 250;
+	constexpr double kKnownGoodZSpeedMmPerSec = 2.5;
 
 	constexpr const char* kManualEnable = "G.arm_manual_enable";
 	constexpr const char* kEnableReq = "G.arm_enable_req";
@@ -229,16 +230,31 @@ void ArmManualAdsService::set_jog_direction(int axis_one_based, int direction, d
 	wake_cv_.notify_all();
 }
 
-void ArmManualAdsService::set_cartesian_jog(int mode, double speed)
+void ArmManualAdsService::set_cartesian_jog(int mode, double speed, double speed_scale)
 {
 	std::lock_guard<std::mutex> lock(mutex_);
-	if (mode < 1 || mode > 5 || !std::isfinite(speed) || speed == 0 || std::abs(speed) > 100)
+	if (mode < 1 || mode > 5 || !std::isfinite(speed) || speed == 0 || std::abs(speed) > 100
+		|| (speed_scale != 0.5 && speed_scale != 1.0 && speed_scale != 2.0))
 		return;
 	if (cartesian_blocked_ || home_requested_
 		|| (curve_pending_ && cartesian_mode_ == 0)) return;
 	if (cartesian_mode_ != 0 && (cartesian_mode_ != mode || cartesian_speed_ != speed)) {
 		cartesian_stop_ = true;
 		return;
+	}
+	const double acceleration_override = mode == 3
+		? desired_jog_acc_[0] * std::abs(speed) / kKnownGoodZSpeedMmPerSec
+		: 0.0;
+	if (mode == 3 && !valid_parameter(acceleration_override)) return;
+	for (double velocity : desired_jog_velocity_)
+		if (!valid_parameter(velocity * speed_scale)) return;
+	if (jog_speed_scale_ != speed_scale) {
+		jog_speed_scale_ = speed_scale;
+		params_dirty_ = true;
+	}
+	if (cartesian_acceleration_override_ != acceleration_override) {
+		cartesian_acceleration_override_ = acceleration_override;
+		params_dirty_ = true;
 	}
 	cartesian_mode_ = mode;
 	cartesian_speed_ = speed;
@@ -308,6 +324,10 @@ void ArmManualAdsService::update_cartesian()
 		cartesian_mode_ = 0;
 		home_requested_ = false;
 		curve_pending_ = false;
+		if (cartesian_acceleration_override_ != 0.0) {
+			cartesian_acceleration_override_ = 0.0;
+			params_dirty_ = true;
+		}
 		cartesian_blocked_ = error != 0 || !stopped;
 		snapshot_.cartesian_status = error == 0 && stopped ? 4 : 5;
 		snapshot_.cartesian_error = stopped ? error : 1003;
@@ -323,6 +343,10 @@ void ArmManualAdsService::update_cartesian()
 		abort(1004); return;
 	}
 	if (now > cartesian_deadline_) { abort(1005); return; }
+	for (int i = 0; i < kArmAxisCount; ++i)
+		if (std::abs(snapshot_.jog_velocity[i] - desired_jog_velocity_[i] * jog_speed_scale_) > 1e-6) return;
+	if (cartesian_mode_ == 3 &&
+		std::abs(snapshot_.jog_acc[0] - cartesian_acceleration_override_) > 1e-6) return;
 	for (int i = 0; i < 5; ++i) {
 		if (!snapshot_.power_done[i] || snapshot_.power_error[i] || snapshot_.motion_error[i]
 			|| !desired_enable_req_[i] || desired_reset_req_[i]
@@ -505,6 +529,7 @@ void ArmManualAdsService::run()
 		const bool write_ok = !has_dirty || write_dirty_request();
 		if (stopping) {
 			update_cartesian();
+			(void)write_dirty_request();
 			break;
 		}
 		if (!write_ok)
@@ -545,6 +570,8 @@ bool ArmManualAdsService::write_dirty_request()
 	std::array<double, 5> base_velocity{};
 	double speed_scale = 1.0;
 	std::array<double, 5> acc{};
+	std::array<double, 5> base_acc{};
+	double acceleration_override = 0.0;
 	std::array<double, 5> dec{};
 	std::array<double, 5> jerk{};
 	bool manual_dirty = false;
@@ -565,7 +592,10 @@ bool ArmManualAdsService::write_dirty_request()
 		// 始终从基准计算，反复切档和保活不会累乘。
 		for (int axis = 0; axis < kArmAxisCount; ++axis)
 			velocity[axis] = base_velocity[axis] * speed_scale;
-		acc = desired_jog_acc_;
+		base_acc = desired_jog_acc_;
+		acc = base_acc;
+		acceleration_override = cartesian_acceleration_override_;
+		if (acceleration_override > 0.0) acc[0] = acceleration_override;
 		dec = desired_jog_dec_;
 		jerk = desired_jog_jerk_;
 		manual_dirty = manual_dirty_;
@@ -613,7 +643,8 @@ bool ArmManualAdsService::write_dirty_request()
 	}
 	if (jog_pos_dirty && desired_jog_pos_req_ == jog_pos_req) jog_pos_dirty_ = false;
 	if (jog_neg_dirty && desired_jog_neg_req_ == jog_neg_req) jog_neg_dirty_ = false;
-	if (params_dirty && desired_jog_velocity_ == base_velocity && jog_speed_scale_ == speed_scale && desired_jog_acc_ == acc &&
+	if (params_dirty && desired_jog_velocity_ == base_velocity && jog_speed_scale_ == speed_scale &&
+		desired_jog_acc_ == base_acc && cartesian_acceleration_override_ == acceleration_override &&
 		desired_jog_dec_ == dec && desired_jog_jerk_ == jerk)
 	{
 		params_dirty_ = false;
@@ -674,8 +705,8 @@ bool ArmManualAdsService::read_snapshot()
 		next.home_request_id = snapshot_.home_request_id;
 		next.at_program_zero = std::isfinite(next.act_pos[1]) && std::isfinite(next.act_pos[2])
 			&& std::isfinite(next.act_pos[3]) && std::isfinite(next.act_pos[4])
-			&& std::abs(next.act_pos[1] - 90) <= 3 && std::abs(next.act_pos[2] - 180) <= 3
-			&& std::abs(next.act_pos[3] - 180) <= 3 && std::abs(next.act_pos[4]) <= 1;
+			&& std::abs(next.act_pos[1]) <= 3 && std::abs(next.act_pos[2]) <= 3
+			&& std::abs(next.act_pos[3]) <= 3 && std::abs(next.act_pos[4]) <= 1;
 		snapshot_ = next;
 		snapshot_at_ = std::chrono::steady_clock::now();
 	}

@@ -22,7 +22,7 @@ struct ArmKinematicConfig {
     Eigen::Vector2d link_lengths = Eigen::Vector2d(0.200, 0.180);
     double lateral_offset = 0.4563;
     double tool_length = 0.5545;
-    // 轴1端点必须实测；轴3至5可显式不设软件范围，不能据此推断机械安全范围。
+    // 限位可用正负无穷表示暂不设软件范围；NaN表示配置缺失。
     JointVector lower = JointVector::Constant(std::numeric_limits<double>::quiet_NaN());
     JointVector upper = JointVector::Constant(std::numeric_limits<double>::quiet_NaN());
     JointVector max_velocity = JointVector::Constant(std::numeric_limits<double>::quiet_NaN());
@@ -30,6 +30,7 @@ struct ArmKinematicConfig {
 };
 
 struct SolverOptions {
+    // 保留兼容字段；当前平面点动使用解析解，不消耗迭代次数。
     int max_iterations = 100;
     double position_tolerance = 1e-7;
     double orientation_tolerance = 1e-7;

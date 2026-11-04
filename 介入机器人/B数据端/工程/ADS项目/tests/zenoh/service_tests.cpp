@@ -136,6 +136,32 @@ struct ZenohServiceTestAccess
         assert(service.results_.empty());
     }
 
+    static void positioning_arm_cartesian_speed()
+    {
+        ZenohService service; initialize(service);
+        VisCommand control;
+        std::uint64_t sequence = 0;
+        for (double scale : { 0.0, 0.5, 1.0, 2.0 })
+        {
+            auto frame = command(service, vi_protocol::Command::ArmCartesianJog,
+                ++sequence, 0, 3, 2500);
+            frame.value1 = scale;
+            send(service, frame);
+            assert(service.poll_command(control) && control.type == VisCommandType::SetArmCartesianJog);
+            assert(control.param1 == 3 && control.param2 == 2500);
+            assert(control.arm_jog_speed_scale == (scale == 0 ? 1.0 : scale));
+            service.command_processed();
+        }
+        for (double invalid : { -1.0, 0.25, 0.75, 3.0 })
+        {
+            auto frame = command(service, vi_protocol::Command::ArmCartesianJog,
+                ++sequence, 0, 3, 2500);
+            frame.value1 = invalid;
+            send(service, frame);
+            assert(!service.poll_command(control));
+        }
+    }
+
     static void task_association()
     {
         ZenohService service; initialize(service);
@@ -391,6 +417,7 @@ int main()
     ZenohServiceTestAccess::expiry_and_replay();
     ZenohServiceTestAccess::results_exclude_jog_and_alive();
     ZenohServiceTestAccess::positioning_arm_speed();
+    ZenohServiceTestAccess::positioning_arm_cartesian_speed();
     ZenohServiceTestAccess::task_association();
     ZenohServiceTestAccess::prepare_axis6_limit();
     ZenohServiceTestAccess::challenge_cannot_revoke();

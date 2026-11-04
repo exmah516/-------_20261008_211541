@@ -183,7 +183,7 @@ namespace MasterConsole.Services
             => Task.FromResult(CommandResult.DoneWithReason($"模拟链路：定位臂轴{axis}{(enabled ? "已上电" : "已断电")}。"));
         public Task<CommandResult> ResetArmAxisAsync(int axis)
             => Task.FromResult(CommandResult.DoneWithReason($"模拟链路：定位臂轴{axis}复位命令已发送。"));
-        public Task<CommandResult> SetArmCartesianJogAsync(int mode, int speedMilli)
+        public Task<CommandResult> SetArmCartesianJogAsync(int mode, int speedMilli, double speedScale = 1.0)
             => Task.FromResult(CommandResult.DoneWithReason("模拟链路：定位臂末端点动命令已发送。"));
         public Task<CommandResult> StopArmAsync()
             => Task.FromResult(CommandResult.DoneWithReason("模拟链路：定位臂停止命令已发送。"));

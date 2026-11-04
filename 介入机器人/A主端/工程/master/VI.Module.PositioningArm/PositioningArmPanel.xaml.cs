@@ -23,7 +23,7 @@ public partial class PositioningArmPanel : UserControl
         _keepaliveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _keepaliveTimer.Tick += KeepaliveTimer_Tick;
         CommandBindings.Add(new CommandBinding(ApplicationCommands.Stop, (_, e) => { StopHoldActions(); e.Handled = true; }));
-        Loaded += (_, _) => _keepaliveTimer.Start();
+        Loaded += (_, _) => { UpdateCartesianRate(); _keepaliveTimer.Start(); };
         Unloaded += (_, _) => { _keepaliveTimer.Stop(); StopHoldActions(); };
     }
 
@@ -53,6 +53,38 @@ public partial class PositioningArmPanel : UserControl
         if (sender is Button button && TryAxis(button.Tag, out int axis)) await _viewModel.ResetArmAxisAsync(axis);
     }
 
+    private void ArmSpeed_Checked(object sender, RoutedEventArgs e)
+    {
+        UpdateCartesianRate();
+        UpdateActiveCartesianJog();
+    }
+
+    private void ArmCartesianMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_cartesianMode != 0) _cartesianMode = ArmCartesianMode.SelectedIndex + 1;
+        UpdateCartesianRate();
+        UpdateActiveCartesianJog();
+    }
+
+    private void UpdateCartesianRate()
+    {
+        if (ArmCartesianRate is null || ArmCartesianMode is null) return;
+        int mode = ArmCartesianMode.SelectedIndex + 1;
+        double speed = _viewModel.GetArmCartesianJogSpeed(mode);
+        ArmCartesianRate.Text = mode is 4 or 5 ? $"{speed:0.##}°/s" : $"{speed:0.##} mm/s";
+    }
+
+    private void UpdateActiveCartesianJog()
+    {
+        if (_cartesianMode == 0 || _cartesianSpeedMilli == 0) return;
+        int mode = ArmCartesianMode.SelectedIndex + 1;
+        if (mode is < 1 or > 5) return;
+        _cartesianMode = mode;
+        int direction = Math.Sign(_cartesianSpeedMilli);
+        _cartesianSpeedMilli = direction * (int)Math.Round(_viewModel.GetArmCartesianJogSpeed(mode) * 1000.0);
+        _ = _viewModel.SetArmCartesianJogAsync(_cartesianMode, _cartesianSpeedMilli);
+    }
+
     private void ArmJogButton_Down(object sender, MouseButtonEventArgs e)
     {
         if (!_viewModel.CanOperate || sender is not Button button || !TryAxis(button.Tag, out int axis) ||
@@ -78,17 +110,23 @@ public partial class PositioningArmPanel : UserControl
         if (!_viewModel.CanOperate || _cartesianMode != 0 || sender is not Button button) return;
         ArmCartesianError.Text = "";
         if (!int.TryParse(Convert.ToString(button.CommandParameter, CultureInfo.InvariantCulture), out int direction) || direction is not (-1 or 1) ||
-            !double.TryParse(ArmCartesianSpeed.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double speed) ||
-            !double.IsFinite(speed) || speed < 0.001 || speed > 100)
+            ArmCartesianMode.SelectedIndex is < 0 or > 4)
         {
-            ArmCartesianError.Text = "速度须在 0.001 至 100 之间。";
+            ArmCartesianError.Text = "请选择有效的末端点动方向。";
+            return;
+        }
+        int mode = ArmCartesianMode.SelectedIndex + 1;
+        double speed = _viewModel.GetArmCartesianJogSpeed(mode);
+        if (!double.IsFinite(speed) || speed <= 0 || speed > 100)
+        {
+            ArmCartesianError.Text = "当前末端点动速度无效。";
             return;
         }
         int version = ++_holdVersion;
         button.CaptureMouse();
         e.Handled = true;
         if (!await SendCartesianParametersAsync(false) || version != _holdVersion || !_viewModel.CanOperate) return;
-        _cartesianMode = ArmCartesianMode.SelectedIndex + 1;
+        _cartesianMode = mode;
         _cartesianSpeedMilli = direction * (int)Math.Round(speed * 1000.0);
         if (!await _viewModel.SetArmCartesianJogAsync(_cartesianMode, _cartesianSpeedMilli))
             _cartesianMode = _cartesianSpeedMilli = 0;

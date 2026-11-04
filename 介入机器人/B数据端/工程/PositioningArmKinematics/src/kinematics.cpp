@@ -1,14 +1,13 @@
 #include "positioning_arm/kinematics.h"
 
-#include <Eigen/Cholesky>
 #include <Eigen/SVD>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 
 namespace positioning_arm {
 namespace {
-using TaskVector = Eigen::Matrix<double, 6, 1>;
 constexpr double Pi = 3.14159265358979323846;
 
 void require(bool condition, const char* message)
@@ -33,25 +32,17 @@ Eigen::Quaterniond rotationZ(double angle)
     return Eigen::Quaterniond(Eigen::AngleAxisd(angle, Eigen::Vector3d::UnitZ()));
 }
 
-Eigen::Vector3d rotationError(const Eigen::Quaterniond& target,
-    const Eigen::Quaterniond& current)
-{
-    Eigen::Quaterniond delta = normalized(target * current.conjugate());
-    if (delta.w() < 0) delta.coeffs() *= -1;
-    const double norm = delta.vec().norm();
-    if (norm < 1e-12) return 2 * delta.vec();
-    return delta.vec() * (2 * std::atan2(norm, delta.w()) / norm);
-}
-
 ArmKinematicConfig validate(ArmKinematicConfig config, const SolverOptions& options)
 {
     require(config.link_lengths.allFinite() && (config.link_lengths.array() > 0).all(),
         "两根连杆长度必须为正");
     require(positive(config.lateral_offset) && positive(config.tool_length),
         "L形工具尺寸必须为正");
-    require((config.lower.array() < config.upper.array()).all()
-        && config.lower.head<2>().allFinite() && config.upper.head<2>().allFinite(),
-        "轴1、2必须设置有限范围，其他轴范围必须有序且无NaN");
+    for (int i = 0; i < AxisCount; ++i) {
+        require(!std::isnan(config.lower[i]) && !std::isnan(config.upper[i])
+            && config.lower[i] < config.upper[i],
+            "轴限位必须有序；使用正负无穷表示不设软件限位");
+    }
     require(config.max_velocity.allFinite()
         && (config.max_velocity.array() > 0).all(),
         "五轴速度限位必须为正");
@@ -96,16 +87,17 @@ ArmPose PositioningArmKinematics::forward(const JointVector& joints) const
     // 省略固定高度，位置Z仅用于增量计算，不代表相对地面高度。
     result.position << 0, 0, joints[0];
 
-    double yaw = 0;
-    for (int i = 0; i < 2; ++i) {
-        yaw += joints[i + 1];
-        result.position += config_.link_lengths[i]
-            * Eigen::Vector3d(std::sin(yaw), -std::cos(yaw), 0);
-    }
+    const double first_link_yaw = joints[1];
+    result.position += config_.link_lengths[0]
+        * Eigen::Vector3d(std::sin(first_link_yaw), -std::cos(first_link_yaw), 0);
 
-    // 机械角总和450度时工具坐标与基座对齐，程序偏置不能在这里重复添加。
-    yaw += joints[3] - Pi / 2;
-    const Eigen::Quaterniond wrist_rotation = rotationZ(yaw)
+    // 轴3机械零位使第二根连杆反向；工具偏置仍按轴2+轴3+轴4定义。
+    const double second_link_yaw = first_link_yaw + joints[2] + Pi;
+    result.position += config_.link_lengths[1]
+        * Eigen::Vector3d(std::sin(second_link_yaw), -std::cos(second_link_yaw), 0);
+
+    const double tool_yaw = joints[1] + joints[2] + joints[3] - Pi / 2;
+    const Eigen::Quaterniond wrist_rotation = rotationZ(tool_yaw)
         * Eigen::Quaterniond(Eigen::AngleAxisd(joints[4], Eigen::Vector3d::UnitX()));
     result.position += wrist_rotation
         * Eigen::Vector3d(config_.lateral_offset, -config_.tool_length, 0);
@@ -131,8 +123,13 @@ FrameJacobian PositioningArmKinematics::computeFrameJacobian(
         result.block<3, 1>(0, i + 1) = axis.cross(pose.position - joint_origin);
         result.block<3, 1>(3, i + 1) = axis;
         yaw += joints[i + 1];
-        if (i < 2) joint_origin += config_.link_lengths[i]
-            * Eigen::Vector3d(std::sin(yaw), -std::cos(yaw), 0);
+        if (i == 0) {
+            joint_origin += config_.link_lengths[0]
+                * Eigen::Vector3d(std::sin(yaw), -std::cos(yaw), 0);
+        } else if (i == 1) {
+            joint_origin += config_.link_lengths[1]
+                * Eigen::Vector3d(std::sin(yaw + Pi), -std::cos(yaw + Pi), 0);
+        }
     }
 
     const Eigen::Vector3d pitch_axis_world =
@@ -254,127 +251,105 @@ IkResult PositioningArmKinematics::solveCartesianJog(
 
     const JointVector travel = config_.max_velocity * command.duration;
     if (!travel.allFinite()) return result;
-    const JointVector lower = config_.lower.cwiseMax(current - travel);
-    const JointVector upper = config_.upper.cwiseMin(current + travel);
-    JointVector joints = current;
-    IkStatus blocked = IkStatus::NoConvergence;
 
-    for (int iteration = 0; iteration <= options_.max_iterations; ++iteration) {
-        result.iterations = iteration;
-        const ArmPose actual = forward(joints);
-        TaskVector error;
-        error.head<3>() = (target.position - actual.position) / characteristic_length_;
-        error.tail<3>() = rotationError(target.quaternion, actual.quaternion);
-        result.position_error = (target.position - actual.position).norm();
-        result.orientation_error = error.tail<3>().norm();
-
-        FrameJacobian jacobian = computeFrameJacobian(joints);
-        jacobian.topRows<3>() /= characteristic_length_;
+    const auto planar_sigma = [&](const JointVector& joints) {
+        const auto full = computeFrameJacobian(joints);
         Eigen::Matrix3d planar;
-        planar.topRows<2>() = jacobian.block<2, 3>(0, 1);
+        planar.topRows<2>() = full.block<2, 3>(0, 1) / characteristic_length_;
         planar.bottomRows<1>().setOnes();
-        const double sigma = Eigen::JacobiSVD<Eigen::Matrix3d>(planar)
-            .singularValues().minCoeff();
-        jacobian.col(0).setZero();
-        jacobian.col(4).setZero();
-        if (result.position_error <= options_.position_tolerance
-            && result.orientation_error <= options_.orientation_tolerance) {
-            if (sigma < options_.singularity_stop
-                && (joints - current).norm() > 0) {
-                result.status = IkStatus::NearSingularity;
-                return result;
-            }
-            result.status = IkStatus::Success;
-            result.target = joints;
-            result.pose = actual;
-            result.pose.quaternion = continuousQuaternion(
-                actual.quaternion, current_pose.quaternion);
-            return result;
-        }
-        if (sigma < options_.singularity_stop) {
-            result.status = IkStatus::NearSingularity;
-            return result;
-        }
-        if (iteration == options_.max_iterations) break;
-
-        const double slowdown = std::min(1.0, sigma / options_.singularity_slow);
-        const double damping = options_.damping / std::max(slowdown, 0.01);
-        JointVector scaled_offset = joints - current;
-        scaled_offset[0] /= characteristic_length_;
-        Eigen::Matrix<double, AxisCount, AxisCount> normal =
-            jacobian.transpose() * jacobian;
-        normal.diagonal().array() += damping * damping + options_.posture_weight;
-        const JointVector scaled_step = normal.ldlt().solve(
-            jacobian.transpose() * error
-            - options_.posture_weight * scaled_offset);
-        JointVector step = scaled_step;
-        step[0] *= characteristic_length_;
-        if (!step.allFinite()) {
-            result.status = IkStatus::NoConvergence;
-            return result;
-        }
-
-        double alpha = slowdown;
-        if (std::abs(step[0]) > options_.max_linear_iteration)
-            alpha = std::min(alpha, options_.max_linear_iteration / std::abs(step[0]));
-        for (int i = 1; i < AxisCount; ++i) {
-            if (std::abs(step[i]) > options_.max_angular_iteration)
-                alpha = std::min(alpha,
-                    options_.max_angular_iteration / std::abs(step[i]));
-        }
-        for (int i = 0; i < AxisCount; ++i) {
-            if (step[i] == 0) continue;
-            const double bound = step[i] > 0 ? upper[i] : lower[i];
-            const double allowed = (bound - joints[i]) / step[i];
-            if (allowed < alpha) {
-                alpha = std::max(0.0, allowed);
-                const bool physical = step[i] > 0
-                    ? upper[i] == config_.upper[i] : lower[i] == config_.lower[i];
-                blocked = physical ? IkStatus::JointLimit : IkStatus::StepLimit;
-            }
-        }
-
-        const double merit = error.squaredNorm()
-            + options_.posture_weight * scaled_offset.squaredNorm();
-        bool accepted = false;
-        for (int backtrack = 0; backtrack < 24 && alpha > 1e-14;
-            ++backtrack, alpha *= 0.5) {
-            const JointVector candidate = joints + alpha * step;
-            if (!checkLimits(candidate)
-                || (candidate.array() < lower.array()).any()
-                || (candidate.array() > upper.array()).any()) {
-                continue;
-            }
-            // 不跨越当前肘部支路，也不主动穿越机械奇异位形。
-            const auto candidate_full = computeFrameJacobian(candidate);
-            Eigen::Matrix3d candidate_planar;
-            candidate_planar.topRows<2>() =
-                candidate_full.block<2, 3>(0, 1) / characteristic_length_;
-            candidate_planar.bottomRows<1>().setOnes();
-            if (std::sin(joints[2]) * std::sin(candidate[2]) <= 0
-                || Eigen::JacobiSVD<Eigen::Matrix3d>(candidate_planar)
-                    .singularValues().minCoeff() < options_.singularity_stop) {
-                blocked = IkStatus::NearSingularity;
-                continue;
-            }
-            const ArmPose next_pose = forward(candidate);
-            TaskVector next_error;
-            next_error.head<3>() =
-                (target.position - next_pose.position) / characteristic_length_;
-            next_error.tail<3>() =
-                rotationError(target.quaternion, next_pose.quaternion);
-            JointVector next_offset = candidate - current;
-            next_offset[0] /= characteristic_length_;
-            if (next_error.squaredNorm()
-                    + options_.posture_weight * next_offset.squaredNorm() < merit) {
-                joints = candidate;
-                accepted = true;
-                break;
-            }
-        }
-        if (!accepted) break;
+        return (std::min)(std::abs(std::sin(joints[2])),
+            Eigen::JacobiSVD<Eigen::Matrix3d>(planar).singularValues().minCoeff());
+    };
+    if (planar_sigma(current) < options_.singularity_stop) {
+        result.status = IkStatus::NearSingularity;
+        return result;
     }
-    result.status = blocked;
+
+    // 解析解只处理平面三轴：先扣除工具偏置，再解轴2、3两连杆，最后由总偏航角解轴4。
+    const double target_yaw = current[1] + current[2] + current[3]
+        - Pi / 2 + command.yaw;
+    const double pitch = current[4];
+    const double tool_x = config_.lateral_offset * std::cos(target_yaw)
+        + config_.tool_length * std::cos(pitch) * std::sin(target_yaw);
+    const double tool_y = config_.lateral_offset * std::sin(target_yaw)
+        - config_.tool_length * std::cos(pitch) * std::cos(target_yaw);
+    const double wrist_x = target.position.x() - tool_x;
+    const double wrist_y = target.position.y() - tool_y;
+    const double radius = std::hypot(wrist_x, wrist_y);
+    const double minimum_radius = std::abs(config_.link_lengths[0]
+        - config_.link_lengths[1]);
+    const double maximum_radius = config_.link_lengths.sum();
+    const double tolerance = (std::max)(options_.position_tolerance, 1e-12);
+    if (!std::isfinite(radius)
+        || radius < minimum_radius - tolerance
+        || radius > maximum_radius + tolerance) {
+        result.status = IkStatus::NoConvergence;
+        return result;
+    }
+
+    const double cosine_q3 = (std::max)(-1.0, (std::min)(1.0,
+        (radius * radius - config_.link_lengths[0] * config_.link_lengths[0]
+            - config_.link_lengths[1] * config_.link_lengths[1])
+        / (2 * config_.link_lengths[0] * config_.link_lengths[1])));
+    const double elbow = std::acos(cosine_q3);
+    const double current_branch = std::sin(current[2]);
+    if (std::abs(current_branch) < options_.singularity_stop) {
+        result.status = IkStatus::NearSingularity;
+        return result;
+    }
+
+    const auto nearest_equivalent = [](double principal, double reference) {
+        return reference + std::remainder(
+            principal - std::remainder(reference, 2 * Pi), 2 * Pi);
+    };
+    JointVector best = current;
+    double best_cost = std::numeric_limits<double>::infinity();
+    IkStatus blocked = IkStatus::NoConvergence;
+    for (double branch : {1.0, -1.0}) {
+        const double effective_q3 = branch * elbow;
+        const double q3 = effective_q3 - Pi;
+        const double q2 = std::atan2(wrist_x, -wrist_y)
+            - std::atan2(config_.link_lengths[1] * std::sin(effective_q3),
+                config_.link_lengths[0] + config_.link_lengths[1] * std::cos(effective_q3));
+        JointVector candidate = current;
+        candidate[1] = nearest_equivalent(q2, current[1]);
+        candidate[2] = nearest_equivalent(q3, current[2]);
+        candidate[3] = nearest_equivalent(
+            target_yaw + Pi / 2 - candidate[1] - candidate[2], current[3]);
+
+        if (current_branch * std::sin(candidate[2]) <= 0) {
+            blocked = IkStatus::NearSingularity;
+            continue;
+        }
+        if (!checkLimits(candidate)) {
+            blocked = IkStatus::JointLimit;
+            continue;
+        }
+        if (((candidate - current).cwiseAbs().array() > travel.array()).any()) {
+            blocked = IkStatus::StepLimit;
+            continue;
+        }
+        if (planar_sigma(candidate) < options_.singularity_stop) {
+            blocked = IkStatus::NearSingularity;
+            continue;
+        }
+
+        const double cost = (candidate.tail<4>() - current.tail<4>()).squaredNorm();
+        if (cost < best_cost) {
+            best = candidate;
+            best_cost = cost;
+        }
+    }
+    if (!std::isfinite(best_cost)) {
+        result.status = blocked;
+        return result;
+    }
+
+    // 解析求解成功后直接返回请求姿态；不再用一次正运动学迭代复核。
+    result.status = IkStatus::Success;
+    result.target = best;
+    result.pose = target;
+    result.position_error = result.orientation_error = 0;
     return result;
 }
 
@@ -390,8 +365,8 @@ IkResult PositioningArmKinematics::solveJog(
         Eigen::Matrix3d planar;
         planar.topRows<2>() = full.block<2, 3>(0, 1) / characteristic_length_;
         planar.bottomRows<1>().setOnes();
-        const double sigma = Eigen::JacobiSVD<Eigen::Matrix3d>(planar)
-            .singularValues().minCoeff();
+        const double sigma = (std::min)(std::abs(std::sin(current[2])),
+            Eigen::JacobiSVD<Eigen::Matrix3d>(planar).singularValues().minCoeff());
         // 硬停止区保留非零命令，让逆解明确报告奇异，而非伪装成静止成功。
         if (sigma >= options_.singularity_stop)
             scale = std::min(1.0, sigma / options_.singularity_slow);

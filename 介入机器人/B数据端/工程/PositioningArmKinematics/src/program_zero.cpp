@@ -13,7 +13,7 @@ using Derivative = Eigen::Matrix<double, 7, 4>;
 
 Eigen::Vector4d zeroAngles()
 {
-    return Eigen::Vector4d(Pi / 2, Pi, Pi, 0);
+    return Eigen::Vector4d::Zero();
 }
 
 bool positive(double value)

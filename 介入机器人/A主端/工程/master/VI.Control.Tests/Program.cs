@@ -61,7 +61,7 @@ internal static class Program
 
         var intervention = (UserControl)region.Panels[0].Content;
         var arm = (UserControl)region.Panels[1].Content;
-        Check(((FrameworkElement)arm.FindName("CartesianControls")!).Visibility == Visibility.Collapsed, "Cartesian and home controls retain their hidden default");
+        Check(((FrameworkElement)arm.FindName("CartesianControls")!).Visibility == Visibility.Visible, "Cartesian five-axis jog controls are visible");
         Check(VisualTreeHelper.GetDpi(intervention).DpiScaleX > 0, "WPF controls report valid device DPI");
         Directory.CreateDirectory(outputDirectory);
         foreach (var size in new[] { new Size(600, 560), new Size(1000, 900), new Size(1920, 1080) })
@@ -181,6 +181,23 @@ internal static class Program
             Pump();
             Check(new[] { speedFast, speedMedium, speedSlow }.Count(button => button.IsChecked == true) == 1,
                 "speed selector keeps exactly one level selected");
+            var expectedRates = scale switch
+            {
+                2.0 => new[] { 30.0, 30.0, 3.0, 1.2, 1.2 },
+                1.0 => new[] { 15.0, 15.0, 2.5, 0.8, 0.8 },
+                _ => new[] { 5.0, 5.0, 1.25, 0.4, 0.4 }
+            };
+            for (int mode = 1; mode <= expectedRates.Length; mode++)
+            {
+                Check(holdVm.GetArmCartesianJogSpeed(mode) == expectedRates[mode - 1],
+                    $"Cartesian mode {mode} uses {scale} speed tier");
+                Check(holdVm.SetArmCartesianJogAsync(mode,
+                    (int)Math.Round(holdVm.GetArmCartesianJogSpeed(mode) * 1000)).GetAwaiter().GetResult() &&
+                    recordingLink.LastArmCartesianJog == (mode,
+                        (int)Math.Round(expectedRates[mode - 1] * 1000)) &&
+                    recordingLink.LastArmCartesianSpeedScale == scale,
+                    $"Cartesian mode {mode} sends its speed tier");
+            }
             for (int armAxis = 1; armAxis <= 5; armAxis++)
             {
                 holdVm.SetArmAxisJog(armAxis, 1);
@@ -189,6 +206,11 @@ internal static class Program
                 holdVm.SetArmAxisJog(armAxis, 0);
             }
         }
+        ((TextBox)holdArm.FindName("ArmLiftMin")!).Text = "0";
+        Invoke(holdArm, "ArmCartesian_Down", holdArm.FindName("CartesianForward")!, MouseArgs(axis));
+        Check(recordingLink.LastArmCartesianJog == (1, 15000), "Cartesian X jog uses the selected medium rate");
+        Invoke(holdArm, "ArmCartesian_Up", holdArm.FindName("CartesianForward")!,
+            new RoutedEventArgs(UIElement.PreviewMouseLeftButtonUpEvent));
         Invoke(holdArm, "ArmJogButton_Down", axis, MouseArgs(axis));
         Invoke(holdArm, "ArmJogButton_Up", axis, new RoutedEventArgs(UIElement.PreviewMouseLeftButtonUpEvent));
         Check(recordingLink.LastArmJog == (1, 0), "arm mouse release sends zero jog");
@@ -329,6 +351,8 @@ public class RecordingRobotLink : DispatchProxy
         });
     }
     public (int Axis, int Direction) LastArmJog { get; private set; }
+    public (int Mode, int SpeedMilli) LastArmCartesianJog { get; private set; }
+    public double LastArmCartesianSpeedScale { get; private set; }
     public double LastArmSpeedScale { get; private set; }
     public Dictionary<int, int> ArmJogDirections { get; } = new();
     public int StopArmCount { get; private set; }
@@ -398,6 +422,12 @@ public class RecordingRobotLink : DispatchProxy
             LastArmSpeedScale = (double)args[2]!;
             ArmJogDirections[LastArmJog.Axis] = LastArmJog.Direction;
             return null;
+        }
+        if (name == "SetArmCartesianJogAsync")
+        {
+            LastArmCartesianJog = ((int)args![0]!, (int)args[1]!);
+            LastArmCartesianSpeedScale = (double)args[2]!;
+            return Task.FromResult(CommandResult.Done());
         }
         if (name == "SetForceFeedbackAsync") { LastForce = ((bool)args![0]!, (int)args[1]!); return Task.FromResult(CommandResult.Done()); }
         if (name == "SetForceFeedbackHoldAsync") { LastForceHold = (bool)args![0]!; return Task.FromResult(CommandResult.Done()); }

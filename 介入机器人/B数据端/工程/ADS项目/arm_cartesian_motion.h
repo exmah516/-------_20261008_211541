@@ -36,14 +36,11 @@ inline ArmCurvePlan plan_arm_curve(const std::array<double, 5>& actual,
         out.error = 1001; return out;
     }
     ArmKinematicConfig c;
-    c.lower << settings.lift_min_mm * 0.001, 0,
-        -std::numeric_limits<double>::infinity(),
-        -std::numeric_limits<double>::infinity(),
-        -std::numeric_limits<double>::infinity();
-    c.upper << (settings.lift_min_mm + 200) * 0.001, 180 * rad,
-        std::numeric_limits<double>::infinity(),
-        std::numeric_limits<double>::infinity(),
-        std::numeric_limits<double>::infinity();
+    // 轴1至4暂不在运动学层做人为范围裁剪；轴5保留设备要求的±60°姿态范围。
+    c.lower.setConstant(-std::numeric_limits<double>::infinity());
+    c.upper.setConstant(std::numeric_limits<double>::infinity());
+    c.lower[4] = -60 * rad;
+    c.upper[4] = 60 * rad;
     JointVector current;
     JointVector amax;
     for (int i = 0; i < 5; ++i) {

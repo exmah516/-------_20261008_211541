@@ -204,8 +204,9 @@ namespace MasterConsole.Services
             => RequestAsync(ZenohCommand.ArmAxisEnable, axis, enabled ? 1 : 0, 0, 0, 5000);
         public Task<CommandResult> ResetArmAxisAsync(int axis)
             => RequestAsync(ZenohCommand.ArmAxisReset, axis, 0, 0, 0, 5000);
-        public Task<CommandResult> SetArmCartesianJogAsync(int mode, int speedMilli)
-            => Task.FromResult(IsConnected && SendCommand(ZenohCommand.ArmCartesianJog, mode, speedMilli, 0, 0, "", null, null, null, 0)
+        public Task<CommandResult> SetArmCartesianJogAsync(int mode, int speedMilli, double speedScale = 1.0)
+            => Task.FromResult(IsConnected && (speedMilli == 0 || speedScale is 0.5 or 1.0 or 2.0) &&
+                SendCommand(ZenohCommand.ArmCartesianJog, mode, speedMilli, speedMilli == 0 ? 0 : speedScale, 0, "", null, null, null, 0)
                 ? CommandResult.DoneWithReason("已发送") : CommandResult.Rejected("点动命令未发送"));
         public Task<CommandResult> StopArmAsync() => RequestAsync(ZenohCommand.ArmStop, 0, 0, 0, 0, 5000);
         public Task<CommandResult> ReturnArmProgramZeroAsync() => RequestAsync(ZenohCommand.ArmProgramZero, 0, 0, 0, 0, 5000);

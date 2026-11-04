@@ -68,7 +68,7 @@ namespace MasterConsole.Services
         Task<CommandResult> SetArmManualEnableAsync(bool enabled);
         Task<CommandResult> SetArmAxisEnableAsync(int axis, bool enabled);
         Task<CommandResult> ResetArmAxisAsync(int axis);
-        Task<CommandResult> SetArmCartesianJogAsync(int mode, int speedMilli);
+        Task<CommandResult> SetArmCartesianJogAsync(int mode, int speedMilli, double speedScale = 1.0);
         Task<CommandResult> StopArmAsync();
         Task<CommandResult> ReturnArmProgramZeroAsync();
         Task<CommandResult> SetArmCartesianParameterAsync(int field, int valueMilli);

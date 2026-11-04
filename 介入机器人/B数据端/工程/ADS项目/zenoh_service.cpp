@@ -931,8 +931,12 @@ void ZenohService::consume_command_locked(const vi_protocol::CommandFrame& recei
         enqueue(VisCommandType::SetArmAxisJog, frame.param1, frame.param2, false,
             frame.param2 == 0 || frame.value1 == 0 ? 1.0 : frame.value1); break;
     case vi_protocol::Command::ArmCartesianJog:
-        if (frame.param1 < 1 || frame.param1 > 5 || frame.param2 < -100000 || frame.param2 > 100000) { add_result_locked(frame.command_id, 1, "Invalid Cartesian jog."); return; }
-        enqueue(VisCommandType::SetArmCartesianJog, frame.param1, frame.param2, false); break;
+        if (frame.param1 < 1 || frame.param1 > 5 || frame.param2 < -100000 || frame.param2 > 100000 ||
+            (frame.param2 != 0 && frame.value1 != 0 && frame.value1 != 0.5 &&
+                frame.value1 != 1.0 && frame.value1 != 2.0))
+        { add_result_locked(frame.command_id, 1, "Invalid Cartesian jog."); return; }
+        enqueue(VisCommandType::SetArmCartesianJog, frame.param1, frame.param2, false,
+            frame.param2 == 0 || frame.value1 == 0 ? 1.0 : frame.value1); break;
     case vi_protocol::Command::ArmStop:
         enqueue(VisCommandType::StopArmCartesian, 0, 0, false);
         for (int axis = 1; axis <= 5; ++axis) enqueue(VisCommandType::SetArmAxisJog, axis, 0, axis == 5);

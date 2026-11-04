@@ -63,7 +63,7 @@ public:
 	void request_reset(int axis_one_based);
 	void set_jog_direction(int axis_one_based, int direction, double speed_scale = 1.0);
 	bool set_jog_parameter(int axis_one_based, int parameter_kind, double value);
-	void set_cartesian_jog(int mode, double speed);
+	void set_cartesian_jog(int mode, double speed, double speed_scale = 1.0);
 	void request_program_zero();
 	void stop_cartesian();
 	void keep_cartesian_alive();
@@ -95,6 +95,7 @@ private:
 	std::array<double, 5> desired_jog_velocity_{ { 5.0, 5.0, 5.0, 5.0, 5.0 } };
 	double jog_speed_scale_ = 1.0;
 	std::array<double, 5> desired_jog_acc_{ { 50.0, 50.0, 50.0, 50.0, 50.0 } };
+	double cartesian_acceleration_override_ = 0.0;
 	std::array<double, 5> desired_jog_dec_{ { 50.0, 50.0, 50.0, 50.0, 50.0 } };
 	std::array<double, 5> desired_jog_jerk_{ { 500.0, 500.0, 500.0, 500.0, 500.0 } };
 	bool manual_dirty_ = true;

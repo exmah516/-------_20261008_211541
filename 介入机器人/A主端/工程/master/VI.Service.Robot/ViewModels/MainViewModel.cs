@@ -392,6 +392,20 @@ namespace MasterConsole.ViewModels
         public bool ArmSpeedMedium { get => _armJogSpeedScale == 1.0; set { if (value) SetArmJogSpeedScale(1.0); } }
         public bool ArmSpeedSlow { get => _armJogSpeedScale == 0.5; set { if (value) SetArmJogSpeedScale(0.5); } }
 
+        public double GetArmCartesianJogSpeed(int mode) => (mode, _armJogSpeedScale) switch
+        {
+            (1 or 2, 2.0) => 30.0,
+            (1 or 2, 1.0) => 15.0,
+            (1 or 2, _) => 5.0,
+            (3, 2.0) => 3.0,
+            (3, 1.0) => 2.5,
+            (3, _) => 1.25,
+            (4 or 5, 2.0) => 1.2,
+            (4 or 5, 1.0) => 0.8,
+            (4 or 5, _) => 0.4,
+            _ => 0.0
+        };
+
         private void SetArmJogSpeedScale(double scale)
         {
             if (_armJogSpeedScale == scale) return;
@@ -410,7 +424,7 @@ namespace MasterConsole.ViewModels
         public void SetArmAxisJog(int axis, int direction) => _link.SetArmAxisJog(axis, direction, _armJogSpeedScale);
         public async Task<bool> SetArmCartesianJogAsync(int mode, int speedMilli)
         {
-            var result = await _link.SetArmCartesianJogAsync(mode, speedMilli);
+            var result = await _link.SetArmCartesianJogAsync(mode, speedMilli, _armJogSpeedScale);
             await ReportArm("定位臂末端点动", result);
             return result.Ok;
         }

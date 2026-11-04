@@ -23,8 +23,8 @@ ArmKinematicConfig fixture()
 {
     ArmKinematicConfig c;
     // 尺寸来自用户；端点、速度、编码器单位仅为离线合成配置。
-    c.lower << 0, 0, -4 * Pi, -4 * Pi, -Pi / 2;
-    c.upper << 0.2, Pi, 4 * Pi, 4 * Pi, Pi / 2;
+    c.lower << 0, -4 * Pi, -4 * Pi, -4 * Pi, -Pi / 2;
+    c.upper << 0.2, 4 * Pi, 4 * Pi, 4 * Pi, Pi / 2;
     c.max_velocity << 0.1, 1, 1, 1, 1;
     for (int i = 0; i < AxisCount; ++i)
         c.calibration[i] = {0, i == 0 ? 0.001 : Degree, 1};
@@ -39,7 +39,7 @@ JointVector start()
 JointVector home()
 {
     JointVector q;
-    q << 0.1, Pi / 2, Pi, Pi, 0;
+    q << 0.1, 0, 0, 0, 0;
     return q;
 }
 JointVector outside()
@@ -128,17 +128,19 @@ int main()
             PositioningArmKinematics arm(fixture());
             auto q = JointVector::Zero().eval(); q[0] = 0.1;
             auto pose = arm.forward(q);
-            check((pose.position - Eigen::Vector3d(-0.5545, -0.8363, 0.1)).norm() < 1e-12,
+            check((pose.position - Eigen::Vector3d(-0.5545, -0.4763, 0.1)).norm() < 1e-12,
                 "Wrong mechanical-zero L geometry");
             pose = arm.forward(home());
-            check((pose.position - Eigen::Vector3d(0.4763, -0.5545, 0.1)).norm() < 1e-12,
+            check((pose.position - Eigen::Vector3d(-0.5545, -0.4763, 0.1)).norm() < 1e-12,
                 "Wrong program-zero geometry");
-            check(pose.quaternion.angularDistance(Eigen::Quaterniond::Identity()) < 1e-12,
-                "Program-zero tool axes not aligned");
+            check(pose.quaternion.angularDistance(
+                Eigen::Quaterniond(Eigen::AngleAxisd(-Pi / 2, Eigen::Vector3d::UnitZ()))) < 1e-12,
+                "Mechanical-zero tool axes not aligned");
             q = home(); q[4] = -30 * Degree;
             pose = arm.forward(q);
             check(std::abs(pose.position.z() - 0.37725) < 1e-12, "Negative pitch did not lift tip");
-            check(std::abs(pose.position.x() - 0.4763) < 1e-12, "Pitch changed lateral offset");
+            check(std::abs(pose.position.x() + 0.480211086398471) < 1e-12,
+                "Pitch changed lateral offset");
             check(arm.degreesOfFreedom() == 5, "Wrong DOF");
         }},
         {"Analytical Jacobian finite differences", [] {
@@ -160,12 +162,13 @@ int main()
                 }
             }
         }},
-        {"Mechanical encoder and program coordinates are distinct", [] {
+        {"Encoder conversion uses the new mechanical-zero reference", [] {
             PositioningArmKinematics arm(fixture());
-            JointVector reading; reading << 100, 90, 180, 180, 0;
+            JointVector reading; reading << 100, 0, 0, 0, 0;
             const auto q = arm.fromEncoder(reading);
             check((q - home()).norm() < 1e-12, "Offsets applied to encoder conversion");
-            check(arm.toProgramCoordinates(q).tail<4>().norm() < 1e-12, "Program offset missing");
+            check(arm.toProgramCoordinates(q).tail<4>().norm() < 1e-12,
+                "Mechanical zero is not program zero");
             check((arm.fromProgramCoordinates(arm.toProgramCoordinates(start())) - start()).norm()
                 < 1e-12, "Program roundtrip");
             check((arm.toEncoder(q) - reading).norm() < 1e-10, "Encoder roundtrip");
@@ -258,6 +261,38 @@ int main()
                 q[i] += 1e-7; check(!arm.checkLimits(q), "Over limit accepted");
             }
         }},
+        {"Analytic Cartesian jog with unlimited axes and bounded pitch", [] {
+            auto c = fixture();
+            c.lower.head<4>().setConstant(-std::numeric_limits<double>::infinity());
+            c.upper.head<4>().setConstant(std::numeric_limits<double>::infinity());
+            c.lower[4] = -60 * Degree; c.upper[4] = 60 * Degree;
+            PositioningArmKinematics arm(c);
+            auto q = start();
+            q[1] = 10 * Pi + 0.6; q[2] = 1.2; q[3] = 8 * Pi + 0.2;
+            q[4] = 30 * Degree;
+            check(arm.checkLimits(q), "Unlimited rotation axes rejected");
+            const auto before = arm.forward(q);
+            for (int mode = 0; mode < 3; ++mode) {
+                CartesianJog command; command.duration = 0.05;
+                if (mode == 0) command.translation.x() = 0.0005;
+                if (mode == 1) command.translation.y() = -0.0005;
+                if (mode == 2) command.yaw = 0.002;
+                const auto r = arm.solveCartesianJog(q, command);
+                check(r.success() && r.iterations == 0, "Analytic jog failed or iterated");
+                check(r.target[0] == q[0] && r.target[4] == q[4],
+                    "Planar jog moved lift or pitch");
+                auto expected = before;
+                expected.position += command.translation;
+                expected.quaternion = Eigen::Quaterniond(
+                    Eigen::AngleAxisd(command.yaw, Eigen::Vector3d::UnitZ()))
+                    * before.quaternion;
+                samePose(arm.forward(r.target), expected);
+            }
+            q[4] = c.upper[4];
+            const auto at_pitch_limit = arm.solveJog(q, {JogAxis::Pitch, -0.1, 0.05});
+            check(at_pitch_limit.status == IkStatus::JointLimit,
+                "Pitch jog crossed the positive 60-degree limit");
+        }},
         {"Continuous planar jog and quaternion sign", [] {
             PositioningArmKinematics arm(fixture());
             auto q = start(); const auto initial = arm.forward(q);
@@ -274,13 +309,17 @@ int main()
             const auto aligned = PositioningArmKinematics::continuousQuaternion(negative, initial.quaternion);
             check(aligned.dot(initial.quaternion) > 1 - 1e-12, "Sign normalization failed");
         }},
-        {"Unreachable and iteration exhaustion preserve state", [] {
-            PositioningArmKinematics arm(fixture());
-            auto q = home(); q[2] -= 0.001;
-            rejected(arm.solveJog(q, {JogAxis::X, 0.3, 0.05}), q);
-            SolverOptions o; o.max_iterations = 1;
-            PositioningArmKinematics limited(fixture(), o);
-            rejected(limited.solveJog(start(), {JogAxis::X, 0.04, 0.05}), start());
+        {"Unreachable preserves state and analytic IK ignores iteration count", [] {
+            auto c = fixture(); c.max_velocity.setConstant(100);
+            SolverOptions o; o.max_translation = 0.6; o.max_iterations = 1;
+            PositioningArmKinematics arm(c, o);
+            auto q = start();
+            CartesianJog unreachable; unreachable.translation.x() = 0.5;
+            unreachable.duration = 0.5;
+            rejected(arm.solveCartesianJog(q, unreachable), q);
+            const auto r = arm.solveJog(q, {JogAxis::X, 0.004, 0.05});
+            check(r.success() && r.iterations == 0,
+                "IK depends on the legacy iteration-count option");
         }},
         {"Home windows include exact boundaries without motion", [] {
             PositioningArmKinematics arm(fixture());
@@ -342,10 +381,12 @@ int main()
             rejected(arm.planProgramZeroReturn(q, o), q, HomeStatus::InvalidInput);
         }},
         {"Home checks initial and final joint limits", [] {
-            auto c = fixture(); c.upper[2] = Pi - Degree;
+            auto c = fixture(); c.lower[2] = Degree;
             PositioningArmKinematics arm(c);
-            rejected(arm.planProgramZeroReturn(outside(), homeOptions()), outside(), HomeStatus::JointLimit);
-            c = fixture(); PositioningArmKinematics normal(c);
+            auto final_out_of_range = home(); final_out_of_range[2] = 2 * Degree;
+            rejected(arm.planProgramZeroReturn(final_out_of_range, homeOptions()),
+                final_out_of_range, HomeStatus::JointLimit);
+            c = fixture(); c.lower[1] = 0; PositioningArmKinematics normal(c);
             auto q = outside(); q[1] = -Degree;
             rejected(normal.planProgramZeroReturn(q, homeOptions()), q, HomeStatus::JointLimit);
         }},

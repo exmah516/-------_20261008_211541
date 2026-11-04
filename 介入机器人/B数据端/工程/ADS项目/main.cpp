@@ -4880,7 +4880,8 @@ int main()
 					arm_manual_ads.set_manual_enable(vcmd.param1 != 0);
 					break;
 				case VisCommandType::SetArmCartesianJog:
-					arm_manual_ads.set_cartesian_jog(vcmd.param1, vcmd.param2 / 1000.0);
+					arm_manual_ads.set_cartesian_jog(vcmd.param1, vcmd.param2 / 1000.0,
+						vcmd.arm_jog_speed_scale);
 					break;
 				case VisCommandType::ReturnArmProgramZero:
 					arm_manual_ads.request_program_zero();

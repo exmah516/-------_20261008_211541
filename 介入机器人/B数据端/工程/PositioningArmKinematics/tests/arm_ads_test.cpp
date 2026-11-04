@@ -9,7 +9,7 @@
 
 namespace {
 std::mutex fake_mutex;
-std::array<double, 5> actual{{100, 90, 180, 180, 0}};
+std::array<double, 5> actual{{100, 0, 0, 0, 0}};
 std::array<double, 5> jog_velocity{{5, 5, 5, 5, 5}}, jog_acc{{50, 50, 50, 50, 50}};
 std::array<double, 5> jog_dec{{50, 50, 50, 50, 50}}, jog_jerk{{500, 500, 500, 500, 500}};
 std::array<bool, 5> jog_pos{}, jog_neg{};
@@ -151,6 +151,15 @@ int main()
             check(std::abs(plan.curve.values[6] + plan.curve.values[7]
                 + plan.curve.values[8] - 135) < 1e-4, "Planar jog changed yaw");
         }
+        const std::array<double, 5> multi_turn{{300, 450, 80, 370, 30}};
+        plan = plan_arm_curve(multi_turn, velocity, acceleration, settings, 1, 3);
+        check(plan.error == 0 && plan.curve.values[5] == multi_turn[0]
+            && plan.curve.values[6] > 180 && plan.curve.values[8] > 360,
+            "Cartesian jog imposed lift or multi-turn rotation limits");
+        auto pitch_over_limit = actual; pitch_over_limit[4] = 61;
+        check(plan_arm_curve(pitch_over_limit, velocity, acceleration,
+            settings, 1, 1).error == 1002,
+            "Cartesian jog accepted pitch outside +/-60 degrees");
         check(plan_arm_curve(actual, velocity, acceleration, settings, 1, 1).error == 1104,
             "Folded-zero Cartesian jog not rejected");
         check(plan_arm_curve(actual, velocity, acceleration, {}, 3, 1).error == 1001,
@@ -204,14 +213,25 @@ int main()
 
         { std::lock_guard<std::mutex> lock(fake_mutex); fake_busy = true; }
         until([&] { return service.snapshot().motion_busy[0]; });
-        service.set_cartesian_jog(3, 1);
+        service.set_cartesian_jog(3, 3, 2.0);
+        until([&] {
+            std::lock_guard<std::mutex> lock(fake_mutex);
+            return jog_velocity[0] == 10.0 && jog_acc[0] == 60.0;
+        });
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         check(count("G.arm_curve_request") == 0 && service.snapshot().cartesian_error != 1008,
             "Transient busy aborted Cartesian jog");
         { std::lock_guard<std::mutex> lock(fake_mutex); fake_busy = false; }
         until([&] { return count("G.arm_curve_request") == 1; });
+        { std::lock_guard<std::mutex> lock(fake_mutex);
+            check(jog_velocity[0] == 10.0 && jog_acc[0] == 60.0 && jog_velocity[1] == 10.0,
+                "Fast Z velocity/acceleration and Cartesian joint speed limits written before curve"); }
         service.stop_cartesian();
-        until([&] { return service.snapshot().cartesian_status == 4; });
+        until([&] {
+            if (service.snapshot().cartesian_status != 4) return false;
+            std::lock_guard<std::mutex> lock(fake_mutex);
+            return jog_velocity[0] == 10.0 && jog_acc[0] == 50.0;
+        });
         check(count("G.arm_curve_request") == 1, "Stop resubmitted curve");
 
         { std::lock_guard<std::mutex> lock(fake_mutex); fail_symbol = "G.arm_curve_data"; }
@@ -257,11 +277,30 @@ int main()
         until([&] { return service.snapshot().cartesian_status == 4; });
         service.set_cartesian_jog(3, 1);
         until([&] { return count("G.arm_curve_request") == 6; });
+        service.stop_cartesian();
+        until([&] { return service.snapshot().cartesian_status == 4; });
+        for (const auto& [speed, expected_acc] : { std::pair{2.5, 50.0}, std::pair{1.25, 25.0} }) {
+            const auto previous_requests = count("G.arm_curve_request");
+            service.set_cartesian_jog(3, speed);
+            until([&] { return count("G.arm_curve_request") == previous_requests + 1; });
+            {
+                std::lock_guard<std::mutex> lock(fake_mutex);
+                check(jog_acc[0] == expected_acc, "Z speed tier wrote its acceleration limit");
+            }
+            service.stop_cartesian();
+            until([&] {
+                if (service.snapshot().cartesian_status != 4) return false;
+                std::lock_guard<std::mutex> lock(fake_mutex);
+                return jog_acc[0] == 50.0;
+            });
+        }
+        service.set_cartesian_jog(3, 3);
+        until([&] { return count("G.arm_curve_request") == 9; });
         const auto cancels_before_shutdown = count("G.arm_curve_cancel");
         service.stop();
         check(count("G.arm_curve_cancel") == cancels_before_shutdown + 1,
             "Service shutdown did not cancel active curve");
-        check(count("G.arm_curve_request") == 6, "Shutdown committed another curve");
+        check(count("G.arm_curve_request") == 9, "Shutdown committed another curve");
         std::cout << "PASS: three jog speeds/all axes/no accumulation/write order/release/lease, PLC units, home window, staged commit, cancellation, no retries, lease/feedback loss, PLC error, shutdown; no hardware.\n";
     } catch (const std::exception& error) {
         std::cerr << "FAIL: " << error.what() << '\n';
