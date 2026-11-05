@@ -61,7 +61,7 @@ IF (stage = 0) AND held AND NOT G.arm_curve_owned
         G.arm_cjog_error := 3002;
     ELSE
         gen(start:=TRUE, held:=FALSE, mode:=G.arm_cjog_mode, dir:=G.arm_cjog_dir,
-            speed:=G.arm_cjog_speed, seed:=G.arm_act_pos, dt:=cycle_seconds);
+            speed:=G.arm_cjog_speed, seed:=G.arm_act_pos, cycle_dt:=cycle_seconds);
         FOR i := 1 TO 5 DO dir_feed[i] := 1; END_FOR
         G.arm_cjog_error := 0;
         G.arm_cjog_owned := TRUE;
@@ -86,7 +86,7 @@ IF stage = 10 THEN
 END_IF
 IF stage = 25 THEN
     gen(start:=FALSE, held:=held, mode:=G.arm_cjog_mode, dir:=G.arm_cjog_dir,
-        speed:=G.arm_cjog_speed, seed:=gen.p, dt:=cycle_seconds);
+        speed:=G.arm_cjog_speed, seed:=gen.p, cycle_dt:=cycle_seconds);
     IF (gen.path_speed = 0) AND NOT held THEN
         zero_cycles := zero_cycles+1;
     ELSE

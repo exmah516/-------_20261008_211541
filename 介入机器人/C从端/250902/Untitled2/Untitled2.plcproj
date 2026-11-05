@@ -31,13 +31,13 @@
     <Compile Include="PlcTask.TcTTO">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="POUs\ArmCartJogGen.TcPOU">
+    <Compile Include="POUs\ArmCartesian.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="POUs\ArmCartJog.TcPOU">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="POUs\ArmCartesian.TcPOU">
+    <Compile Include="POUs\ArmCartJogGen.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="POUs\err.TcPOU">

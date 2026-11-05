@@ -3593,7 +3593,7 @@ External Setpoint Generation:
 		</Motion>
 		<Plc>
 			<Project GUID="{DD2ED881-765C-44ED-90B1-8AE0D6051941}" Name="Untitled2" PrjFilePath="Untitled2\Untitled2.plcproj" TmcFilePath="Untitled2\Untitled2.tmc" ReloadTmc="true" AmsPort="851" FileArchiveSettings="#x000e" SymbolicMapping="true">
-				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="2" TmcPath="Untitled2\Untitled2.tmc" TmcHash="{430E9DE4-2A85-62D4-2010-A55C88D1666B}">
+				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="2" TmcPath="Untitled2\Untitled2.tmc" TmcHash="{0969CBE4-DDC2-09D3-FE59-2C948045EE1A}">
 					<Name>Untitled2 Instance</Name>
 					<CLSID ClassFactory="TcPlc30">{08500001-0000-0000-F000-000000000064}</CLSID>
 					<Vars VarGrpType="1">
@@ -3659,15 +3659,15 @@ External Setpoint Generation:
 							<Type GUID="{25521FAA-EA5F-4C7F-8864-BBCCDACD2E98}" Namespace="MC">NCTOPLC_AXIS_REF</Type>
 						</Var>
 						<Var>
-							<Name>G.fn_2_value</Name>
-							<Type>INT</Type>
-						</Var>
-						<Var>
 							<Name>G.ft_1_value</Name>
 							<Type>INT</Type>
 						</Var>
 						<Var>
 							<Name>G.fn_1_value</Name>
+							<Type>INT</Type>
+						</Var>
+						<Var>
+							<Name>G.fn_2_value</Name>
 							<Type>INT</Type>
 						</Var>
 						<Var>
@@ -3739,6 +3739,10 @@ External Setpoint Generation:
 							<Type GUID="{96B75FEB-2D84-43BE-A3EC-D9A681F27D52}" Namespace="MC">PLCTONC_AXIS_REF</Type>
 						</Var>
 						<Var>
+							<Name>G.inject_axis[2].PlcToNc</Name>
+							<Type GUID="{96B75FEB-2D84-43BE-A3EC-D9A681F27D52}" Namespace="MC">PLCTONC_AXIS_REF</Type>
+						</Var>
+						<Var>
 							<Name>G.cylinder2_value</Name>
 							<Comment><![CDATA[ 电缸2控制值 (安装在轴1机构上)]]></Comment>
 							<Type>WORD</Type>
@@ -3757,10 +3761,6 @@ External Setpoint Generation:
 							<Name>G.cylinder5_value</Name>
 							<Comment><![CDATA[ 电缸5控制值 (安装在轴3机构上控制y阀)]]></Comment>
 							<Type>WORD</Type>
-						</Var>
-						<Var>
-							<Name>G.inject_axis[2].PlcToNc</Name>
-							<Type GUID="{96B75FEB-2D84-43BE-A3EC-D9A681F27D52}" Namespace="MC">PLCTONC_AXIS_REF</Type>
 						</Var>
 					</Vars>
 					<Contexts>

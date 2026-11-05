@@ -9,7 +9,7 @@ VAR_INPUT
     dir : INT;
     speed : LREAL;
     seed : ARRAY[1..5] OF LREAL;
-    dt : LREAL;
+    cycle_dt : LREAL;
 END_VAR
 VAR_OUTPUT
     p : ARRAY[1..5] OF LREAL;
@@ -41,7 +41,7 @@ VAR
     reanchor, trial_ok : BOOL;
     i, j : INT;
     u, delta_sigma_des, delta_sigma, lower_step, upper_step : LREAL;
-    best_step, trial_step, axis_sign, s, ex, ey : LREAL;
+    best_step, trial_step, axis_sign, signed_path, ex, ey : LREAL;
     candidate_wx, candidate_wy, best_wx, best_wy : LREAL;
     candidate_radius, candidate_cosine, candidate_elbow : LREAL;
     candidate_azimuth, azimuth_denominator : LREAL;
@@ -65,7 +65,7 @@ IF target_speed <> v1 THEN
     IF v1 > v0 THEN duration := T_ACC; ELSE duration := T_DEC; END_IF
     tau := 0;
 END_IF
-IF NOT start THEN tau := tau + dt; END_IF
+IF NOT start THEN tau := tau + cycle_dt; END_IF
 u := MIN(1.0, tau / duration);
 path_v := v0 + (v1-v0)*(3.0*u*u-2.0*u*u*u);
 // 模式或方向变化在曲线零速点重新锚定。
@@ -84,17 +84,17 @@ IF reanchor THEN
 END_IF
 limited := FALSE;
 IF start THEN path_speed := 0; target_speed := 0; RETURN; END_IF
-delta_sigma_des := 0.5*(path_v_previous+path_v)*dt;
+delta_sigma_des := 0.5*(path_v_previous+path_v)*cycle_dt;
 IF latched_mode >= 3 THEN
     // Z正向为轴1减小；俯仰正向为轴5减小；偏航正向为轴4增大。
     IF latched_mode = 3 THEN j := 1;
     ELSIF latched_mode = 4 THEN j := 5;
     ELSE j := 4; END_IF
-    delta_sigma := MIN(delta_sigma_des, JOINT_VCAP[j]*dt);
-    s := latched_dir*(sigma+delta_sigma);
+    delta_sigma := MIN(delta_sigma_des, JOINT_VCAP[j]*cycle_dt);
+    signed_path := latched_dir*(sigma+delta_sigma);
     p := anchor;
     IF latched_mode = 5 THEN axis_sign := 1.0; ELSE axis_sign := -1.0; END_IF
-    p[j] := anchor[j]+axis_sign*s;
+    p[j] := anchor[j]+axis_sign*signed_path;
 ELSE
     // X/Y试探直线步长；环带与三关节步长共同决定可接受步长。
     IF latched_mode = 1 THEN ex := 1.0; ey := 0.0;
@@ -128,9 +128,9 @@ ELSE
             WHILE candidate_q3-p[3] > 180.0 DO candidate_q3 := candidate_q3-360.0; END_WHILE
             WHILE candidate_q3-p[3] < -180.0 DO candidate_q3 := candidate_q3+360.0; END_WHILE
             candidate_q4 := anchor[4]+(anchor[2]+anchor[3])-(candidate_q2+candidate_q3);
-            trial_ok := (ABS(candidate_q2-p[2]) <= JOINT_VCAP[2]*dt)
-                AND (ABS(candidate_q3-p[3]) <= JOINT_VCAP[3]*dt)
-                AND (ABS(candidate_q4-p[4]) <= JOINT_VCAP[4]*dt);
+            trial_ok := (ABS(candidate_q2-p[2]) <= JOINT_VCAP[2]*cycle_dt)
+                AND (ABS(candidate_q3-p[3]) <= JOINT_VCAP[3]*cycle_dt)
+                AND (ABS(candidate_q4-p[4]) <= JOINT_VCAP[4]*cycle_dt);
         END_IF
         IF trial_ok THEN
             lower_step := trial_step; best_step := trial_step;
@@ -149,11 +149,11 @@ ELSE
     END_IF
 END_IF
 sigma := sigma+delta_sigma;
-path_speed := delta_sigma/dt;
+path_speed := delta_sigma/cycle_dt;
 limited := delta_sigma < delta_sigma_des;
 FOR i := 1 TO 5 DO
-    v[i] := (p[i]-position_before[i])/dt;
-    a[i] := (v[i]-velocity_before[i])/dt;
+    v[i] := (p[i]-position_before[i])/cycle_dt;
+    a[i] := (v[i]-velocity_before[i])/cycle_dt;
 END_FOR]]></ST>
     </Implementation>
   </POU>
