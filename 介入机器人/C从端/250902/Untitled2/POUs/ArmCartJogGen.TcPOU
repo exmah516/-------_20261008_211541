@@ -24,6 +24,8 @@ VAR CONSTANT
     RAD : LREAL := PI / 180.0;
     L1 : LREAL := 200.0; // 毫米，取自kinematics.h
     L2 : LREAL := 180.0;
+    TOOL_LATERAL_OFFSET_MM : LREAL := 456.3;
+    TOOL_LENGTH_MM : LREAL := 554.5;
     T_ACC : LREAL := 1.0; // 秒
     T_DEC : LREAL := 0.5;
     INITIAL_BRANCH : INT := 1;
@@ -36,6 +38,7 @@ VAR
     path_v, path_v_previous, v0, v1, tau, sigma : LREAL;
     duration : LREAL := T_ACC;
     wx, wy : LREAL;
+    psi0, d0x, d0y, tcp0x, tcp0y : LREAL;
     latched_mode, latched_dir : INT;
     branch : INT := INITIAL_BRANCH;
     reanchor, trial_ok : BOOL;
@@ -46,6 +49,7 @@ VAR
     candidate_radius, candidate_cosine, candidate_elbow : LREAL;
     candidate_azimuth, azimuth_denominator : LREAL;
     candidate_q2, candidate_q3, candidate_q4 : LREAL;
+    candidate_psi : LREAL;
     best_q2, best_q3, best_q4, branch_q3 : LREAL;
 END_VAR]]></Declaration>
     <Implementation>
@@ -81,19 +85,74 @@ IF reanchor THEN
     END_IF
     wx := L1*SIN(anchor[2]*RAD)+L2*SIN((anchor[2]+anchor[3])*RAD+PI);
     wy := -L1*COS(anchor[2]*RAD)-L2*COS((anchor[2]+anchor[3])*RAD+PI);
+    psi0 := anchor[2]+anchor[3]+anchor[4]-90.0;
+    d0x := TOOL_LATERAL_OFFSET_MM;
+    d0y := -TOOL_LENGTH_MM*COS(anchor[5]*RAD);
+    tcp0x := wx+d0x*COS(psi0*RAD)-d0y*SIN(psi0*RAD);
+    tcp0y := wy+d0x*SIN(psi0*RAD)+d0y*COS(psi0*RAD);
 END_IF
 limited := FALSE;
 IF start THEN path_speed := 0; target_speed := 0; RETURN; END_IF
 delta_sigma_des := 0.5*(path_v_previous+path_v)*cycle_dt;
-IF latched_mode >= 3 THEN
-    // Z正向为轴1减小；俯仰正向为轴5减小；偏航正向为轴4增大。
+IF latched_mode = 5 THEN
+    // 每周期由偏航累计角和锚定TCP反求腕点，不累加腕点位移。
+    best_step := 0; lower_step := 0; upper_step := delta_sigma_des;
+    FOR i := 0 TO BISECTION_COUNT DO
+        IF i = 0 THEN trial_step := delta_sigma_des;
+        ELSE trial_step := (lower_step+upper_step)/2.0; END_IF
+        candidate_psi := psi0+latched_dir*(sigma+trial_step);
+        candidate_wx := tcp0x-d0x*COS(candidate_psi*RAD)+d0y*SIN(candidate_psi*RAD);
+        candidate_wy := tcp0y-d0x*SIN(candidate_psi*RAD)-d0y*COS(candidate_psi*RAD);
+        candidate_radius := SQRT(candidate_wx*candidate_wx+candidate_wy*candidate_wy);
+        trial_ok := FALSE;
+        IF (candidate_radius >= L1-L2) AND (candidate_radius <= L1+L2) THEN
+            candidate_cosine := (candidate_radius*candidate_radius-L1*L1-L2*L2)/(2.0*L1*L2);
+            IF candidate_cosine > 1.0 THEN candidate_cosine := 1.0;
+            ELSIF candidate_cosine < -1.0 THEN candidate_cosine := -1.0; END_IF
+            candidate_elbow := branch*ACOS(candidate_cosine);
+            azimuth_denominator := -candidate_wy;
+            IF azimuth_denominator > 0 THEN candidate_azimuth := ATAN(candidate_wx/azimuth_denominator);
+            ELSIF azimuth_denominator < 0 THEN
+                IF candidate_wx >= 0 THEN candidate_azimuth := ATAN(candidate_wx/azimuth_denominator)+PI;
+                ELSE candidate_azimuth := ATAN(candidate_wx/azimuth_denominator)-PI; END_IF
+            ELSE
+                IF candidate_wx > 0 THEN candidate_azimuth := PI/2.0;
+                ELSE candidate_azimuth := -PI/2.0; END_IF
+            END_IF
+            candidate_q2 := (candidate_azimuth-ATAN(L2*SIN(candidate_elbow)/(L1+L2*COS(candidate_elbow))))/RAD;
+            candidate_q3 := (candidate_elbow-PI)/RAD;
+            WHILE candidate_q2-p[2] > 180.0 DO candidate_q2 := candidate_q2-360.0; END_WHILE
+            WHILE candidate_q2-p[2] < -180.0 DO candidate_q2 := candidate_q2+360.0; END_WHILE
+            WHILE candidate_q3-p[3] > 180.0 DO candidate_q3 := candidate_q3-360.0; END_WHILE
+            WHILE candidate_q3-p[3] < -180.0 DO candidate_q3 := candidate_q3+360.0; END_WHILE
+            candidate_q4 := anchor[4]+(candidate_psi-psi0)-((candidate_q2+candidate_q3)-(anchor[2]+anchor[3]));
+            trial_ok := (ABS(candidate_q2-p[2]) <= JOINT_VCAP[2]*cycle_dt)
+                AND (ABS(candidate_q3-p[3]) <= JOINT_VCAP[3]*cycle_dt)
+                AND (ABS(candidate_q4-p[4]) <= JOINT_VCAP[4]*cycle_dt);
+        END_IF
+        IF trial_ok THEN
+            lower_step := trial_step; best_step := trial_step;
+            best_wx := candidate_wx; best_wy := candidate_wy;
+            best_q2 := candidate_q2; best_q3 := candidate_q3; best_q4 := candidate_q4;
+            IF i = 0 THEN EXIT; END_IF
+        ELSE
+            upper_step := trial_step;
+        END_IF
+    END_FOR
+    delta_sigma := best_step;
+    IF delta_sigma > 0 THEN
+        p[1] := anchor[1]; p[5] := anchor[5];
+        p[2] := best_q2; p[3] := best_q3; p[4] := best_q4;
+    END_IF
+ELSIF latched_mode >= 3 THEN
+    // Z正向为轴1减小；俯仰正向为轴5减小。
     IF latched_mode = 3 THEN j := 1;
     ELSIF latched_mode = 4 THEN j := 5;
     ELSE j := 4; END_IF
     delta_sigma := MIN(delta_sigma_des, JOINT_VCAP[j]*cycle_dt);
     signed_path := latched_dir*(sigma+delta_sigma);
     p := anchor;
-    IF latched_mode = 5 THEN axis_sign := 1.0; ELSE axis_sign := -1.0; END_IF
+    axis_sign := -1.0;
     p[j] := anchor[j]+axis_sign*signed_path;
 ELSE
     // X/Y试探直线步长；环带与三关节步长共同决定可接受步长。

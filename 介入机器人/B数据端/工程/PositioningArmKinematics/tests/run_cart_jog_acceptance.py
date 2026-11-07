@@ -45,9 +45,10 @@ def run(name, command):
 
 run("st_translation", [sys.executable, tests / "translate_cart_jog_st.py",
     repo / "C从端/250902/Untitled2/POUs/ArmCartJogGen.TcPOU", build / "arm_cart_jog_st_generated.h"])
-run("st_static_audit_round2", [sys.executable, tests / "audit_cart_jog_st.py"])
+run("st_static_audit_round3", [sys.executable, tests / "audit_cart_jog_st.py"])
 for name, files, arguments in [
     ("home_regression", [tests / "home_regression.cpp", *sources], ["--verify", tests / "home_baseline.txt"]),
+    ("arm_cart_jog_regression", [tests / "arm_cart_jog_regression.cpp"], [tests / "arm_cart_jog_round3_baseline.bin"]),
     ("arm_cart_jog_tests", [tests / "arm_cart_jog_tests.cpp", *sources], []),
     ("arm_cart_jog_equivalence", [tests / "arm_cart_jog_equivalence.cpp"], []),
     ("arm_ads_tests", [tests / "arm_ads_test.cpp", ads / "arm_manual_ads_service.cpp", *sources], []),

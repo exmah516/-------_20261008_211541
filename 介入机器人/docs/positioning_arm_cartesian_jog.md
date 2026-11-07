@@ -1,6 +1,6 @@
 # 定位臂 PLC 末端点动接口
 
-更新：2026-11-05，仅修订 T11 跨过渡路径加速度判据，运动算法与接口保持原样。全量复验结果、T7交界周期与零位四方向实测见[本轮交付报告](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/docs/positioning_arm_cartesian_jog_round2_report.md>)。本机可执行的离线项目全部通过；PLC 未构建，Scope 未做。
+更新：2026-11-05，第三轮将模式5改为保持TCP位置的偏航运动，并拆分偏航速度档。第三轮完整验收见[本轮交付报告](positioning_arm_cartesian_jog_round3_report.md)。PLC 未构建；工程机编译、下载和激活仍待现场执行。
 
 旧《定位臂项目修改与接口说明》docx 已过时。归零继续使用原 17 个 LREAL 单段曲线且 `[16]=0`；末端点动由下述 PLC 接口独立生成，协议命令格式不变。
 
@@ -18,7 +18,27 @@ Wy = −200 cos(q2) − 180 cos(q2+q3+π)
 
 机械 q3=0 完全折叠，q3=±180° 完全伸直。`INITIAL_BRANCH=+1` 取 `α=+acos(cos α)`，从折叠位沿可达方向离开时 α 从 π 减小，因此机械轴 3 向负方向弯；无需反转该常量。折叠、伸直及其多圈等价值不能判定分支时保留上次分支。实现见 [ArmCartJogGen:74](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJogGen.TcPOU:74>)。
 
-姿态仍为 `Rz(q2+q3+q4−90°)·Rx(q5)`（[kinematics.cpp:95](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/B数据端/工程/PositioningArmKinematics/src/kinematics.cpp:95>)）。偏航+对应轴 4 增大；俯仰+对应轴 5 减小。X/Y 保持轴 1、5，轴 4 用 `anchor4+(anchor2+anchor3)−(q2+q3)` 保持偏航。俯仰/偏航只转各自关节。
+姿态仍为 `Rz(ψ)·Rx(q5)`、`ψ=q2+q3+q4−90°`（[kinematics.cpp:95](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/B数据端/工程/PositioningArmKinematics/src/kinematics.cpp:95>)）。俯仰+对应轴5减小。X/Y 保持轴1、5，轴4补偿以保持偏航。模式5的偏航+使ψ增大，并协调轴2、3、4保持TCP位置及轴1、5锚点。
+
+### 第三轮：偏航保持TCP位置
+
+正解工具向量在 [kinematics.cpp:98](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/B数据端/工程/PositioningArmKinematics/src/kinematics.cpp:98>) 为 `(lateral_offset,−tool_length,0)`，工具参数在 [kinematics.h:22](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/B数据端/工程/PositioningArmKinematics/include/positioning_arm/kinematics.h:22>) 为 `lateral_offset=0.4563 m`、`tool_length=0.5545 m`。由 `Rz(ψ)Rx(q5)` 得：
+
+```text
+d(q5) = (456.3, −554.5 cos(q5)) mm
+TCP_xy = W(q2,q3) + Rz(ψ) d(q5)
+TCP_z = q1 − 554.5 sin(q5) mm
+```
+
+因此水平工具偏移除ψ外只依赖q5；TCP竖直分量只依赖q1、q5。偏航锚定后，每周期使用 `ψ0 + dir·(σ+Δσ)` 和固定 `TCP0` 直接反算 `W_try=TCP0−Rz(ψ_try)d0`，闭式逆解、角度展开、关节步长约束和12次二分与X/Y相同，不逐周期累加腕点。工具常量 `TOOL_LATERAL_OFFSET_MM=456.3`、`TOOL_LENGTH_MM=554.5` 在ST和参考模型一致。
+
+| 档位 | 俯仰模式4 (°/s) | 偏航模式5 (°/s) |
+|---|---:|---:|
+| 快 | 1.2 | 2.4 |
+| 中 | 0.8 | 1.6 |
+| 慢 | 0.4 | 0.8 |
+
+速度仍仅由 [MainViewModel.GetArmCartesianJogSpeed](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/A主端/工程/master/VI.Service.Robot/ViewModels/MainViewModel.cs:406>) 提供。TCP保持导致的腕点线速度约为 `|d|·|ψ̇|`；关节速度超过JOINT_VCAP时，沿用步长二分降速并通过现有limited提示显示。9种构型和三档的实测需求见第三轮报告。
 
 ### Z定义及偏移的使用点
 
@@ -39,7 +59,7 @@ Wy = −200 cos(q2) − 180 cos(q2+q3+π)
 ## 本轮发生器规则
 
 1. 三次速度曲线仍从当前名义速度平滑过渡，增速 1 s、减速 0.5 s。每周期先保存名义 `v_prev`，更新曲线得到 `v`，期望路径增量 `Δσ_des=0.5·(v_prev+v)·dt`。同向重按从当前名义速度重新加速；换模式/换向仍在名义速度到零时锚定新请求，不离开阶段 25。
-2. 单轴模式的步长为 `MIN(Δσ_des,JOINT_VCAP[j]·dt)`，再依上述 Z/俯仰/偏航符号更新位置。
+2. Z和俯仰单轴模式的步长为 `MIN(Δσ_des,JOINT_VCAP[j]·dt)`；模式5使用第三轮TCP固定偏航逆解，参与轴2、3、4，轴1、5保持锚点。
 3. X/Y 先试完整期望步长，闭式逆解并展开到上一周期最近的 360° 等价值。候选腕点必须位于精确环带 `[L1−L2,L1+L2]=[20,380] mm`，轴 2/3/4 每轴增量必须不超过 `JOINT_VCAP[i]·dt`。完整步长不通过时固定二分 12 次，保留已验收的最大正步长；没有正步长通过就保持位置。`FOR i=0..12` 中 i=0 为完整试探，只有该试探成功才提前 EXIT，其余执行全部 12 次二分。
 4. ACOS 前仅把 `cos α` 限制到 `[−1,1]`；方位角用 ATAN 与象限分解求 atan2，不增加第二个 ACOS 夹紧。原 `Q3_MARGIN`、单位路径雅可比和 k 均已删除。
 5. 前馈速度严格等于位置差分/dt，前馈加速度严格等于前馈速度差分/dt。实际 `path_speed=Δσ/dt`；`limited=(Δσ<Δσ_des)`。限速和可达边界均不写错误码。
@@ -119,7 +139,7 @@ snapshot→main.cpp 的 vs→Zenoh StateFrame→RemoteRobotLink→StatusFrame �
 
 ## 现场验收清单（用户执行）
 
-T1–T13、归零回归、ST↔C++比对及主端/数据端构建回归均已通过；PLC编译和Scope轨迹对照仍待工程机完成。**PLC修改需要用户重新下载并激活**，同时部署匹配的数据端和上位机；仅更新可执行文件不会使新PLC符号生效。
+第三轮T1–T13、Y1–Y6、归零回归、ST↔C++比对及端点构建结果见[第三轮报告](positioning_arm_cartesian_jog_round3_report.md)。**PLC修改需要用户在工程机重新构建、下载并激活**；现场执行前，确认数据端和上位机使用匹配版本。
 
 - [ ] 下载并激活 PLC，在线确认 G.arm_cjog_if_version = 1，数据端启动日志打印相同的版本号。
 - [ ] 五个模式 × 三档：按住 10 s 连续运动，约 1 s 达到设定速度；松开后平滑停止，X/Y 停止距离不超过 15 mm。

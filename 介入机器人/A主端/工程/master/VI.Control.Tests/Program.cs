@@ -183,9 +183,9 @@ internal static class Program
                 "speed selector keeps exactly one level selected");
             var expectedRates = scale switch
             {
-                2.0 => new[] { 30.0, 30.0, 3.0, 1.2, 1.2 },
-                1.0 => new[] { 15.0, 15.0, 2.5, 0.8, 0.8 },
-                _ => new[] { 5.0, 5.0, 1.25, 0.4, 0.4 }
+                2.0 => new[] { 30.0, 30.0, 3.0, 1.2, 2.4 },
+                1.0 => new[] { 15.0, 15.0, 2.5, 0.8, 1.6 },
+                _ => new[] { 5.0, 5.0, 1.25, 0.4, 0.8 }
             };
             for (int mode = 1; mode <= expectedRates.Length; mode++)
             {

@@ -48,6 +48,57 @@ Axes seed(int mode, double effective_elbow)
     const double q2 = -std::atan(Gen::L2*std::sin(e)/(Gen::L1+Gen::L2*std::cos(e)))/Gen::RAD;
     return {{100, q2+(mode == 2 ? 90.0 : 0.0), effective_elbow-180, 37, 12}};
 }
+std::array<double,2> wrist_xy(const Axes& p)
+{
+    return {{Gen::L1*std::sin(p[1]*Gen::RAD)+Gen::L2*std::sin((p[1]+p[2])*Gen::RAD+Gen::PI),
+        -Gen::L1*std::cos(p[1]*Gen::RAD)-Gen::L2*std::cos((p[1]+p[2])*Gen::RAD+Gen::PI)}};
+}
+double psi_deg(const Axes& p) { return p[1]+p[2]+p[3]-90.0; }
+Axes yaw_seed(double effective_elbow, double q5, bool outward_boundary = false)
+{
+    Axes p=seed(1,effective_elbow);
+    p[4]=q5;
+    const auto wrist=wrist_xy(p);
+    const double wrist_angle=std::atan2(wrist[1],wrist[0])/Gen::RAD;
+    const double d_y=-Gen::TOOL_LENGTH_MM*std::cos(q5*Gen::RAD);
+    const double d_angle=std::atan2(d_y,Gen::TOOL_LATERAL_OFFSET_MM)/Gen::RAD;
+    const double psi=wrist_angle+(outward_boundary?90.0:0.0)-d_angle;
+    p[3]=psi-p[1]-p[2]+90.0;
+    return p;
+}
+bool yaw_candidate(const Gen& g, const Axes& current, double sigma_base, int dir, double step, Axes& q)
+{
+    const double psi=g.psi0+dir*(sigma_base+step);
+    const double wx=g.tcp0x-Gen::TOOL_LATERAL_OFFSET_MM*std::cos(psi*Gen::RAD)
+        +g.d0y*std::sin(psi*Gen::RAD);
+    const double wy=g.tcp0y-Gen::TOOL_LATERAL_OFFSET_MM*std::sin(psi*Gen::RAD)
+        -g.d0y*std::cos(psi*Gen::RAD);
+    const double radius=std::hypot(wx,wy);
+    if(radius<Gen::L1-Gen::L2 || radius>Gen::L1+Gen::L2) return false;
+    const double cosine=std::clamp((radius*radius-Gen::L1*Gen::L1-Gen::L2*Gen::L2)/(2*Gen::L1*Gen::L2),-1.0,1.0);
+    const double elbow=g.branch*std::acos(cosine);
+    const double azimuth=std::atan2(wx,-wy);
+    double q2=(azimuth-std::atan(Gen::L2*std::sin(elbow)/(Gen::L1+Gen::L2*std::cos(elbow))))/Gen::RAD;
+    double q3=(elbow-Gen::PI)/Gen::RAD;
+    while(q2-current[1]>180.0) q2-=360.0;
+    while(q2-current[1]<-180.0) q2+=360.0;
+    while(q3-current[2]>180.0) q3-=360.0;
+    while(q3-current[2]<-180.0) q3+=360.0;
+    const double q4=g.anchor[3]+(psi-g.psi0)-((q2+q3)-(g.anchor[1]+g.anchor[2]));
+    q=current;
+    q[1]=q2; q[2]=q3; q[3]=q4;
+    return true;
+}
+double curve_integral(const Gen& g,double tau_begin,double tau_end)
+{
+    const auto primitive=[&](double t){
+        const double u=std::min(t,g.duration)/g.duration;
+        const double transition=g.v0*std::min(t,g.duration)
+            +(g.v1-g.v0)*g.duration*(u*u*u-.5*u*u*u*u);
+        return transition+g.v1*std::max(0.0,t-g.duration);
+    };
+    return primitive(tau_end)-primitive(tau_begin);
+}
 Gen begin(int mode, int dir, double speed, Axes p)
 {
     nominal_bounds = {{0,0}};
@@ -173,15 +224,20 @@ int main()
 
     bool t4=true;
     for (int mode=1;mode<=5;++mode) {
-        const Axes speeds = mode<=2 ? Axes{{30,15,5,0,0}} : mode==3 ? Axes{{3,2.5,1.25,0,0}} : Axes{{1.2,.8,.4,0,0}};
+        const Axes speeds = mode<=2 ? Axes{{30,15,5,0,0}} : mode==3 ? Axes{{3,2.5,1.25,0,0}}
+            : mode==4 ? Axes{{1.2,.8,.4,0,0}} : Axes{{2.4,1.6,.8,0,0}};
         for (int tier=0;tier<3;++tier) {
-            g=begin(mode,1,speeds[tier],seed(mode,90));
+            const Axes p=mode==5?yaw_seed(90,0):seed(mode,90);
+            g=begin(mode,1,speeds[tier],p);
             for(int n=0;n<2000;++n) tick(g,true,mode,1,speeds[tier],"T4");
             const double start=g.sigma;
-            for(int n=0;n<501;++n) tick(g,false,0,0,0,"T4");
+            bool constrained=g.limited;
+            for(int n=0;n<501;++n) { tick(g,false,0,0,0,"T4"); constrained=constrained||g.limited; }
             const double distance=g.sigma-start;
-            std::cout<<"T4 mode="<<mode<<" tier="<<tier<<" stop_distance="<<distance<<'\n';
-            t4=t4 && (mode>3 || distance<=15);
+            const double expected=speeds[tier]*.25;
+            std::cout<<"T4 mode="<<mode<<" tier="<<tier<<" stop_distance="<<distance
+                <<" expected="<<expected<<" limited="<<constrained<<'\n';
+            t4=t4 && (mode<=2 ? distance<=15 : constrained || std::abs(distance-expected)<=expected*.005);
         }
     }
     result("T4",t4);
@@ -257,23 +313,142 @@ int main()
         && reverse_full_speed_s>0 && reverse_full_speed_s<=3 && g.path_speed==5 && branch_unchanged);
 
     bool t10=true;
-    for(int mode=3;mode<=5;++mode){
+    for(int mode=3;mode<=4;++mode){
         const double speed=mode==3?3:1.2; const auto p=seed(mode,90);
         g=begin(mode,1,speed,p); const auto before=truth.forward(joints(p));
         for(int n=0;n<2000;++n)tick(g,true,mode,1,speed,"T10");
-        const int j=mode==3?0:mode==4?4:3; bool others=true;
+        const int j=mode==3?0:4; bool others=true;
         for(int i=0;i<5;++i)if(i!=j)others=others && std::memcmp(&g.p[i],&p[i],sizeof(double))==0;
         const auto after=truth.forward(joints(g.p));
         const double integral_error=std::abs(std::abs(g.p[j]-p[j])-1.5*speed);
-        const bool sign=mode==3?g.p[0]<p[0]:mode==4?pitch(after)>pitch(before):std::remainder(yaw(after)-yaw(before),2*Gen::PI)>0;
+        const bool sign=mode==3?g.p[0]<p[0]:pitch(after)>pitch(before);
         std::cout<<"T10 mode="<<mode<<" distance="<<std::abs(g.p[j]-p[j])<<" analytic_integral_error="<<integral_error<<'\n';
         t10=t10 && others && sign && integral_error<=1e-4;
     }
     result("T10",t10,"trapezoidal step versus continuous cubic integral, tolerance 1e-4");
     bool t12=true;
     for(double s:{3.,2.5,1.25})t12=t12 && s<=Gen::JOINT_VCAP[0];
-    for(double s:{1.2,.8,.4})t12=t12 && s<=Gen::JOINT_VCAP[3] && s<=Gen::JOINT_VCAP[4];
+    for(double s:{1.2,.8,.4})t12=t12 && s<=Gen::JOINT_VCAP[4];
     result("T12",t12,"UI speed table checked separately");
+
+    bool y1=true; double y1_tcp=0,y1_z=0,y1_pitch=0,y1_psi_error=0,y1_integral_error=0;int y1_cases=0,y1_cycles=0;
+    for(double elbow:{30.,90.,150.})for(double q5:{0.,30.,-30.})for(int dir:{1,-1}){
+        const Axes p=yaw_seed(elbow,q5);g=begin(5,dir,.8,p);
+        const auto initial=truth.forward(joints(p));const double initial_psi=psi_deg(p);
+        double max_psi_sigma=0,expected_sigma=0,max_integral_error=0;bool finite=true,limited_seen=false;
+        for(int n=1;n<=3500;++n){
+            const double old_v1=g.v1,old_tau=g.tau;tick(g,n<=3000,5,dir,.8,"Y1");
+            expected_sigma+=curve_integral(g,g.v1!=old_v1?0:old_tau,g.tau);
+            const auto fk=truth.forward(joints(g.p));
+            y1_tcp=std::max(y1_tcp,(fk.position-initial.position).norm()*1000);
+            y1_z=std::max(y1_z,std::abs(fk.position.z()-initial.position.z())*1000);
+            y1_pitch=std::max(y1_pitch,std::abs(pitch(fk)-pitch(initial))/Gen::RAD);
+            max_psi_sigma=std::max(max_psi_sigma,std::abs(psi_deg(g.p)-initial_psi-dir*g.sigma));
+            limited_seen=limited_seen||g.limited;
+            if(!g.limited)max_integral_error=std::max(max_integral_error,std::abs(g.sigma-expected_sigma));
+            finite=finite&&std::isfinite(fk.position.x())&&std::isfinite(fk.position.y())&&std::isfinite(fk.position.z())
+                &&std::isfinite(g.path_speed)&&g.p[0]==p[0]&&g.p[4]==p[4];
+        }
+        const double yaw_change=psi_deg(g.p)-initial_psi;
+        y1_integral_error=std::max(y1_integral_error,max_integral_error);
+        y1_psi_error=std::max(y1_psi_error,max_psi_sigma);
+        y1=y1&&finite&&!limited_seen&&y1_z<=1e-6&&y1_pitch<=1e-6&&max_psi_sigma<=1e-9
+            &&std::abs(yaw_change)>0&&(dir>0?yaw_change>0:yaw_change<0);
+        std::cout<<"Y1 config elbow="<<elbow<<" q5="<<q5<<" dir="<<dir<<" yaw_change="<<yaw_change
+            <<" limited="<<limited_seen<<" sigma="<<g.sigma<<" integral_error="<<max_integral_error<<'\n';
+        y1_cycles+=3500;++y1_cases;
+    }
+    std::cout<<"Y1 cases="<<y1_cases<<" cycles="<<y1_cycles<<" tcp_max_mm="<<y1_tcp
+        <<" z_max_mm="<<y1_z<<" pitch_max_deg="<<y1_pitch<<" psi_sigma_error_deg="<<y1_psi_error
+        <<" integral_error_deg="<<y1_integral_error<<"\n";
+    result("Y1",y1&&y1_tcp<=.01&&y1_integral_error<=1e-4);
+
+    g=begin(5,1,.8,yaw_seed(90,0));double y2_peak=0,y2_previous=0,y2_stop=0;int y2_acc=0,y2_dec=0;
+    bool y2_monotonic=true;double y2_sigma=0;
+    for(int n=1;n<=2000;++n){tick(g,true,5,1,.8,"Y2");y2_monotonic=y2_monotonic&&g.path_speed>=y2_previous;
+        y2_peak=std::max(y2_peak,(g.path_speed-y2_previous)/DT);y2_previous=g.path_speed;if(g.path_speed==.8&&y2_acc==0)y2_acc=n;}
+    y2_sigma=g.sigma;
+    for(int n=1;n<=501;++n){tick(g,false,0,0,0,"Y2");if(g.path_speed==0&&y2_dec==0)y2_dec=n;}
+    const double y2_stopping=g.sigma-y2_sigma;
+    std::cout<<"Y2 acc_s="<<y2_acc*DT<<" stop_s="<<y2_dec*DT<<" stop_deg="<<y2_stopping<<" peak_deg_s2="<<y2_peak<<'\n';
+    result("Y2",y2_monotonic&&std::abs(y2_acc-1000)<=1&&std::abs(y2_dec-500)<=1
+        &&std::abs(y2_stopping-.2)<=.001);
+
+    bool y3=true;double y3_max_joint=0,y3_tcp=0;std::uint64_t y3_cycles=0;
+    for(double elbow:{30.,90.,150.})for(double q5:{0.,30.,-30.})for(double speed:{2.4,1.6,.8}){
+        const Axes p=yaw_seed(elbow,q5);g=begin(5,1,speed,p);const auto initial=truth.forward(joints(p));bool constrained=false;
+        Axes full_rate{};const bool derivative_valid=yaw_candidate(g,p,0,1,speed*DT,full_rate);
+        const double required_q2=derivative_valid?std::abs(full_rate[1]-p[1])/DT:std::numeric_limits<double>::infinity();
+        const double required_q3=derivative_valid?std::abs(full_rate[2]-p[2])/DT:std::numeric_limits<double>::infinity();
+        const double required_q4=derivative_valid?std::abs(full_rate[3]-p[3])/DT:std::numeric_limits<double>::infinity();
+        const double required_joint=std::max({required_q2,required_q3,required_q4});
+        const double wrist_speed=speed*Gen::RAD*std::hypot(g.d0x,g.d0y);
+        for(int n=0;n<3000;++n){const auto previous=g.p;tick(g,true,5,1,speed,"Y3");
+            for(int i=0;i<5;++i){const double joint_speed=std::abs(g.p[i]-previous[i])/DT;y3_max_joint=std::max(y3_max_joint,joint_speed);
+                y3=y3&&joint_speed<=Gen::JOINT_VCAP[i]*(1+1e-9);}
+            const auto fk=truth.forward(joints(g.p));y3_tcp=std::max(y3_tcp,(fk.position-initial.position).norm()*1000);
+            constrained=constrained||g.limited;y3_cycles++;}
+        std::cout<<"Y3 elbow="<<elbow<<" q5="<<q5<<" requested_deg_s="<<speed
+            <<" required_wrist_mm_s="<<wrist_speed<<" required_q2_deg_s="<<required_q2
+            <<" required_q3_deg_s="<<required_q3<<" required_q4_deg_s="<<required_q4
+            <<" limited="<<constrained<<" actual_yaw_speed_deg_s="<<g.path_speed
+            <<" tcp_max_mm="<<y3_tcp<<'\n';
+        y3=y3&&derivative_valid&&std::isfinite(required_joint);
+    }
+    result("Y3",y3&&y3_tcp<=.01,"cases=9x3 cycles="+std::to_string(y3_cycles)+" max_joint_deg_s="+std::to_string(y3_max_joint));
+
+    g=begin(5,1,.8,yaw_seed(10,0,true));const Axes y4_start=g.p;
+    bool y4_boundary=false,y4_finite=true;double y4_min=std::hypot(g.wx,g.wy),y4_max=y4_min;
+    int y4_reverse_full_cycle=0,y4_stop_cycle=0;
+    while(y4_stop_cycle==0&&cycle_count["Y4"]<6000){const int n=cycle_count["Y4"];
+        tick(g,true,5,1,.8,"Y4");
+        const auto current_wrist=wrist_xy(g.p);const double actual_radius=std::hypot(current_wrist[0],current_wrist[1]);
+        y4_min=std::min(y4_min,actual_radius);y4_max=std::max(y4_max,actual_radius);y4_boundary=y4_boundary||g.limited;
+        y4_finite=y4_finite&&std::isfinite(g.path_speed)&&std::isfinite(actual_radius);
+        if(g.path_speed<.001&&g.limited)y4_stop_cycle=n+1;
+    }
+    double y4_reverse_peak=0,y4_max_joint=0;bool y4_limited_reverse=false;
+    for(int n=1;n<=3000;++n){const auto previous=g.p;tick(g,true,5,-1,.8,"Y4 reverse");
+        const auto current_wrist=wrist_xy(g.p);const double actual_radius=std::hypot(current_wrist[0],current_wrist[1]);
+        y4_min=std::min(y4_min,actual_radius);y4_max=std::max(y4_max,actual_radius);
+        y4_finite=y4_finite&&std::isfinite(g.path_speed)&&std::isfinite(actual_radius);
+        y4_reverse_peak=std::max(y4_reverse_peak,g.path_speed);y4_limited_reverse=y4_limited_reverse||g.limited;
+        for(int i=1;i<=3;++i)y4_max_joint=std::max(y4_max_joint,std::abs(g.p[i]-previous[i])/DT);
+        if(g.path_speed>=.8&&y4_reverse_full_cycle==0)y4_reverse_full_cycle=n;}
+    const auto y4_end_wrist=wrist_xy(g.p);
+    std::cout<<"Y4 radius_min="<<y4_min<<" radius_max="<<y4_max<<" boundary_limited="<<y4_boundary
+        <<" stop_cycle="<<y4_stop_cycle<<" reverse_reach_s="<<y4_reverse_full_cycle*DT
+        <<" reverse_peak_speed="<<y4_reverse_peak<<" reverse_final_speed="<<g.path_speed
+        <<" reverse_limited="<<y4_limited_reverse<<" max_joint_deg_s="<<y4_max_joint
+        <<" start_q="<<y4_start[1]<<','<<y4_start[2]<<','<<y4_start[3]
+        <<" end_wrist_r="<<std::hypot(y4_end_wrist[0],y4_end_wrist[1])<<'\n';
+    result("Y4",y4_finite&&y4_boundary&&y4_min>=Gen::L1-Gen::L2-1e-10&&y4_max<=Gen::L1+Gen::L2+1e-10
+        &&y4_reverse_peak<=.8&&y4_limited_reverse&&y4_max_joint<=Gen::JOINT_VCAP[3]*(1+1e-9),
+        "boundary stop and reversal verified; JOINT_VCAP limits recovery rate when 0.8 deg/s is infeasible");
+
+    bool y5=true;for(int dir:{1,-1}){const Axes zero{{100,0,0,0,0}};g=begin(5,dir,.8,zero);const auto initial=truth.forward(joints(zero));
+        double max_tcp=0;for(int n=0;n<2000;++n){tick(g,true,5,dir,.8,"Y5");const auto fk=truth.forward(joints(g.p));
+            max_tcp=std::max(max_tcp,(fk.position-initial.position).norm()*1000);}
+        const bool no_motion=g.sigma==0;
+        std::cout<<"Y5 dir="<<dir<<" yaw_deg="<<g.sigma*dir<<" final_path_speed="<<g.path_speed
+            <<" tcp_error_mm="<<max_tcp<<" limited="<<g.limited<<" no_motion="<<no_motion<<'\n';
+        y5=y5&&max_tcp<=.01&&std::isfinite(g.path_speed)&&(!no_motion||g.limited);}
+    result("Y5",y5,"from zero q=(100,0,0,0,0)");
+
+    g=begin(1,1,5,yaw_seed(90,0));bool y6=true,y6_yaw_captured=false;int y6_x_anchor=0,y6_y_anchor=0;
+    Eigen::Vector3d y6_yaw_tcp_anchor=Eigen::Vector3d::Zero();double y6_tcp=0;bool y6_no_error=true;
+    for(int n=1;n<=9000;++n){const int mode=n<=2000?1:n<=5500?5:2;const double speed=mode==1||mode==2?5:.8;
+        tick(g,true,mode,1,speed,"Y6");if(mode==5&&g.latched_mode==5&&y6_x_anchor==0)y6_x_anchor=n;
+        if(mode==2&&g.latched_mode==2&&y6_y_anchor==0)y6_y_anchor=n;
+        if(g.latched_mode==5){
+            if(!y6_yaw_captured){y6_yaw_tcp_anchor=truth.forward(joints(g.anchor)).position;y6_yaw_captured=true;}
+            y6_tcp=std::max(y6_tcp,(truth.forward(joints(g.p)).position-y6_yaw_tcp_anchor).norm()*1000);
+        }
+        y6_no_error=y6_no_error&&std::isfinite(g.path_speed);
+    }
+    y6=y6_x_anchor>=2500&&y6_y_anchor>=6000&&y6_yaw_captured&&y6_tcp<=.01&&g.latched_mode==2&&y6_no_error;
+    std::cout<<"Y6 yaw_reanchor_cycle="<<y6_x_anchor<<" y_reanchor_cycle="<<y6_y_anchor<<" yaw_tcp_error_mm="<<y6_tcp<<" stage25_model=true\n";
+    result("Y6",y6);
 
     bool branch_retained=true;
     for(double known_q3:{-90.,90.}){

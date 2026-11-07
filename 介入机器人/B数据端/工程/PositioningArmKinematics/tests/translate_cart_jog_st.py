@@ -98,7 +98,7 @@ for name, kind, value in re.findall(r"(\w+)\s*:\s*(ARRAY\[1\.\.5\] OF LREAL|LREA
         code.append("static constexpr " + cpp + " " + name + " = " + value + ";")
     else:
         code.append("static constexpr std::array<double,6> " + name + " = {{0," + value.strip()[1:-1] + "}};")
-code.append("void step(bool start,bool held,int mode,int dir,double speed,const std::array<double,6>& seed,double dt) {")
+code.append("void step(bool start,bool held,int mode,int dir,double speed,const std::array<double,6>& seed,double cycle_dt) {")
 code += statements()
 code += ["}", "};"]
 assert pos == len(tokens)
