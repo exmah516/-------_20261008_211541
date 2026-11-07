@@ -88,6 +88,25 @@ for api in ["MC_ExtSetPointGenEnable", "MC_ExtSetPointGenDisable", "MC_Stop", "M
     check(api in (plc / "POUs/ArmCartesian.TcPOU").read_text(encoding="utf-8-sig")
           and api in (plc / "POUs/ArmCartJog.TcPOU").read_text(encoding="utf-8-sig"), "existing Tc2_MC2 API " + api)
 check("G.arm_cjog_owned AND (stage = 10 OR stage = 25)" in wrapper, "Feed only owned stages 10/25")
+for name, body, error in [("ArmCartJog", wrapper, "arm_cjog_error"), ("ArmCartesian", home, "arm_curve_error")]:
+    check("Execute:=(stage=50) AND NOT G.arm_axis[i].Status.Error" in body,
+          name + " skips MC_Stop on NC error axis")
+    check("all_disabled AND (fb_disable[i].Done OR fb_disable[i].Error OR G.arm_axis[i].Status.Error)" in body,
+          name + " Disable Done/Error/axis error completes stage 40")
+    check("all_stopped AND (fb_stop[i].Done OR fb_stop[i].Error OR G.arm_axis[i].Status.Error)" in body,
+          name + " Stop Done/Error/axis error completes stage 50")
+    check("all_released := all_released AND NOT fb_stop[i].Busy;" in body,
+          name + " stage 60 waits only for Stop Busy to clear")
+    check("IF G." + error + " = 0 THEN\n            IF fb_enable[i].Error" in body,
+          name + " FB errors preserve first cause")
+for name in ["ArmCartJogGen.TcPOU", "ArmManual.TcPOU"]:
+    working = (plc / "POUs" / name).read_text(encoding="utf-8-sig").replace("\r\n", "\n")
+    before = subprocess.check_output(["git", "show", "713d8830aaf04cd23b1547c3f0da03528f5c5d94:介入机器人/C从端/250902/Untitled2/POUs/" + name], cwd=repo).decode("utf-8-sig").replace("\r\n", "\n")
+    check(working == before, name + " unchanged from pre-round4 (line endings normalized)")
+check("IF G.arm_curve_owned OR G.arm_cjog_owned THEN" in manual
+      and "reset_exec[i] := TRUE;" in manual
+      and "Execute:=reset_exec[i] AND (axis_state[i] = 0)" in manual,
+      "manual reset request resumes after ownership release; MC_Reset call retained")
 check("IF G.arm_cjog_owned THEN reject_error := 2001; END_IF" in home
       and "NOT G.arm_cjog_owned" in manual, "home/manual exclude jog ownership")
 kin = repo / "B数据端/工程/PositioningArmKinematics"

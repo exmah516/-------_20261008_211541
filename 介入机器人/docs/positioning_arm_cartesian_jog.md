@@ -1,6 +1,6 @@
 # 定位臂 PLC 末端点动接口
 
-更新：2026-11-05，第三轮将模式5改为保持TCP位置的偏航运动，并拆分偏航速度档。第三轮完整验收见[本轮交付报告](positioning_arm_cartesian_jog_round3_report.md)。PLC 未构建；工程机编译、下载和激活仍待现场执行。
+更新：2026-11-07，第四轮修复ArmCartJog与ArmCartesian故障停机的所有权死锁。修复B因奇异判据的非单调反例，按规格停止，发生器未改；S1/S2/S4未通过，本轮整体未通过。详见[第四轮交付报告](positioning_arm_cartesian_jog_round4_report.md)。第三轮保持TCP偏航仍沿用原实现，历史结果见[第三轮报告](positioning_arm_cartesian_jog_round3_report.md)。PLC未构建，需工程机编译、下载、激活。
 
 旧《定位臂项目修改与接口说明》docx 已过时。归零继续使用原 17 个 LREAL 单段曲线且 `[16]=0`；末端点动由下述 PLC 接口独立生成，协议命令格式不变。
 
@@ -106,11 +106,11 @@ ST 常量集中在 [ArmCartJogGen:22](<D:/Work_files/Vessel intervention Robot/�
 | 0 空闲 | mode非零且非法报3001；held且归零无所有权、request=ack时检查 drive_ready；就绪则以 G.arm_act_pos 锚定、速度/加速度0、feed方向1，取得所有权 | 就绪→10；未就绪报3002并保持0 |
 | 10 使能 | 五轴 MC_ExtSetPointGenEnable，绝对位置；owned期间每周期 Feed(p,0,0) | 全部 Enabled→25；使能超过2s报3003→40 |
 | 25 运行 | 每周期 Gen 与 Feed；模式/方向变化先减到0再重新锚定，阶段和所有权保持 | 无held且实际路径速度0连续2周期→40；驱动未就绪报3002→40 |
-| 40 停用 | 五轴 MC_ExtSetPointGenDisable | 全停用：正常→60，故障→50 |
-| 50 停止 | MC_Stop，使用原 G.arm_jog_dec/jerk | 全Done→60 |
+| 40 停用 | 五轴 MC_ExtSetPointGenDisable | 每轴Done、Error或NC轴错误均视为完成；全部完成后正常→60，故障→50 |
+| 50 停止 | NC错误轴Execute=FALSE，其余轴MC_Stop，使用原 G.arm_jog_dec/jerk | 每轴Done、Error或NC轴错误均视为完成；全部完成→60 |
 | 60 释放 | 等待 MC_Stop不再Busy | owned=FALSE→0 |
 
-Enable/Disable/Stop 任一 Error 保存 ErrorID；阶段<40时进入40，阶段≥40保持该阶段。Fault 路径包含 MC_Stop，正常减速结束不再额外调用 MC_Stop。Feed 仅在 owned 且阶段10/25。速度非零更新方向符号，零速保持上一值。[ArmCartJog:123–143](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:123>) 映射为对外0–4状态；25且target_speed=0为减速状态3。
+Enable/Disable/Stop错误仅在当前错误码为0时保存，保留首个根因，下一次成功起步清零。阶段<40发生错误时进入40；40/50中的错误按上述完成判据继续释放，60仅等待Stop.Busy清除。Fault 路径包含 MC_Stop，正常减速结束不再额外调用 MC_Stop。Feed 仅在 owned 且阶段10/25。速度非零更新方向符号，零速保持上一值。[ArmCartJog:125–147](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:125>) 映射为对外0–4状态；25且target_speed=0为减速状态3。
 
 drive_ready 在 [ArmCartJog:51–57](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:51>) 与原 ArmCartesian:63–69 相同：总使能、主机通信/急停、1ms周期、五轴上电Done、使能请求、轴故障、复位及单轴点动请求。归零起步额外拒绝 cjog_owned，报2001但不写点动请求；ArmManual 在复位和 allow_jog 两处排除 cjog_owned。
 
@@ -137,9 +137,15 @@ snapshot→main.cpp 的 vs→Zenoh StateFrame→RemoteRobotLink→StatusFrame �
 
 协议沿用仓库此前扩展状态字段时的 Version=1 及 v1 topic。StateFrame 51→55项：索引50为uint32 State、51为uint32 Error、52为bool Limited、53为float64 PathSpeed、54为AuthTag。两端严格长度/类型校验和黄金样本同步更新；主端、数据端须同步部署，旧51项帧会被拒绝，没有兼容回退。ArmCartesianJog 命令格式未变；speedScale 对新末端点动完全忽略，仍供原单轴点动使用。
 
+## 第四轮验收状态
+
+修复A的S5三个场景通过：其它轴Done后2个周期内释放，错误码保持第一个；正常松开3200周期逐位相同。运动回归45场景160120周期无差异；T/Y实际场景301853周期、S1–S3诊断64000周期的ST转译↔C++最大差均0。
+
+修复B没有实施。反例：奇异区内X+，较小步长使δ降低而被拒，较大步长跨过半径最近点后使δ升高而被接受，固定二分可能返回0并漏掉可接受步长。SING_MARGIN/ELBOW_BRAKE_ACC未加入生产发生器。当前现场位姿X−/Y−仍会进入奇异区并出现超过200°/s²的关节加速度，S1/S2/S4失败；本轮不能作为奇异区域运动验收已通过的版本。反例、逐周期峰值、未执行项目和现场前提见第四轮报告。
+
 ## 现场验收清单（用户执行）
 
-第三轮T1–T13、Y1–Y6、归零回归、ST↔C++比对及端点构建结果见[第三轮报告](positioning_arm_cartesian_jog_round3_report.md)。**PLC修改需要用户在工程机重新构建、下载并激活**；现场执行前，确认数据端和上位机使用匹配版本。
+历史第三轮结果见[第三轮报告](positioning_arm_cartesian_jog_round3_report.md)；当前结果以[第四轮报告](positioning_arm_cartesian_jog_round4_report.md)为准。以下涉及奇异区域的运动步骤待B完成后执行。**PLC修改需要用户在工程机重新构建、下载并激活**；现场执行前，确认数据端和上位机使用匹配版本。
 
 - [ ] 下载并激活 PLC，在线确认 G.arm_cjog_if_version = 1，数据端启动日志打印相同的版本号。
 - [ ] 五个模式 × 三档：按住 10 s 连续运动，约 1 s 达到设定速度；松开后平滑停止，X/Y 停止距离不超过 15 mm。

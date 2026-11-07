@@ -1,4 +1,5 @@
 #include "arm_cart_jog_reference.h"
+#include "arm_cart_jog_st_generated.h"
 #include "positioning_arm/kinematics.h"
 #include <cstring>
 #include <iomanip>
@@ -23,6 +24,12 @@ int peak_case_cycle=0;
 std::map<std::string,int> cycle_count;
 std::map<std::string,double> acceleration_ratio_by_case;
 bool cycles_finite = true;
+struct AccelerationPeak { double value=0, previous_velocity=0, velocity=0, q3=0; int cycle=0,axis=0; bool limited=false; };
+std::map<std::string,AccelerationPeak> joint_acceleration_by_case;
+StCartJog translated;
+std::uint64_t translated_cycles=0;
+double translated_difference=0;
+bool translated_discrete_equal=true;
 
 positioning_arm::ArmKinematicConfig config()
 {
@@ -102,7 +109,11 @@ double curve_integral(const Gen& g,double tau_begin,double tau_end)
 Gen begin(int mode, int dir, double speed, Axes p)
 {
     nominal_bounds = {{0,0}};
-    Gen g; g.step(true, false, mode, dir, speed, p, DT); return g;
+    Gen g; g.step(true, false, mode, dir, speed, p, DT);
+    translated=StCartJog{};
+    const std::array<double,6> st_seed{{0,p[0],p[1],p[2],p[3],p[4]}};
+    translated.step(true,false,mode,dir,speed,st_seed,DT);
+    return g;
 }
 void tick(Gen& g, bool held, int mode, int dir, double speed, const char* name)
 {
@@ -110,6 +121,20 @@ void tick(Gen& g, bool held, int mode, int dir, double speed, const char* name)
     const double previous_path_speed = g.path_speed, previous_nominal = g.path_v;
     const int cycle=++cycle_count[name];
     g.step(false, held, mode, dir, speed, g.p, DT);
+    const std::array<double,6> st_seed{{0,prev_p[0],prev_p[1],prev_p[2],prev_p[3],prev_p[4]}};
+    translated.step(false,held,mode,dir,speed,st_seed,DT);++translated_cycles;
+    for(int i=0;i<5;++i)translated_difference=std::max({translated_difference,
+        std::abs(g.p[i]-translated.p[i+1]),std::abs(g.v[i]-translated.v[i+1]),std::abs(g.a[i]-translated.a[i+1])});
+    for(const auto& pair:{std::pair<double,double>{g.path_speed,translated.path_speed},
+        {g.target_speed,translated.target_speed},{g.path_v,translated.path_v},{g.v0,translated.v0},{g.v1,translated.v1},
+        {g.tau,translated.tau},{g.duration,translated.duration},{g.sigma,translated.sigma}})
+        translated_difference=std::max(translated_difference,std::abs(pair.first-pair.second));
+    translated_discrete_equal=translated_discrete_equal&&g.limited==translated.limited&&g.branch==translated.branch
+        &&g.latched_mode==translated.latched_mode&&g.latched_dir==translated.latched_dir;
+    if(g.latched_mode==1||g.latched_mode==2||g.latched_mode==5)for(int i=1;i<=3;++i){
+        auto& peak=joint_acceleration_by_case[name];
+        if(std::abs(g.a[i])>peak.value)peak={std::abs(g.a[i]),prev_v[i],g.v[i],g.p[2],cycle,i+1,g.limited};
+    }
     for (int i = 0; i < 5; ++i)
         cycles_finite = cycles_finite && std::isfinite(g.p[i]) && std::isfinite(g.v[i]) && std::isfinite(g.a[i]);
     cycles_finite = cycles_finite && std::isfinite(g.path_speed);
@@ -501,6 +526,12 @@ int main()
         <<" B_k_minus_2="<<peak_bounds[0]<<" B_k_minus_1="<<peak_bounds[1]<<" B_k="<<peak_bounds[2]
         <<" allowed="<<1.01*std::max({peak_bounds[0],peak_bounds[1],peak_bounds[2]})<<'\n';
     result("T11",cycles_finite && velocity_difference<=1e-9 && acceleration_difference<=1e-9 && path_acceleration_ok);
+    bool s4=true;
+    for(const auto& item:joint_acceleration_by_case){const auto& peak=item.second;
+        std::cout<<"S4 case="<<item.first<<" max_joint_acceleration="<<peak.value<<" cycle="<<peak.cycle
+            <<" axis="<<peak.axis<<" previous_velocity="<<peak.previous_velocity<<" velocity="<<peak.velocity
+            <<" q3="<<peak.q3<<" limited="<<peak.limited<<'\n';s4=s4&&peak.value<=200;}
+    result("S4",s4,"all planar/yaw cycles included; B stopped on nonmonotone specification");
 
     auto shifted=config();shifted.base_offset_mm=Eigen::Vector3d(20,-30,40);
     positioning_arm::PositioningArmKinematics translated(shifted);auto p=seed(1,90);
@@ -511,6 +542,9 @@ int main()
     result("OFFSET",(moved.position-base.position-shifted.base_offset_mm*.001).norm()<1e-12
         && (j-j0).norm()<1e-12 && ik0.success() && ik1.success() && (ik0.target-ik1.target).norm()<1e-12);
     result("FINITE",cycles_finite);
+    std::cout<<"ST_EQ exact_T_and_Y_cycles="<<translated_cycles<<" max_difference="<<translated_difference
+        <<" discrete_equal="<<translated_discrete_equal<<'\n';
+    result("ST_EQ",translated_difference==0&&translated_discrete_equal);
     std::cout<<"TOTAL failures="<<failures<<'\n';
     return failures?1:0;
 }

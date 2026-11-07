@@ -151,7 +151,7 @@ IF G.arm_curve_request <> G.arm_curve_ack THEN
             G.arm_curve_error := 0;
             G.arm_curve_state := 1;
         ELSE
-            G.arm_curve_error := reject_error;
+            IF G.arm_curve_error = 0 THEN G.arm_curve_error := reject_error; END_IF
             G.arm_curve_cancel := TRUE;
             finish_state := 4;
             IF stage > 0 THEN
@@ -168,7 +168,8 @@ IF (stage > 0) AND (stage < 40) THEN
     IF G.arm_curve_cancel OR NOT allowed THEN
         finish_state := 3;
         IF NOT allowed THEN
-            G.arm_curve_error := 2003; finish_state := 4; G.arm_curve_cancel := TRUE;
+            IF G.arm_curve_error = 0 THEN G.arm_curve_error := 2003; END_IF
+            finish_state := 4; G.arm_curve_cancel := TRUE;
         END_IF
         stage := 40;
         phase_elapsed := 0;
@@ -176,7 +177,7 @@ IF (stage > 0) AND (stage < 40) THEN
 END_IF
 IF stage > 0 THEN phase_elapsed := phase_elapsed + cycle_seconds; END_IF
 IF (stage = 10 OR stage = 30) AND (phase_elapsed > 2.0) THEN
-    G.arm_curve_error := 2007;
+    IF G.arm_curve_error = 0 THEN G.arm_curve_error := 2007; END_IF
     G.arm_curve_cancel := TRUE;
     finish_state := 4;
     stage := 40;
@@ -196,7 +197,7 @@ IF stage = 20 THEN
         IF (ABS(v[i]) > velocity_limit[i]+0.000001)
             OR (ABS(a[i]) > acceleration_limit[i]+0.000001)
             OR NOT ((G.arm_act_pos[i]-p[i] >= -1.0) AND (G.arm_act_pos[i]-p[i] <= 1.0)) THEN
-            G.arm_curve_error := 2008;
+            IF G.arm_curve_error = 0 THEN G.arm_curve_error := 2008; END_IF
             G.arm_curve_cancel := TRUE;
             finish_state := 4;
             stage := 40;
@@ -224,20 +225,22 @@ FOR i := 1 TO 5 DO
     fb_enable[i](Axis:=G.arm_axis[i], Execute:=(stage=10),
         Position:=curve[i+4], PositionType:=POSITIONTYPE_ABSOLUTE);
     fb_disable[i](Axis:=G.arm_axis[i], Execute:=(stage=40));
-    fb_stop[i](Axis:=G.arm_axis[i], Execute:=(stage=50),
+    fb_stop[i](Axis:=G.arm_axis[i], Execute:=(stage=50) AND NOT G.arm_axis[i].Status.Error,
         Deceleration:=deceleration_limit[i], Jerk:=jerk_limit[i]);
     all_enabled := all_enabled AND fb_enable[i].Enabled;
-    all_disabled := all_disabled AND NOT fb_enable[i].Enabled
-        AND NOT fb_enable[i].Busy AND NOT fb_disable[i].Busy AND NOT fb_disable[i].Error;
-    all_stopped := all_stopped AND fb_stop[i].Done AND NOT fb_stop[i].Error;
-    all_released := all_released AND NOT fb_stop[i].Busy AND NOT fb_stop[i].Error;
+    // 与末端点动相同，错误轴和功能块错误不阻塞所有权释放。
+    all_disabled := all_disabled AND (fb_disable[i].Done OR fb_disable[i].Error OR G.arm_axis[i].Status.Error);
+    all_stopped := all_stopped AND (fb_stop[i].Done OR fb_stop[i].Error OR G.arm_axis[i].Status.Error);
+    all_released := all_released AND NOT fb_stop[i].Busy;
     arrived := arrived AND (ABS(G.arm_act_pos[i]-curve[i+4]) <= 0.05)
         AND (ABS(G.arm_act_vel[i]) <= 0.1);
     IF G.arm_curve_owned AND (fb_enable[i].Error OR fb_disable[i].Error OR fb_stop[i].Error) THEN
         G.arm_curve_cancel := TRUE;
-        IF fb_enable[i].Error THEN G.arm_curve_error := fb_enable[i].ErrorID; END_IF
-        IF fb_disable[i].Error THEN G.arm_curve_error := fb_disable[i].ErrorID; END_IF
-        IF fb_stop[i].Error THEN G.arm_curve_error := fb_stop[i].ErrorID; END_IF
+        IF G.arm_curve_error = 0 THEN
+            IF fb_enable[i].Error THEN G.arm_curve_error := fb_enable[i].ErrorID;
+            ELSIF fb_disable[i].Error THEN G.arm_curve_error := fb_disable[i].ErrorID;
+            ELSIF fb_stop[i].Error THEN G.arm_curve_error := fb_stop[i].ErrorID; END_IF
+        END_IF
         finish_state := 4;
         IF stage < 40 THEN stage := 40; END_IF
     END_IF

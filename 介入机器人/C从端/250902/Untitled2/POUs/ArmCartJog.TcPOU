@@ -46,7 +46,7 @@ request_valid := (G.arm_cjog_mode >= 1) AND (G.arm_cjog_mode <= 5)
     AND ((G.arm_cjog_dir = -1) OR (G.arm_cjog_dir = 1))
     AND (G.arm_cjog_speed > 0) AND (G.arm_cjog_speed <= 100);
 held := request_valid AND (alive_age < ALIVE_TIMEOUT);
-IF (G.arm_cjog_mode <> 0) AND NOT request_valid THEN G.arm_cjog_error := 3001; END_IF
+IF (G.arm_cjog_mode <> 0) AND NOT request_valid AND (G.arm_cjog_error = 0) THEN G.arm_cjog_error := 3001; END_IF
 // 与ArmCartesian的驱动就绪表达式逐项一致。
 drive_ready := G.arm_manual_enable AND NOT G.host_comm_timeout AND NOT G.estop_hold_req
     AND (ABS(cycle_seconds-0.001) < 0.00000001);
@@ -58,7 +58,7 @@ END_FOR
 IF (stage = 0) AND held AND NOT G.arm_curve_owned
     AND (G.arm_curve_request = G.arm_curve_ack) THEN
     IF NOT drive_ready THEN
-        G.arm_cjog_error := 3002;
+        IF G.arm_cjog_error = 0 THEN G.arm_cjog_error := 3002; END_IF
     ELSE
         gen(start:=TRUE, held:=FALSE, mode:=G.arm_cjog_mode, dir:=G.arm_cjog_dir,
             speed:=G.arm_cjog_speed, seed:=G.arm_act_pos, cycle_dt:=cycle_seconds);
@@ -72,14 +72,14 @@ IF (stage = 0) AND held AND NOT G.arm_curve_owned
     END_IF
 END_IF
 IF (stage = 10 OR stage = 25) AND NOT drive_ready THEN
-    G.arm_cjog_error := 3002;
+    IF G.arm_cjog_error = 0 THEN G.arm_cjog_error := 3002; END_IF
     fault_stop := TRUE;
     stage := 40;
 END_IF
 IF stage = 10 THEN
     enable_age := enable_age+cycle_seconds;
     IF enable_age > ENABLE_TIMEOUT THEN
-        G.arm_cjog_error := 3003;
+        IF G.arm_cjog_error = 0 THEN G.arm_cjog_error := 3003; END_IF
         fault_stop := TRUE;
         stage := 40;
     END_IF
@@ -105,17 +105,19 @@ FOR i := 1 TO 5 DO
     fb_enable[i](Axis:=G.arm_axis[i], Execute:=(stage=10),
         Position:=gen.p[i], PositionType:=POSITIONTYPE_ABSOLUTE);
     fb_disable[i](Axis:=G.arm_axis[i], Execute:=(stage=40));
-    fb_stop[i](Axis:=G.arm_axis[i], Execute:=(stage=50),
+    fb_stop[i](Axis:=G.arm_axis[i], Execute:=(stage=50) AND NOT G.arm_axis[i].Status.Error,
         Deceleration:=G.arm_jog_dec[i], Jerk:=G.arm_jog_jerk[i]);
     all_enabled := all_enabled AND fb_enable[i].Enabled;
-    all_disabled := all_disabled AND NOT fb_enable[i].Enabled
-        AND NOT fb_enable[i].Busy AND NOT fb_disable[i].Busy AND NOT fb_disable[i].Error;
-    all_stopped := all_stopped AND fb_stop[i].Done AND NOT fb_stop[i].Error;
-    all_released := all_released AND NOT fb_stop[i].Busy AND NOT fb_stop[i].Error;
+    // 错误轴交回NC复位；停用或停止报错也必须走完释放。
+    all_disabled := all_disabled AND (fb_disable[i].Done OR fb_disable[i].Error OR G.arm_axis[i].Status.Error);
+    all_stopped := all_stopped AND (fb_stop[i].Done OR fb_stop[i].Error OR G.arm_axis[i].Status.Error);
+    all_released := all_released AND NOT fb_stop[i].Busy;
     IF G.arm_cjog_owned AND (fb_enable[i].Error OR fb_disable[i].Error OR fb_stop[i].Error) THEN
-        IF fb_enable[i].Error THEN G.arm_cjog_error := fb_enable[i].ErrorID; END_IF
-        IF fb_disable[i].Error THEN G.arm_cjog_error := fb_disable[i].ErrorID; END_IF
-        IF fb_stop[i].Error THEN G.arm_cjog_error := fb_stop[i].ErrorID; END_IF
+        IF G.arm_cjog_error = 0 THEN
+            IF fb_enable[i].Error THEN G.arm_cjog_error := fb_enable[i].ErrorID;
+            ELSIF fb_disable[i].Error THEN G.arm_cjog_error := fb_disable[i].ErrorID;
+            ELSIF fb_stop[i].Error THEN G.arm_cjog_error := fb_stop[i].ErrorID; END_IF
+        END_IF
         fault_stop := TRUE;
         IF stage < 40 THEN stage := 40; END_IF
     END_IF

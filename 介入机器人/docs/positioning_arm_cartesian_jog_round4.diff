@@ -1,0 +1,1285 @@
+diff --git a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_regression.cpp b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_regression.cpp
+index 82ec6ab..0f66295 100644
+--- a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_regression.cpp
++++ b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_regression.cpp
+@@ -40,6 +40,18 @@ Axes seed(int mode, double effective_elbow)
+     return {{100, q2 + (mode == 2 ? 90.0 : 0.0), effective_elbow - 180, 37, 12}};
+ }
+ 
++Axes yaw_seed(double elbow, double q5)
++{
++    Axes p = seed(1, elbow);
++    p[4] = q5;
++    const double wx = Gen::L1*std::sin(p[1]*Gen::RAD)+Gen::L2*std::sin((p[1]+p[2])*Gen::RAD+Gen::PI);
++    const double wy = -Gen::L1*std::cos(p[1]*Gen::RAD)-Gen::L2*std::cos((p[1]+p[2])*Gen::RAD+Gen::PI);
++    const double psi = std::atan2(wy, wx)/Gen::RAD
++        - std::atan2(-Gen::TOOL_LENGTH_MM*std::cos(q5*Gen::RAD), Gen::TOOL_LATERAL_OFFSET_MM)/Gen::RAD;
++    p[3] = psi-p[1]-p[2]+90.0;
++    return p;
++}
++
+ Gen begin(int mode, int dir, double speed, Axes p)
+ {
+     Gen g;
+@@ -60,8 +72,14 @@ void record(std::uint32_t id, std::uint32_t cycles, Gen& g, Update update)
+ 
+ int main(int argc, char** argv)
+ {
+-    if (argc < 2 || argc > 3) return 2;
+-    const char magic[8] = {'A','R','M','J','O','G','3','\0'};
++    if (argc < 2 || argc > 4) return 2;
++    bool capture = false, round4 = false;
++    for (int i = 2; i < argc; ++i) {
++        if (std::strcmp(argv[i], "--capture") == 0) capture = true;
++        else if (std::strcmp(argv[i], "--round4") == 0) round4 = true;
++        else return 2;
++    }
++    const char magic[8] = {'A','R','M','J','O','G',round4 ? '4' : '3','\0'};
+     append(magic, sizeof(magic));
+     std::uint32_t case_id = 0;
+ 
+@@ -101,12 +119,14 @@ int main(int argc, char** argv)
+         state.step(false, held, 1, held ? 1 : 0, held ? 5 : 0, state.p, 0.001);
+     });
+ 
++    if (!round4) {
+     const double e = 10 * Gen::RAD;
+     const double q2 = -std::atan(Gen::L2 * std::sin(e) / (Gen::L1 + Gen::L2 * std::cos(e))) / Gen::RAD;
+     g = begin(1, 1, 5, Axes{{100, q2 + 90, -170, 37, 12}});
+     record(105, 6000, g, [](Gen& state, std::uint32_t n) {
+         state.step(false, true, 1, n <= 3000 ? 1 : -1, 5, state.p, 0.001);
+     });
++    }
+ 
+     for (int mode = 3; mode <= 4; ++mode) {
+         const double speed = mode == 3 ? 3 : 1.2;
+@@ -116,15 +136,33 @@ int main(int argc, char** argv)
+         });
+     }
+ 
+-    for (int mode : {1, 2}) for (int dir : {1, -1}) {
++    if (!round4) for (int mode : {1, 2}) for (int dir : {1, -1}) {
+         g = begin(mode, dir, 5, Axes{{100, 0, 0, 0, 0}});
+         record(130 + static_cast<std::uint32_t>((mode - 1) * 2 + (dir < 0)), 2000, g,
+             [=](Gen& state, std::uint32_t) { state.step(false, true, mode, dir, 5, state.p, 0.001); });
+     }
+ 
++    if (round4) {
++        std::uint32_t id = 200;
++        for (double elbow : {30.,90.,150.}) for (double q5 : {0.,30.,-30.}) for (int dir : {1,-1}) {
++            g = begin(5, dir, .8, yaw_seed(elbow,q5));
++            record(id++, 3500, g, [=](Gen& state, std::uint32_t n) {
++                state.step(false, n <= 3000, 5, dir, .8, state.p, .001);
++            });
++        }
++        g = begin(5, 1, .8, yaw_seed(90,0));
++        record(220, 2501, g, [](Gen& state, std::uint32_t n) {
++            state.step(false, n <= 2000, n <= 2000 ? 5 : 0, n <= 2000 ? 1 : 0,
++                n <= 2000 ? .8 : 0, state.p, .001);
++        });
++        g = begin(1, 1, 5, yaw_seed(90,0));
++        record(221, 9000, g, [](Gen& state, std::uint32_t n) {
++            const int mode = n <= 2000 ? 1 : n <= 5500 ? 5 : 2;
++            state.step(false, true, mode, 1, mode == 5 ? .8 : 5, state.p, .001);
++        });
++    }
++
+     const std::vector<unsigned char> bytes = baseline;
+-    const bool capture = argc == 3 && std::strcmp(argv[2], "--capture") == 0;
+-    if (argc == 3 && !capture) return 2;
+     if (capture) {
+         std::ofstream output(argv[1], std::ios::binary);
+         output.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+@@ -137,7 +175,8 @@ int main(int argc, char** argv)
+     const std::vector<unsigned char> expected((std::istreambuf_iterator<char>(input)), {});
+     const auto mismatch = std::mismatch(bytes.begin(), bytes.end(), expected.begin(), expected.end());
+     const bool equal = bytes.size() == expected.size() && mismatch.first == bytes.end();
+-    std::cout << (equal ? "PASS" : "FAIL") << " second-round bitwise regression scenarios=30 cycles=" << total_cycles
++    std::cout << (equal ? "PASS" : "FAIL") << (round4 ? " pre-round4 bitwise regression scenarios=45 cycles="
++        : " second-round bitwise regression scenarios=30 cycles=") << total_cycles
+         << " bytes=" << bytes.size() << " baseline_bytes=" << expected.size() << '\n';
+     if (!equal) std::cout << "first differing byte=" << std::distance(bytes.begin(), mismatch.first) << '\n';
+     return equal ? 0 : 1;
+diff --git a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_tests.cpp b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_tests.cpp
+index 5c7388c..9702919 100644
+--- a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_tests.cpp
++++ b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_tests.cpp
+@@ -1,4 +1,5 @@
+ #include "arm_cart_jog_reference.h"
++#include "arm_cart_jog_st_generated.h"
+ #include "positioning_arm/kinematics.h"
+ #include <cstring>
+ #include <iomanip>
+@@ -23,6 +24,12 @@ int peak_case_cycle=0;
+ std::map<std::string,int> cycle_count;
+ std::map<std::string,double> acceleration_ratio_by_case;
+ bool cycles_finite = true;
++struct AccelerationPeak { double value=0, previous_velocity=0, velocity=0, q3=0; int cycle=0,axis=0; bool limited=false; };
++std::map<std::string,AccelerationPeak> joint_acceleration_by_case;
++StCartJog translated;
++std::uint64_t translated_cycles=0;
++double translated_difference=0;
++bool translated_discrete_equal=true;
+ 
+ positioning_arm::ArmKinematicConfig config()
+ {
+@@ -102,7 +109,11 @@ double curve_integral(const Gen& g,double tau_begin,double tau_end)
+ Gen begin(int mode, int dir, double speed, Axes p)
+ {
+     nominal_bounds = {{0,0}};
+-    Gen g; g.step(true, false, mode, dir, speed, p, DT); return g;
++    Gen g; g.step(true, false, mode, dir, speed, p, DT);
++    translated=StCartJog{};
++    const std::array<double,6> st_seed{{0,p[0],p[1],p[2],p[3],p[4]}};
++    translated.step(true,false,mode,dir,speed,st_seed,DT);
++    return g;
+ }
+ void tick(Gen& g, bool held, int mode, int dir, double speed, const char* name)
+ {
+@@ -110,6 +121,20 @@ void tick(Gen& g, bool held, int mode, int dir, double speed, const char* name)
+     const double previous_path_speed = g.path_speed, previous_nominal = g.path_v;
+     const int cycle=++cycle_count[name];
+     g.step(false, held, mode, dir, speed, g.p, DT);
++    const std::array<double,6> st_seed{{0,prev_p[0],prev_p[1],prev_p[2],prev_p[3],prev_p[4]}};
++    translated.step(false,held,mode,dir,speed,st_seed,DT);++translated_cycles;
++    for(int i=0;i<5;++i)translated_difference=std::max({translated_difference,
++        std::abs(g.p[i]-translated.p[i+1]),std::abs(g.v[i]-translated.v[i+1]),std::abs(g.a[i]-translated.a[i+1])});
++    for(const auto& pair:{std::pair<double,double>{g.path_speed,translated.path_speed},
++        {g.target_speed,translated.target_speed},{g.path_v,translated.path_v},{g.v0,translated.v0},{g.v1,translated.v1},
++        {g.tau,translated.tau},{g.duration,translated.duration},{g.sigma,translated.sigma}})
++        translated_difference=std::max(translated_difference,std::abs(pair.first-pair.second));
++    translated_discrete_equal=translated_discrete_equal&&g.limited==translated.limited&&g.branch==translated.branch
++        &&g.latched_mode==translated.latched_mode&&g.latched_dir==translated.latched_dir;
++    if(g.latched_mode==1||g.latched_mode==2||g.latched_mode==5)for(int i=1;i<=3;++i){
++        auto& peak=joint_acceleration_by_case[name];
++        if(std::abs(g.a[i])>peak.value)peak={std::abs(g.a[i]),prev_v[i],g.v[i],g.p[2],cycle,i+1,g.limited};
++    }
+     for (int i = 0; i < 5; ++i)
+         cycles_finite = cycles_finite && std::isfinite(g.p[i]) && std::isfinite(g.v[i]) && std::isfinite(g.a[i]);
+     cycles_finite = cycles_finite && std::isfinite(g.path_speed);
+@@ -501,6 +526,12 @@ int main()
+         <<" B_k_minus_2="<<peak_bounds[0]<<" B_k_minus_1="<<peak_bounds[1]<<" B_k="<<peak_bounds[2]
+         <<" allowed="<<1.01*std::max({peak_bounds[0],peak_bounds[1],peak_bounds[2]})<<'\n';
+     result("T11",cycles_finite && velocity_difference<=1e-9 && acceleration_difference<=1e-9 && path_acceleration_ok);
++    bool s4=true;
++    for(const auto& item:joint_acceleration_by_case){const auto& peak=item.second;
++        std::cout<<"S4 case="<<item.first<<" max_joint_acceleration="<<peak.value<<" cycle="<<peak.cycle
++            <<" axis="<<peak.axis<<" previous_velocity="<<peak.previous_velocity<<" velocity="<<peak.velocity
++            <<" q3="<<peak.q3<<" limited="<<peak.limited<<'\n';s4=s4&&peak.value<=200;}
++    result("S4",s4,"all planar/yaw cycles included; B stopped on nonmonotone specification");
+ 
+     auto shifted=config();shifted.base_offset_mm=Eigen::Vector3d(20,-30,40);
+     positioning_arm::PositioningArmKinematics translated(shifted);auto p=seed(1,90);
+@@ -511,6 +542,9 @@ int main()
+     result("OFFSET",(moved.position-base.position-shifted.base_offset_mm*.001).norm()<1e-12
+         && (j-j0).norm()<1e-12 && ik0.success() && ik1.success() && (ik0.target-ik1.target).norm()<1e-12);
+     result("FINITE",cycles_finite);
++    std::cout<<"ST_EQ exact_T_and_Y_cycles="<<translated_cycles<<" max_difference="<<translated_difference
++        <<" discrete_equal="<<translated_discrete_equal<<'\n';
++    result("ST_EQ",translated_difference==0&&translated_discrete_equal);
+     std::cout<<"TOTAL failures="<<failures<<'\n';
+     return failures?1:0;
+ }
+diff --git a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/audit_cart_jog_st.py b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/audit_cart_jog_st.py
+index 23a4c28..6374fa0 100644
+--- a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/audit_cart_jog_st.py
++++ b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/audit_cart_jog_st.py
+@@ -88,6 +88,25 @@ for api in ["MC_ExtSetPointGenEnable", "MC_ExtSetPointGenDisable", "MC_Stop", "M
+     check(api in (plc / "POUs/ArmCartesian.TcPOU").read_text(encoding="utf-8-sig")
+           and api in (plc / "POUs/ArmCartJog.TcPOU").read_text(encoding="utf-8-sig"), "existing Tc2_MC2 API " + api)
+ check("G.arm_cjog_owned AND (stage = 10 OR stage = 25)" in wrapper, "Feed only owned stages 10/25")
++for name, body, error in [("ArmCartJog", wrapper, "arm_cjog_error"), ("ArmCartesian", home, "arm_curve_error")]:
++    check("Execute:=(stage=50) AND NOT G.arm_axis[i].Status.Error" in body,
++          name + " skips MC_Stop on NC error axis")
++    check("all_disabled AND (fb_disable[i].Done OR fb_disable[i].Error OR G.arm_axis[i].Status.Error)" in body,
++          name + " Disable Done/Error/axis error completes stage 40")
++    check("all_stopped AND (fb_stop[i].Done OR fb_stop[i].Error OR G.arm_axis[i].Status.Error)" in body,
++          name + " Stop Done/Error/axis error completes stage 50")
++    check("all_released := all_released AND NOT fb_stop[i].Busy;" in body,
++          name + " stage 60 waits only for Stop Busy to clear")
++    check("IF G." + error + " = 0 THEN\n            IF fb_enable[i].Error" in body,
++          name + " FB errors preserve first cause")
++for name in ["ArmCartJogGen.TcPOU", "ArmManual.TcPOU"]:
++    working = (plc / "POUs" / name).read_text(encoding="utf-8-sig").replace("\r\n", "\n")
++    before = subprocess.check_output(["git", "show", "713d8830aaf04cd23b1547c3f0da03528f5c5d94:介入机器人/C从端/250902/Untitled2/POUs/" + name], cwd=repo).decode("utf-8-sig").replace("\r\n", "\n")
++    check(working == before, name + " unchanged from pre-round4 (line endings normalized)")
++check("IF G.arm_curve_owned OR G.arm_cjog_owned THEN" in manual
++      and "reset_exec[i] := TRUE;" in manual
++      and "Execute:=reset_exec[i] AND (axis_state[i] = 0)" in manual,
++      "manual reset request resumes after ownership release; MC_Reset call retained")
+ check("IF G.arm_cjog_owned THEN reject_error := 2001; END_IF" in home
+       and "NOT G.arm_cjog_owned" in manual, "home/manual exclude jog ownership")
+ kin = repo / "B数据端/工程/PositioningArmKinematics"
+diff --git a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/run_cart_jog_acceptance.py b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/run_cart_jog_acceptance.py
+index a9ec933..ad8ee2b 100644
+--- a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/run_cart_jog_acceptance.py
++++ b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/run_cart_jog_acceptance.py
+@@ -13,6 +13,10 @@ ads = kin.parent / "ADS项目"
+ tests = kin / "tests"
+ build = kin / "build-cart-jog"
+ logs = repo / "docs/acceptance_cart_jog"
++round4 = "--round4" in sys.argv or "--capture-round4" in sys.argv
++capture_round4 = "--capture-round4" in sys.argv
++if round4:
++    logs = logs / "round4"
+ build.mkdir(exist_ok=True)
+ logs.mkdir(parents=True, exist_ok=True)
+ vswhere = Path(os.environ["ProgramFiles(x86)"]) / "Microsoft Visual Studio/Installer/vswhere.exe"
+@@ -24,6 +28,8 @@ environment = subprocess.check_output(
+ env = dict(line.split("=", 1) for line in environment.splitlines() if "=" in line and not line.startswith("="))
+ env["PATH"] = env.pop("Path", env.get("PATH", ""))
+ env["VSLANG"] = "1033"
++env["PYTHONUTF8"] = "1"
++env["PYTHONIOENCODING"] = "utf-8"
+ cl = shutil.which("cl.exe", path=env["PATH"])
+ flags = ["/nologo", "/O2", "/std:c++17", "/EHsc", "/utf-8", "/DNOMINMAX", "/MD", "/W3", "/bigobj",
+     "/I" + str(kin / "include"), "/I" + str(kin / ".deps/Library/include/eigen3"), "/I" + str(build),
+@@ -45,10 +51,40 @@ def run(name, command):
+ 
+ run("st_translation", [sys.executable, tests / "translate_cart_jog_st.py",
+     repo / "C从端/250902/Untitled2/POUs/ArmCartJogGen.TcPOU", build / "arm_cart_jog_st_generated.h"])
+-run("st_static_audit_round3", [sys.executable, tests / "audit_cart_jog_st.py"])
++if round4:
++    run("stage_translation", [sys.executable, tests / "translate_cart_jog_st.py",
++        repo / "C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU", build / "arm_cart_jog_stage_generated.h", "--wrapper"])
++    # 正常松开基线只从本轮修改前的已提交ST生成，不使用修复后的源码。
++    prefix = subprocess.check_output(["git", "rev-parse", "--show-prefix"], cwd=repo, text=True, encoding="utf-8").strip()
++    before_commit = "713d8830aaf04cd23b1547c3f0da03528f5c5d94"
++    results["stage_baseline_commit"] = before_commit
++    before = subprocess.check_output(["git", "show", before_commit + ":" + prefix + "C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU"], cwd=repo)
++    before_source = build / "ArmCartJog_before_round4.TcPOU"
++    before_source.write_bytes(before)
++    results["stage_baseline_source_sha256"] = hashlib.sha256(before).hexdigest()
++    before_header = build / "arm_cart_jog_stage_before_generated.h"
++    run("stage_translation_before", [sys.executable, tests / "translate_cart_jog_st.py",
++        before_source, before_header, "--wrapper"])
++    before_header.write_text(before_header.read_text(encoding="utf-8").replace(
++        "struct StCartJogStage :", "struct StCartJogStageBefore :"), encoding="utf-8")
++if capture_round4:
++    for name, baseline, args in [
++        ("arm_cart_jog_regression", "arm_cart_jog_round4_baseline.bin", ["--round4", "--capture"]),
++        ("arm_cart_jog_stage_tests", "arm_cart_jog_round4_stage_baseline.bin", ["--capture"]),
++    ]:
++        executable = build / (name + ".exe")
++        if run(name + "_capture_build", [cl, *flags, tests / (name + ".cpp"), "/Fe:" + str(executable)]) == 0:
++            run(name + "_capture", [executable, tests / baseline, *args])
++    sys.exit(1 if any(value != 0 for value in results.values() if isinstance(value, int)) else 0)
++run("st_static_audit_round4" if round4 else "st_static_audit_round3", [sys.executable, tests / "audit_cart_jog_st.py"])
+ for name, files, arguments in [
+     ("home_regression", [tests / "home_regression.cpp", *sources], ["--verify", tests / "home_baseline.txt"]),
+     ("arm_cart_jog_regression", [tests / "arm_cart_jog_regression.cpp"], [tests / "arm_cart_jog_round3_baseline.bin"]),
++    *(([("arm_cart_jog_round4_regression", [tests / "arm_cart_jog_regression.cpp"],
++        [tests / "arm_cart_jog_round4_baseline.bin", "--round4"]),
++        ("arm_cart_jog_stage_tests", [tests / "arm_cart_jog_stage_tests.cpp"],
++        [tests / "arm_cart_jog_round4_stage_baseline.bin"]),
++        ("arm_cart_jog_round4_diagnostics", [tests / "arm_cart_jog_round4_diagnostics.cpp", *sources], [])]) if round4 else []),
+     ("arm_cart_jog_tests", [tests / "arm_cart_jog_tests.cpp", *sources], []),
+     ("arm_cart_jog_equivalence", [tests / "arm_cart_jog_equivalence.cpp"], []),
+     ("arm_ads_tests", [tests / "arm_ads_test.cpp", ads / "arm_manual_ads_service.cpp", *sources], []),
+@@ -59,5 +95,8 @@ for name, files, arguments in [
+         run(name, [executable, *arguments])
+ 
+ results["home_baseline_sha256"] = hashlib.sha256((tests / "home_baseline.txt").read_bytes()).hexdigest()
++if round4:
++    for filename in ["arm_cart_jog_round4_baseline.bin", "arm_cart_jog_round4_stage_baseline.bin"]:
++        results[filename + "_sha256"] = hashlib.sha256((tests / filename).read_bytes()).hexdigest()
+ (logs / "results.json").write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
+ sys.exit(1 if any(value != 0 for value in results.values() if isinstance(value, int)) else 0)
+diff --git a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/translate_cart_jog_st.py b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/translate_cart_jog_st.py
+index 57537f5..16caec6 100644
+--- a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/translate_cart_jog_st.py
++++ b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/translate_cart_jog_st.py
+@@ -4,7 +4,8 @@ import re
+ import sys
+ import xml.etree.ElementTree as ET
+ 
+-source, output = map(Path, sys.argv[1:])
++source, output = map(Path, sys.argv[1:3])
++wrapper = len(sys.argv) == 4 and sys.argv[3] == "--wrapper"
+ root = ET.parse(source).getroot()
+ decl = root.find(".//Declaration").text
+ body = root.find(".//ST").text
+@@ -13,19 +14,24 @@ tokens = re.findall(r":=|<>|>=|<=|\.\.|[A-Za-z_]\w*|\d+(?:\.\d+)?(?:[eE][+-]?\d+
+ pos = 0
+ 
+ def expression(items):
+-    s = " ".join(items)
++    s = " ".join("==" if token == "=" else "=" if token == ":=" else token for token in items)
+     for old, new in {
+         "TRUE": "true", "FALSE": "false", "AND": "&&", "OR": "||", "NOT": "!",
+         "MIN": "std::min", "MAX": "std::max", "ABS": "std::abs",
+         "SIN": "std::sin", "COS": "std::cos", "ACOS": "std::acos",
+         "ATAN": "std::atan", "SQRT": "std::sqrt",
++        "UDINT_TO_LREAL": "double", "POSITIONTYPE_ABSOLUTE": "0",
+     }.items():
+         s = re.sub(r"\b" + old + r"\b", new, s)
+-    s = s.replace("<>", "!=").replace(":=", "=")
++    s = s.replace("<>", "!=")
++    s = re.sub(r"TwinCAT_SystemInfoVarList\s*\.\s*_TaskInfo\s*\[\s*1\s*\]\s*\.\s*CycleTime", "cycle_time_100ns", s)
++    s = re.sub(r"TwinCAT_SystemInfoVarList\s*\.\s*_TaskInfo\s*\[\s*1\s*\]\s*\.\s*FirstCycle", "first_cycle", s)
+     return s
+ 
+ def condition(items):
+-    return re.sub(r"(?<![<>=!])=(?!=)", "==", expression(items))
++    return expression(items)
++
++assert expression(["valid", ":=", "dir", "=", "1"]) == "valid = dir == 1"
+ 
+ def until(marker):
+     global pos
+@@ -36,10 +42,31 @@ def until(marker):
+     pos += 1
+     return result
+ 
+-def statements(stops=()):
++def case_label():
++    return re.match(r"\d+(?: , \d+)* :", " ".join(tokens[pos:])) is not None
++
++def call(items):
++    opening = items.index("(")
++    target = expression(items[:opening])
++    values, start, depth = [], opening+1, 0
++    for n in range(start, len(items)):
++        if items[n] in ("(", "["): depth += 1
++        elif items[n] in (")", "]"): depth -= 1
++        if depth == 0 and items[n] == "," or depth == -1:
++            argument = items[start:n]
++            assert argument[1] == ":="
++            values.append(condition(argument[2:]))
++            start = n+1
++    if target == "gen": target += ".step"
++    elif target == "MC_ExtSetPointGenFeed": target = "feed"
++    else: target += ".call"
++    return target + "(" + ",".join(values) + ");"
++
++def statements(stops=(), in_case=False):
+     global pos
+     lines = []
+     while pos < len(tokens) and tokens[pos] not in stops:
++        if in_case and case_label(): break
+         token = tokens[pos]
+         pos += 1
+         if token == ";":
+@@ -72,23 +99,36 @@ def statements(stops=()):
+             lines += statements(("END_WHILE",))
+             pos += 1
+             lines.append("}")
++        elif token == "CASE":
++            lines.append("switch (" + expression(until("OF")) + ") {")
++            while tokens[pos] != "END_CASE":
++                labels = until(":")
++                lines += ["case " + value + ":" for value in labels if value != ","]
++                lines += ["{"] + statements(("END_CASE",), True) + ["break;", "}"]
++            pos += 1
++            lines.append("}")
+         elif token == "EXIT":
+             lines.append("break;")
+         elif token == "RETURN":
+             lines.append("return;")
+         else:
+             pos -= 1
+-            lines.append(expression(until(";")) + ";")
++            items = until(";")
++            lines.append(call(items) if items[0] in ("gen", "fb_enable", "fb_disable", "fb_stop", "MC_ExtSetPointGenFeed")
++                         else expression(items) + ";")
+     return lines
+ 
+-code = ["#pragma once", "#include <array>", "#include <cmath>", "#include <algorithm>", "struct StCartJog {"]
++code = ["#pragma once", "#include <array>", "#include <cmath>", "#include <algorithm>"]
++code += ["#include \"arm_cart_jog_stage_signals.h\"", "struct StCartJogStage : JogStageSignals<StCartJog> {"] if wrapper else ["struct StCartJog {"]
+ variables = re.findall(r"\bVAR_OUTPUT\s+(.*?)END_VAR|\bVAR(?!\s+CONSTANT)\s+(.*?)END_VAR", decl, re.S)
+ for output_vars, locals_ in variables:
+     for names, kind, init in re.findall(
+-        r"([A-Za-z_][\w, ]*)\s*:\s*(ARRAY\[1\.\.5\] OF LREAL|LREAL|INT|BOOL)(?:\s*:=\s*([^;]+))?\s*;",
++        r"([A-Za-z_][\w, ]*)\s*:\s*(ARRAY\[1\.\.5\] OF (?:MC_\w+|LREAL|DINT)|ArmCartJogGen|LREAL|UDINT|INT|BOOL)(?:\s*:=\s*([^;]+))?\s*;",
+         re.sub(r"//[^\n]*", "", output_vars + locals_),
+     ):
+-        cpp = {"LREAL": "double", "INT": "int", "BOOL": "bool", "ARRAY[1..5] OF LREAL": "std::array<double,6>"}[kind]
++        if wrapper and (kind == "ArmCartJogGen" or "MC_" in kind): continue
++        cpp = {"LREAL": "double", "INT": "int", "UDINT": "std::uint32_t", "BOOL": "bool",
++               "ARRAY[1..5] OF LREAL": "std::array<double,6>", "ARRAY[1..5] OF DINT": "std::array<int,6>"}[kind]
+         for name in names.split(","):
+             code.append(cpp + " " + name.strip() + " = " + (init or "{}") + ";")
+ constant_block = re.search(r"VAR CONSTANT(.*?)END_VAR", decl, re.S).group(1)
+@@ -98,7 +138,7 @@ for name, kind, value in re.findall(r"(\w+)\s*:\s*(ARRAY\[1\.\.5\] OF LREAL|LREA
+         code.append("static constexpr " + cpp + " " + name + " = " + value + ";")
+     else:
+         code.append("static constexpr std::array<double,6> " + name + " = {{0," + value.strip()[1:-1] + "}};")
+-code.append("void step(bool start,bool held,int mode,int dir,double speed,const std::array<double,6>& seed,double cycle_dt) {")
++code.append("void step() {" if wrapper else "void step(bool start,bool held,int mode,int dir,double speed,const std::array<double,6>& seed,double cycle_dt) {")
+ code += statements()
+ code += ["}", "};"]
+ assert pos == len(tokens)
+diff --git a/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU b/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU
+index d62a9ea..f23a419 100644
+--- a/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU
++++ b/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU
+@@ -46,7 +46,7 @@ request_valid := (G.arm_cjog_mode >= 1) AND (G.arm_cjog_mode <= 5)
+     AND ((G.arm_cjog_dir = -1) OR (G.arm_cjog_dir = 1))
+     AND (G.arm_cjog_speed > 0) AND (G.arm_cjog_speed <= 100);
+ held := request_valid AND (alive_age < ALIVE_TIMEOUT);
+-IF (G.arm_cjog_mode <> 0) AND NOT request_valid THEN G.arm_cjog_error := 3001; END_IF
++IF (G.arm_cjog_mode <> 0) AND NOT request_valid AND (G.arm_cjog_error = 0) THEN G.arm_cjog_error := 3001; END_IF
+ // 与ArmCartesian的驱动就绪表达式逐项一致。
+ drive_ready := G.arm_manual_enable AND NOT G.host_comm_timeout AND NOT G.estop_hold_req
+     AND (ABS(cycle_seconds-0.001) < 0.00000001);
+@@ -58,7 +58,7 @@ END_FOR
+ IF (stage = 0) AND held AND NOT G.arm_curve_owned
+     AND (G.arm_curve_request = G.arm_curve_ack) THEN
+     IF NOT drive_ready THEN
+-        G.arm_cjog_error := 3002;
++        IF G.arm_cjog_error = 0 THEN G.arm_cjog_error := 3002; END_IF
+     ELSE
+         gen(start:=TRUE, held:=FALSE, mode:=G.arm_cjog_mode, dir:=G.arm_cjog_dir,
+             speed:=G.arm_cjog_speed, seed:=G.arm_act_pos, cycle_dt:=cycle_seconds);
+@@ -72,14 +72,14 @@ IF (stage = 0) AND held AND NOT G.arm_curve_owned
+     END_IF
+ END_IF
+ IF (stage = 10 OR stage = 25) AND NOT drive_ready THEN
+-    G.arm_cjog_error := 3002;
++    IF G.arm_cjog_error = 0 THEN G.arm_cjog_error := 3002; END_IF
+     fault_stop := TRUE;
+     stage := 40;
+ END_IF
+ IF stage = 10 THEN
+     enable_age := enable_age+cycle_seconds;
+     IF enable_age > ENABLE_TIMEOUT THEN
+-        G.arm_cjog_error := 3003;
++        IF G.arm_cjog_error = 0 THEN G.arm_cjog_error := 3003; END_IF
+         fault_stop := TRUE;
+         stage := 40;
+     END_IF
+@@ -105,17 +105,19 @@ FOR i := 1 TO 5 DO
+     fb_enable[i](Axis:=G.arm_axis[i], Execute:=(stage=10),
+         Position:=gen.p[i], PositionType:=POSITIONTYPE_ABSOLUTE);
+     fb_disable[i](Axis:=G.arm_axis[i], Execute:=(stage=40));
+-    fb_stop[i](Axis:=G.arm_axis[i], Execute:=(stage=50),
++    fb_stop[i](Axis:=G.arm_axis[i], Execute:=(stage=50) AND NOT G.arm_axis[i].Status.Error,
+         Deceleration:=G.arm_jog_dec[i], Jerk:=G.arm_jog_jerk[i]);
+     all_enabled := all_enabled AND fb_enable[i].Enabled;
+-    all_disabled := all_disabled AND NOT fb_enable[i].Enabled
+-        AND NOT fb_enable[i].Busy AND NOT fb_disable[i].Busy AND NOT fb_disable[i].Error;
+-    all_stopped := all_stopped AND fb_stop[i].Done AND NOT fb_stop[i].Error;
+-    all_released := all_released AND NOT fb_stop[i].Busy AND NOT fb_stop[i].Error;
++    // 错误轴交回NC复位；停用或停止报错也必须走完释放。
++    all_disabled := all_disabled AND (fb_disable[i].Done OR fb_disable[i].Error OR G.arm_axis[i].Status.Error);
++    all_stopped := all_stopped AND (fb_stop[i].Done OR fb_stop[i].Error OR G.arm_axis[i].Status.Error);
++    all_released := all_released AND NOT fb_stop[i].Busy;
+     IF G.arm_cjog_owned AND (fb_enable[i].Error OR fb_disable[i].Error OR fb_stop[i].Error) THEN
+-        IF fb_enable[i].Error THEN G.arm_cjog_error := fb_enable[i].ErrorID; END_IF
+-        IF fb_disable[i].Error THEN G.arm_cjog_error := fb_disable[i].ErrorID; END_IF
+-        IF fb_stop[i].Error THEN G.arm_cjog_error := fb_stop[i].ErrorID; END_IF
++        IF G.arm_cjog_error = 0 THEN
++            IF fb_enable[i].Error THEN G.arm_cjog_error := fb_enable[i].ErrorID;
++            ELSIF fb_disable[i].Error THEN G.arm_cjog_error := fb_disable[i].ErrorID;
++            ELSIF fb_stop[i].Error THEN G.arm_cjog_error := fb_stop[i].ErrorID; END_IF
++        END_IF
+         fault_stop := TRUE;
+         IF stage < 40 THEN stage := 40; END_IF
+     END_IF
+diff --git a/介入机器人/C从端/250902/Untitled2/POUs/ArmCartesian.TcPOU b/介入机器人/C从端/250902/Untitled2/POUs/ArmCartesian.TcPOU
+index 80a4ad4..f2161e4 100644
+--- a/介入机器人/C从端/250902/Untitled2/POUs/ArmCartesian.TcPOU
++++ b/介入机器人/C从端/250902/Untitled2/POUs/ArmCartesian.TcPOU
+@@ -151,7 +151,7 @@ IF G.arm_curve_request <> G.arm_curve_ack THEN
+             G.arm_curve_error := 0;
+             G.arm_curve_state := 1;
+         ELSE
+-            G.arm_curve_error := reject_error;
++            IF G.arm_curve_error = 0 THEN G.arm_curve_error := reject_error; END_IF
+             G.arm_curve_cancel := TRUE;
+             finish_state := 4;
+             IF stage > 0 THEN
+@@ -168,7 +168,8 @@ IF (stage > 0) AND (stage < 40) THEN
+     IF G.arm_curve_cancel OR NOT allowed THEN
+         finish_state := 3;
+         IF NOT allowed THEN
+-            G.arm_curve_error := 2003; finish_state := 4; G.arm_curve_cancel := TRUE;
++            IF G.arm_curve_error = 0 THEN G.arm_curve_error := 2003; END_IF
++            finish_state := 4; G.arm_curve_cancel := TRUE;
+         END_IF
+         stage := 40;
+         phase_elapsed := 0;
+@@ -176,7 +177,7 @@ IF (stage > 0) AND (stage < 40) THEN
+ END_IF
+ IF stage > 0 THEN phase_elapsed := phase_elapsed + cycle_seconds; END_IF
+ IF (stage = 10 OR stage = 30) AND (phase_elapsed > 2.0) THEN
+-    G.arm_curve_error := 2007;
++    IF G.arm_curve_error = 0 THEN G.arm_curve_error := 2007; END_IF
+     G.arm_curve_cancel := TRUE;
+     finish_state := 4;
+     stage := 40;
+@@ -196,7 +197,7 @@ IF stage = 20 THEN
+         IF (ABS(v[i]) > velocity_limit[i]+0.000001)
+             OR (ABS(a[i]) > acceleration_limit[i]+0.000001)
+             OR NOT ((G.arm_act_pos[i]-p[i] >= -1.0) AND (G.arm_act_pos[i]-p[i] <= 1.0)) THEN
+-            G.arm_curve_error := 2008;
++            IF G.arm_curve_error = 0 THEN G.arm_curve_error := 2008; END_IF
+             G.arm_curve_cancel := TRUE;
+             finish_state := 4;
+             stage := 40;
+@@ -224,20 +225,22 @@ FOR i := 1 TO 5 DO
+     fb_enable[i](Axis:=G.arm_axis[i], Execute:=(stage=10),
+         Position:=curve[i+4], PositionType:=POSITIONTYPE_ABSOLUTE);
+     fb_disable[i](Axis:=G.arm_axis[i], Execute:=(stage=40));
+-    fb_stop[i](Axis:=G.arm_axis[i], Execute:=(stage=50),
++    fb_stop[i](Axis:=G.arm_axis[i], Execute:=(stage=50) AND NOT G.arm_axis[i].Status.Error,
+         Deceleration:=deceleration_limit[i], Jerk:=jerk_limit[i]);
+     all_enabled := all_enabled AND fb_enable[i].Enabled;
+-    all_disabled := all_disabled AND NOT fb_enable[i].Enabled
+-        AND NOT fb_enable[i].Busy AND NOT fb_disable[i].Busy AND NOT fb_disable[i].Error;
+-    all_stopped := all_stopped AND fb_stop[i].Done AND NOT fb_stop[i].Error;
+-    all_released := all_released AND NOT fb_stop[i].Busy AND NOT fb_stop[i].Error;
++    // 与末端点动相同，错误轴和功能块错误不阻塞所有权释放。
++    all_disabled := all_disabled AND (fb_disable[i].Done OR fb_disable[i].Error OR G.arm_axis[i].Status.Error);
++    all_stopped := all_stopped AND (fb_stop[i].Done OR fb_stop[i].Error OR G.arm_axis[i].Status.Error);
++    all_released := all_released AND NOT fb_stop[i].Busy;
+     arrived := arrived AND (ABS(G.arm_act_pos[i]-curve[i+4]) <= 0.05)
+         AND (ABS(G.arm_act_vel[i]) <= 0.1);
+     IF G.arm_curve_owned AND (fb_enable[i].Error OR fb_disable[i].Error OR fb_stop[i].Error) THEN
+         G.arm_curve_cancel := TRUE;
+-        IF fb_enable[i].Error THEN G.arm_curve_error := fb_enable[i].ErrorID; END_IF
+-        IF fb_disable[i].Error THEN G.arm_curve_error := fb_disable[i].ErrorID; END_IF
+-        IF fb_stop[i].Error THEN G.arm_curve_error := fb_stop[i].ErrorID; END_IF
++        IF G.arm_curve_error = 0 THEN
++            IF fb_enable[i].Error THEN G.arm_curve_error := fb_enable[i].ErrorID;
++            ELSIF fb_disable[i].Error THEN G.arm_curve_error := fb_disable[i].ErrorID;
++            ELSIF fb_stop[i].Error THEN G.arm_curve_error := fb_stop[i].ErrorID; END_IF
++        END_IF
+         finish_state := 4;
+         IF stage < 40 THEN stage := 40; END_IF
+     END_IF
+diff --git a/介入机器人/docs/positioning_arm_cartesian_jog.md b/介入机器人/docs/positioning_arm_cartesian_jog.md
+index d20d977..0528d54 100644
+--- a/介入机器人/docs/positioning_arm_cartesian_jog.md
++++ b/介入机器人/docs/positioning_arm_cartesian_jog.md
+@@ -1,6 +1,6 @@
+ # 定位臂 PLC 末端点动接口
+ 
+-更新：2026-11-05，第三轮将模式5改为保持TCP位置的偏航运动，并拆分偏航速度档。第三轮完整验收见[本轮交付报告](positioning_arm_cartesian_jog_round3_report.md)。PLC 未构建；工程机编译、下载和激活仍待现场执行。
++更新：2026-11-07，第四轮修复ArmCartJog与ArmCartesian故障停机的所有权死锁。修复B因奇异判据的非单调反例，按规格停止，发生器未改；S1/S2/S4未通过，本轮整体未通过。详见[第四轮交付报告](positioning_arm_cartesian_jog_round4_report.md)。第三轮保持TCP偏航仍沿用原实现，历史结果见[第三轮报告](positioning_arm_cartesian_jog_round3_report.md)。PLC未构建，需工程机编译、下载、激活。
+ 
+ 旧《定位臂项目修改与接口说明》docx 已过时。归零继续使用原 17 个 LREAL 单段曲线且 `[16]=0`；末端点动由下述 PLC 接口独立生成，协议命令格式不变。
+ 
+@@ -106,11 +106,11 @@ ST 常量集中在 [ArmCartJogGen:22](<D:/Work_files/Vessel intervention Robot/
+ | 0 空闲 | mode非零且非法报3001；held且归零无所有权、request=ack时检查 drive_ready；就绪则以 G.arm_act_pos 锚定、速度/加速度0、feed方向1，取得所有权 | 就绪→10；未就绪报3002并保持0 |
+ | 10 使能 | 五轴 MC_ExtSetPointGenEnable，绝对位置；owned期间每周期 Feed(p,0,0) | 全部 Enabled→25；使能超过2s报3003→40 |
+ | 25 运行 | 每周期 Gen 与 Feed；模式/方向变化先减到0再重新锚定，阶段和所有权保持 | 无held且实际路径速度0连续2周期→40；驱动未就绪报3002→40 |
+-| 40 停用 | 五轴 MC_ExtSetPointGenDisable | 全停用：正常→60，故障→50 |
+-| 50 停止 | MC_Stop，使用原 G.arm_jog_dec/jerk | 全Done→60 |
++| 40 停用 | 五轴 MC_ExtSetPointGenDisable | 每轴Done、Error或NC轴错误均视为完成；全部完成后正常→60，故障→50 |
++| 50 停止 | NC错误轴Execute=FALSE，其余轴MC_Stop，使用原 G.arm_jog_dec/jerk | 每轴Done、Error或NC轴错误均视为完成；全部完成→60 |
+ | 60 释放 | 等待 MC_Stop不再Busy | owned=FALSE→0 |
+ 
+-Enable/Disable/Stop 任一 Error 保存 ErrorID；阶段<40时进入40，阶段≥40保持该阶段。Fault 路径包含 MC_Stop，正常减速结束不再额外调用 MC_Stop。Feed 仅在 owned 且阶段10/25。速度非零更新方向符号，零速保持上一值。[ArmCartJog:123–143](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:123>) 映射为对外0–4状态；25且target_speed=0为减速状态3。
++Enable/Disable/Stop错误仅在当前错误码为0时保存，保留首个根因，下一次成功起步清零。阶段<40发生错误时进入40；40/50中的错误按上述完成判据继续释放，60仅等待Stop.Busy清除。Fault 路径包含 MC_Stop，正常减速结束不再额外调用 MC_Stop。Feed 仅在 owned 且阶段10/25。速度非零更新方向符号，零速保持上一值。[ArmCartJog:125–147](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:125>) 映射为对外0–4状态；25且target_speed=0为减速状态3。
+ 
+ drive_ready 在 [ArmCartJog:51–57](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:51>) 与原 ArmCartesian:63–69 相同：总使能、主机通信/急停、1ms周期、五轴上电Done、使能请求、轴故障、复位及单轴点动请求。归零起步额外拒绝 cjog_owned，报2001但不写点动请求；ArmManual 在复位和 allow_jog 两处排除 cjog_owned。
+ 
+@@ -137,9 +137,15 @@ snapshot→main.cpp 的 vs→Zenoh StateFrame→RemoteRobotLink→StatusFrame 
+ 
+ 协议沿用仓库此前扩展状态字段时的 Version=1 及 v1 topic。StateFrame 51→55项：索引50为uint32 State、51为uint32 Error、52为bool Limited、53为float64 PathSpeed、54为AuthTag。两端严格长度/类型校验和黄金样本同步更新；主端、数据端须同步部署，旧51项帧会被拒绝，没有兼容回退。ArmCartesianJog 命令格式未变；speedScale 对新末端点动完全忽略，仍供原单轴点动使用。
+ 
++## 第四轮验收状态
++
++修复A的S5三个场景通过：其它轴Done后2个周期内释放，错误码保持第一个；正常松开3200周期逐位相同。运动回归45场景160120周期无差异；T/Y实际场景301853周期、S1–S3诊断64000周期的ST转译↔C++最大差均0。
++
++修复B没有实施。反例：奇异区内X+，较小步长使δ降低而被拒，较大步长跨过半径最近点后使δ升高而被接受，固定二分可能返回0并漏掉可接受步长。SING_MARGIN/ELBOW_BRAKE_ACC未加入生产发生器。当前现场位姿X−/Y−仍会进入奇异区并出现超过200°/s²的关节加速度，S1/S2/S4失败；本轮不能作为奇异区域运动验收已通过的版本。反例、逐周期峰值、未执行项目和现场前提见第四轮报告。
++
+ ## 现场验收清单（用户执行）
+ 
+-第三轮T1–T13、Y1–Y6、归零回归、ST↔C++比对及端点构建结果见[第三轮报告](positioning_arm_cartesian_jog_round3_report.md)。**PLC修改需要用户在工程机重新构建、下载并激活**；现场执行前，确认数据端和上位机使用匹配版本。
++历史第三轮结果见[第三轮报告](positioning_arm_cartesian_jog_round3_report.md)；当前结果以[第四轮报告](positioning_arm_cartesian_jog_round4_report.md)为准。以下涉及奇异区域的运动步骤待B完成后执行。**PLC修改需要用户在工程机重新构建、下载并激活**；现场执行前，确认数据端和上位机使用匹配版本。
+ 
+ - [ ] 下载并激活 PLC，在线确认 G.arm_cjog_if_version = 1，数据端启动日志打印相同的版本号。
+ - [ ] 五个模式 × 三档：按住 10 s 连续运动，约 1 s 达到设定速度；松开后平滑停止，X/Y 停止距离不超过 15 mm。
+diff --git a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_signals.h b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_signals.h
+new file mode 100644
+index 0000000..def02c5
+--- /dev/null
++++ b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_signals.h
+@@ -0,0 +1,68 @@
++#pragma once
++#include "arm_cart_jog_reference.h"
++#include "arm_cart_jog_st_generated.h"
++#include <cstdint>
++#include <type_traits>
++
++struct AxisSignal { struct { bool Error = false; } Status; int index = 0; };
++struct FbFrame {
++    bool Done = false, Error = false, Busy = false, Enabled = false;
++    std::uint32_t ErrorID = 0;
++};
++struct ScriptedFb : FbFrame {
++    FbFrame script;
++    bool execute = false;
++    double position = 0, deceleration = 0, jerk = 0;
++    void call(AxisSignal&, bool request, double p = 0, double option = 0) {
++        static_cast<FbFrame&>(*this) = script;
++        execute = request; position = p; deceleration = p; jerk = option;
++    }
++};
++struct JogGlobals {
++    int arm_cjog_mode = 0, arm_cjog_dir = 0;
++    double arm_cjog_speed = 0, arm_cjog_path_speed = 0;
++    std::uint32_t arm_cjog_alive = 0, arm_cjog_state = 0, arm_cjog_error = 0;
++    std::uint32_t arm_curve_request = 0, arm_curve_ack = 0;
++    bool arm_cjog_owned = false, arm_cjog_limited = false, arm_curve_owned = false;
++    bool arm_manual_enable = true, host_comm_timeout = false, estop_hold_req = false;
++    std::array<AxisSignal,6> arm_axis{};
++    std::array<FbFrame,6> arm_power_output{};
++    std::array<bool,6> arm_enable_req{}, arm_reset_req{}, arm_jog_pos_req{}, arm_jog_neg_req{};
++    std::array<double,6> arm_act_pos{}, arm_jog_dec{}, arm_jog_jerk{};
++};
++template<class Model> struct JogGenAdapter {
++    Model core;
++    std::array<double,6> p{},v{},a{};
++    double path_speed = 0, target_speed = 0;
++    bool limited = false;
++    void step(bool start, bool held, int mode, int dir, double speed,
++        const std::array<double,6>& seed, double dt) {
++        if constexpr (std::is_same_v<Model,ArmCartJogReference>) {
++            const std::array<double,5> q{{seed[1],seed[2],seed[3],seed[4],seed[5]}};
++            core.step(start,held,mode,dir,speed,q,dt);
++            for(int i=1;i<=5;++i){p[i]=core.p[i-1];v[i]=core.v[i-1];a[i]=core.a[i-1];}
++        } else {
++            core.step(start,held,mode,dir,speed,seed,dt);
++            p=core.p;v=core.v;a=core.a;
++        }
++        path_speed=core.path_speed;target_speed=core.target_speed;limited=core.limited;
++    }
++};
++template<class Model> struct JogStageSignals {
++    JogGlobals G;
++    bool first_cycle = false;
++    std::uint32_t cycle_time_100ns = 10000;
++    JogGenAdapter<Model> gen;
++    std::array<ScriptedFb,6> fb_enable{},fb_disable{},fb_stop{};
++    std::array<std::array<double,4>,6> last_feed{};
++    std::array<int,6> feed_count{};
++    void feed(AxisSignal& axis,double p,double v,double a,int dir) {
++        last_feed[axis.index]={{p,v,a,static_cast<double>(dir)}};
++        ++feed_count[axis.index];
++    }
++    JogStageSignals() {
++        G.arm_act_pos={{0,100,-40,-90,37,12}};
++        for(int i=1;i<=5;++i){G.arm_axis[i].index=i;G.arm_power_output[i].Done=true;
++            G.arm_enable_req[i]=true;G.arm_jog_dec[i]=50;G.arm_jog_jerk[i]=500;}
++    }
++};
+diff --git a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_reference.h b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_reference.h
+new file mode 100644
+index 0000000..0dc3634
+--- /dev/null
++++ b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_reference.h
+@@ -0,0 +1,79 @@
++#pragma once
++#include "arm_cart_jog_stage_signals.h"
++
++// 对照ArmCartJog语句；轴和功能块输出由测试脚本逐周期赋值，不连接NC。
++struct JogStageReference : JogStageSignals<ArmCartJogReference> {
++    static constexpr double ALIVE_TIMEOUT=.5, ENABLE_TIMEOUT=2.;
++    int stage=0,zero_cycles=0;
++    double cycle_seconds=0,alive_age=0,enable_age=0;
++    std::uint32_t last_alive=0;
++    bool request_valid=false,held=false,drive_ready=false,fault_stop=false;
++    bool all_enabled=false,all_disabled=false,all_stopped=false,all_released=false;
++    std::array<int,6> dir_feed{};
++    void step() {
++        cycle_seconds=double(cycle_time_100ns)*.0000001;
++        if(first_cycle){stage=0;G.arm_cjog_owned=false;G.arm_cjog_state=0;
++            G.arm_cjog_error=0;G.arm_cjog_limited=false;G.arm_cjog_path_speed=0;}
++        if(G.arm_cjog_alive!=last_alive){last_alive=G.arm_cjog_alive;alive_age=0;}
++        else alive_age=alive_age+cycle_seconds;
++        request_valid=G.arm_cjog_mode>=1&&G.arm_cjog_mode<=5
++            &&(G.arm_cjog_dir==-1||G.arm_cjog_dir==1)&&G.arm_cjog_speed>0&&G.arm_cjog_speed<=100;
++        held=request_valid&&alive_age<ALIVE_TIMEOUT;
++        if(G.arm_cjog_mode!=0&&!request_valid&&G.arm_cjog_error==0)G.arm_cjog_error=3001;
++        drive_ready=G.arm_manual_enable&&!G.host_comm_timeout&&!G.estop_hold_req
++            &&std::abs(cycle_seconds-.001)<.00000001;
++        for(int i=1;i<=5;++i)drive_ready=drive_ready&&G.arm_power_output[i].Done&&G.arm_enable_req[i]
++            &&!G.arm_axis[i].Status.Error&&!G.arm_reset_req[i]&&!G.arm_jog_pos_req[i]&&!G.arm_jog_neg_req[i];
++        if(stage==0&&held&&!G.arm_curve_owned&&G.arm_curve_request==G.arm_curve_ack){
++            if(!drive_ready){if(G.arm_cjog_error==0)G.arm_cjog_error=3002;}
++            else {gen.step(true,false,G.arm_cjog_mode,G.arm_cjog_dir,G.arm_cjog_speed,G.arm_act_pos,cycle_seconds);
++                for(int i=1;i<=5;++i)dir_feed[i]=1;
++                G.arm_cjog_error=0;G.arm_cjog_owned=true;fault_stop=false;
++                enable_age=0;zero_cycles=0;stage=10;}
++        }
++        if((stage==10||stage==25)&&!drive_ready){
++            if(G.arm_cjog_error==0)G.arm_cjog_error=3002;
++            fault_stop=true;stage=40;
++        }
++        if(stage==10){enable_age=enable_age+cycle_seconds;
++            if(enable_age>ENABLE_TIMEOUT){if(G.arm_cjog_error==0)G.arm_cjog_error=3003;
++                fault_stop=true;stage=40;}}
++        if(stage==25){gen.step(false,held,G.arm_cjog_mode,G.arm_cjog_dir,G.arm_cjog_speed,gen.p,cycle_seconds);
++            if(gen.path_speed==0&&!held)zero_cycles=zero_cycles+1;else zero_cycles=0;
++            if(zero_cycles>=2)stage=40;}
++        all_enabled=true;all_disabled=true;all_stopped=true;all_released=true;
++        for(int i=1;i<=5;++i){
++            if(gen.v[i]>0)dir_feed[i]=1;
++            if(gen.v[i]<0)dir_feed[i]=-1;
++            if(G.arm_cjog_owned&&(stage==10||stage==25))feed(G.arm_axis[i],gen.p[i],gen.v[i],gen.a[i],dir_feed[i]);
++            fb_enable[i].call(G.arm_axis[i],stage==10,gen.p[i],0);
++            fb_disable[i].call(G.arm_axis[i],stage==40);
++            fb_stop[i].call(G.arm_axis[i],stage==50&&!G.arm_axis[i].Status.Error,G.arm_jog_dec[i],G.arm_jog_jerk[i]);
++            all_enabled=all_enabled&&fb_enable[i].Enabled;
++            all_disabled=all_disabled&&(fb_disable[i].Done||fb_disable[i].Error||G.arm_axis[i].Status.Error);
++            all_stopped=all_stopped&&(fb_stop[i].Done||fb_stop[i].Error||G.arm_axis[i].Status.Error);
++            all_released=all_released&&!fb_stop[i].Busy;
++            if(G.arm_cjog_owned&&(fb_enable[i].Error||fb_disable[i].Error||fb_stop[i].Error)){
++                if(G.arm_cjog_error==0){
++                    if(fb_enable[i].Error)G.arm_cjog_error=fb_enable[i].ErrorID;
++                    else if(fb_disable[i].Error)G.arm_cjog_error=fb_disable[i].ErrorID;
++                    else if(fb_stop[i].Error)G.arm_cjog_error=fb_stop[i].ErrorID;
++                }
++                fault_stop=true;if(stage<40)stage=40;
++            }
++        }
++        switch(stage){
++        case 10:if(all_enabled)stage=25;break;
++        case 40:if(all_disabled){if(fault_stop)stage=50;else stage=60;}break;
++        case 50:if(all_stopped)stage=60;break;
++        case 60:if(all_released){G.arm_cjog_owned=false;stage=0;}break;
++        }
++        switch(stage){
++        case 0:G.arm_cjog_state=0;break;
++        case 10:G.arm_cjog_state=1;break;
++        case 25:if(gen.target_speed>0)G.arm_cjog_state=2;else G.arm_cjog_state=3;break;
++        case 40:case 50:case 60:G.arm_cjog_state=4;break;
++        }
++        G.arm_cjog_limited=gen.limited;G.arm_cjog_path_speed=gen.path_speed;
++    }
++};
+diff --git a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_tests.cpp b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_tests.cpp
+new file mode 100644
+index 0000000..77b8321
+--- /dev/null
++++ b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_tests.cpp
+@@ -0,0 +1,113 @@
++#include "arm_cart_jog_stage_reference.h"
++#include "arm_cart_jog_stage_generated.h"
++#include "arm_cart_jog_stage_before_generated.h"
++#include <cstring>
++#include <fstream>
++#include <iomanip>
++#include <iostream>
++#include <vector>
++
++using Bytes=std::vector<unsigned char>;
++template<class T>void append(Bytes& out,const T& x){const auto* p=reinterpret_cast<const unsigned char*>(&x);out.insert(out.end(),p,p+sizeof(x));}
++template<class M>void sample(Bytes& out,const M& m){
++    append(out,m.stage);append(out,m.G.arm_cjog_owned);append(out,m.G.arm_cjog_state);append(out,m.G.arm_cjog_error);
++    append(out,m.alive_age);append(out,m.enable_age);append(out,m.zero_cycles);append(out,m.fault_stop);
++    append(out,m.gen.path_speed);append(out,m.gen.target_speed);append(out,m.gen.limited);
++    for(int i=1;i<=5;++i){append(out,m.gen.p[i]);append(out,m.gen.v[i]);append(out,m.gen.a[i]);
++        append(out,m.dir_feed[i]);append(out,m.feed_count[i]);for(double value:m.last_feed[i])append(out,value);
++        for(const auto* fb:{&m.fb_enable[i],&m.fb_disable[i],&m.fb_stop[i]}){
++            append(out,fb->execute);append(out,fb->Done);append(out,fb->Error);append(out,fb->Busy);
++            append(out,fb->Enabled);append(out,fb->ErrorID);append(out,fb->position);append(out,fb->jerk);
++        }
++    }
++}
++template<class M>void normal_script(M& m,int n){
++    m.first_cycle=n==0;
++    m.G.arm_cjog_mode=n<=2500?1:0;m.G.arm_cjog_dir=n<=2500?1:0;m.G.arm_cjog_speed=n<=2500?5:0;
++    ++m.G.arm_cjog_alive;
++    for(int i=1;i<=5;++i){m.fb_enable[i].script={};m.fb_enable[i].script.Enabled=m.stage==10||m.stage==25;
++        m.fb_disable[i].script={};m.fb_disable[i].script.Done=m.stage==40;
++        m.fb_stop[i].script={};m.fb_stop[i].script.Done=m.stage==50;}
++}
++template<class M>Bytes normal_trace(){M m;Bytes data;for(int n=0;n<3200;++n){normal_script(m,n);m.step();sample(data,m);}return data;}
++
++int main(int argc,char**argv){
++    if(argc<2||argc>3)return 2;
++    const bool capture=argc==3&&std::strcmp(argv[2],"--capture")==0;
++    if(argc==3&&!capture)return 2;
++    const Bytes trace=normal_trace<StCartJogStage>();
++    if(capture){const auto before=normal_trace<StCartJogStageBefore>();
++        std::ofstream file(argv[1],std::ios::binary);file.write(reinterpret_cast<const char*>(before.data()),before.size());
++        std::cout<<"CAPTURE pre-round4 normal stage trace cycles=3200 bytes="<<before.size()<<'\n';return file?0:1;}
++    std::ifstream file(argv[1],std::ios::binary);const Bytes baseline((std::istreambuf_iterator<char>(file)),{});
++    const Bytes reference=normal_trace<JogStageReference>();
++    const Bytes before=normal_trace<StCartJogStageBefore>();
++    for(const auto& item:{std::pair<const char*,const Bytes*>{"pre-round4",&baseline},{"reference",&reference}}){
++        const auto mismatch=std::mismatch(trace.begin(),trace.end(),item.second->begin(),item.second->end());
++        std::cout<<"S5.3 compare="<<item.first<<" bytes="<<trace.size()<<" other_bytes="<<item.second->size()
++            <<" first_difference="<<std::distance(trace.begin(),mismatch.first)<<'\n';
++    }
++    int failures=0;std::uint64_t cycles=3200;
++    bool normal_discrete_equal=true;
++    JogStageReference normal_ref;StCartJogStage normal_st;
++    for(int n=0;n<3200;++n){normal_script(normal_ref,n);normal_script(normal_st,n);normal_ref.step();normal_st.step();
++        normal_discrete_equal=normal_discrete_equal&&normal_ref.request_valid==normal_st.request_valid
++            &&normal_ref.held==normal_st.held&&normal_ref.drive_ready==normal_st.drive_ready
++            &&normal_ref.last_alive==normal_st.last_alive&&normal_ref.all_enabled==normal_st.all_enabled
++            &&normal_ref.all_disabled==normal_st.all_disabled&&normal_ref.all_stopped==normal_st.all_stopped
++            &&normal_ref.all_released==normal_st.all_released
++            &&normal_ref.gen.core.branch==normal_st.gen.core.branch
++            &&normal_ref.gen.core.latched_mode==normal_st.gen.core.latched_mode
++            &&normal_ref.gen.core.latched_dir==normal_st.gen.core.latched_dir;}
++
++    const auto result=[&](bool ok,const char* name){std::cout<<(ok?"PASS ":"FAIL ")<<name<<'\n';if(!ok)++failures;};
++    result(trace==baseline&&trace==reference&&trace==before&&normal_discrete_equal,"S5.3 normal release: 3200 cycles identical to pre-round4 ST and handwritten reference");
++    static_assert(StCartJogStage::ALIVE_TIMEOUT==JogStageReference::ALIVE_TIMEOUT);
++    static_assert(StCartJogStage::ENABLE_TIMEOUT==JogStageReference::ENABLE_TIMEOUT);
++    for(int scenario:{1,2}){
++        JogStageReference ref;StCartJogStage st;
++        ref.stage=st.stage=scenario==1?25:40;
++        ref.G.arm_cjog_owned=st.G.arm_cjog_owned=true;
++        const std::uint32_t root_error=scenario==1?3002:0x1234;
++        int released=0;bool equal=true,skip_error_axis=true,healthy_stop=false,root_kept=true,waited_for_busy=false;
++        for(int n=1;n<=15;++n){
++            if(scenario==1)ref.G.arm_axis[2].Status.Error=true;
++            ++ref.G.arm_cjog_alive;st.G=ref.G;
++            for(int i=1;i<=5;++i){
++                FbFrame enable,disable,stop;
++                disable.Done=n>=2;
++                if(scenario==2&&i==3){disable.Done=false;disable.Error=true;disable.ErrorID=0x1234;}
++                stop.Busy=n>=3&&n<=6;
++                stop.Done=n>=5;
++                if(scenario==1&&i==2){stop.Error=n>=2;stop.ErrorID=0x4650;stop.Busy=false;stop.Done=false;}
++                if(scenario==2&&i==1&&n>=3){stop.Error=true;stop.ErrorID=0x5678;stop.Busy=false;stop.Done=false;}
++                ref.fb_enable[i].script=st.fb_enable[i].script=enable;
++                ref.fb_disable[i].script=st.fb_disable[i].script=disable;
++                ref.fb_stop[i].script=st.fb_stop[i].script=stop;
++            }
++            ref.step();st.step();++cycles;
++            Bytes a,b;sample(a,ref);sample(b,st);equal=equal&&a==b
++                &&ref.all_enabled==st.all_enabled&&ref.all_disabled==st.all_disabled
++                &&ref.all_stopped==st.all_stopped&&ref.all_released==st.all_released;
++            if(scenario==1){skip_error_axis=skip_error_axis&&!st.fb_stop[2].execute;
++                healthy_stop=healthy_stop||st.fb_stop[1].execute;}
++            if(n==6)waited_for_busy=st.stage==60&&st.G.arm_cjog_owned;
++            if(st.G.arm_cjog_error!=0)root_kept=root_kept&&st.G.arm_cjog_error==root_error;
++            if(st.stage==0&&!st.G.arm_cjog_owned&&released==0)released=n;
++        }
++        std::cout<<"S5."<<scenario<<" release_cycle="<<released<<" cycles_after_other_axes_done="<<released-5
++            <<" error="<<st.G.arm_cjog_error<<" error_axis_stop_execute="<<!skip_error_axis<<'\n';
++        result(equal&&released>=5&&released<=15&&root_kept&&waited_for_busy&&st.G.arm_cjog_error==root_error
++            &&(scenario!=1||(skip_error_axis&&healthy_stop)),scenario==1?
++            "S5.1 axis 2 error, Stop error and Busy release":"S5.2 Disable error releases and preserves first error");
++    }
++    // 错误码在空闲和坏请求期间保持，只有下一次成功起步才清零。
++    JogStageReference ref;StCartJogStage st;ref.G.arm_cjog_error=0x4650;st.G=ref.G;
++    bool invalid_keeps_first=true;
++    for(int mode:{9,1}){ref.G.arm_cjog_mode=mode;ref.G.arm_cjog_dir=1;ref.G.arm_cjog_speed=5;
++        ++ref.G.arm_cjog_alive;st.G=ref.G;ref.step();st.step();++cycles;
++        if(mode==9)invalid_keeps_first=ref.G.arm_cjog_error==0x4650&&st.G.arm_cjog_error==0x4650;}
++    result(invalid_keeps_first&&ref.G.arm_cjog_error==0&&st.G.arm_cjog_error==0&&ref.stage==10&&st.stage==10,"first error clears on successful start");
++    std::cout<<"S5 ST versus reference cycles="<<cycles<<" bitwise_exact="<<(failures==0)<<" max_numerical_difference="<<(failures==0?"0":"see failed comparison")<<" failures="<<failures<<'\n';
++    return failures?1:0;
++}
+diff --git a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_round4_diagnostics.cpp b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_round4_diagnostics.cpp
+new file mode 100644
+index 0000000..af70b77
+--- /dev/null
++++ b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_round4_diagnostics.cpp
+@@ -0,0 +1,153 @@
++#include "arm_cart_jog_reference.h"
++#include "arm_cart_jog_st_generated.h"
++#include "positioning_arm/kinematics.h"
++#include <cstring>
++#include <iomanip>
++#include <iostream>
++#include <limits>
++
++using Gen=ArmCartJogReference;
++using Axes=std::array<double,5>;
++constexpr double DT=.001, SING_MARGIN=5.;
++int failures=0;
++std::uint64_t compared_cycles=0;
++double difference=0;
++bool equivalent=true;
++double diagnostic_path_ratio=0,diagnostic_velocity_difference=0,diagnostic_acceleration_difference=0;
++bool diagnostic_path_ok=true;
++
++void result(bool ok,const char* label){std::cout<<(ok?"PASS ":"FAIL ")<<label<<'\n';if(!ok)++failures;}
++double alpha(const Axes& p){double value=p[2]+180.;while(value>180.)value-=360.;while(value<=-180.)value+=360.;return value;}
++double delta(const Axes& p){const double e=std::abs(alpha(p));return std::min(e-SING_MARGIN,180.-SING_MARGIN-e);}
++std::array<double,2> wrist(const Axes& p){return {{Gen::L1*std::sin(p[1]*Gen::RAD)+Gen::L2*std::sin((p[1]+p[2])*Gen::RAD+Gen::PI),
++    -Gen::L1*std::cos(p[1]*Gen::RAD)-Gen::L2*std::cos((p[1]+p[2])*Gen::RAD+Gen::PI)}};}
++positioning_arm::JointVector joints(const Axes& p){positioning_arm::JointVector q;for(int i=0;i<5;++i)q[i]=p[i]*(i==0?.001:Gen::RAD);return q;}
++positioning_arm::ArmKinematicConfig config(){positioning_arm::ArmKinematicConfig c;
++    c.lower.setConstant(-std::numeric_limits<double>::infinity());c.upper.setConstant(std::numeric_limits<double>::infinity());
++    c.lower[4]=-60*Gen::RAD;c.upper[4]=60*Gen::RAD;
++    for(int i=0;i<5;++i){c.calibration[i]={0,i==0?.001:Gen::RAD,1};c.max_velocity[i]=Gen::JOINT_VCAP[i]*(i==0?.001:Gen::RAD);}return c;}
++
++// 本文件只诊断未改动的第三轮发生器；不把候选奇异规则接入运动模型。
++struct Run {
++    Gen g;StCartJog st;Axes initial;
++    positioning_arm::PositioningArmKinematics truth{config()};
++    Eigen::Vector3d tcp_initial;
++    double min_delta=std::numeric_limits<double>::infinity(),max_acceleration=0,max_speed=0,line_error=0;
++    double radius_min=std::numeric_limits<double>::infinity(),radius_max=0,peak_previous_v=0,peak_v=0;
++    bool finite=true,cap=true,branch_same=true;
++    int cycle=0,peak_cycle=0,peak_axis=0,first_stop=0,initial_branch=0;
++    std::array<double,2> nominal_bounds{};
++    double maximum_path_ratio=0;int path_peak_cycle=0;
++    explicit Run(Axes p,int mode,int dir,double speed):initial(p){
++        g.step(true,false,mode,dir,speed,p,DT);
++        const std::array<double,6> seed{{0,p[0],p[1],p[2],p[3],p[4]}};
++        st.step(true,false,mode,dir,speed,seed,DT);tcp_initial=truth.forward(joints(p)).position;
++        initial_branch=g.branch;min_delta=delta(p);
++    }
++    void tick(int mode,int dir,double speed){
++        const Axes before=g.p,previous_v=g.v;const double previous_path_speed=g.path_speed;
++        const std::array<double,6> seed{{0,before[0],before[1],before[2],before[3],before[4]}};
++        g.step(false,true,mode,dir,speed,g.p,DT);st.step(false,true,mode,dir,speed,seed,DT);++cycle;++compared_cycles;
++        const double bound=1.5*std::abs(g.v1-g.v0)/g.duration;
++        const double maximum_bound=std::max({nominal_bounds[0],nominal_bounds[1],bound});
++        nominal_bounds={{nominal_bounds[1],bound}};
++        if(!g.limited){const double acceleration=std::abs(g.path_speed-previous_path_speed)/DT;
++            const double ratio=maximum_bound>0?acceleration/maximum_bound:acceleration==0?0:std::numeric_limits<double>::infinity();
++            diagnostic_path_ok=diagnostic_path_ok&&acceleration<=1.01*maximum_bound;
++            diagnostic_path_ratio=std::max(diagnostic_path_ratio,ratio);
++            if(ratio>maximum_path_ratio){maximum_path_ratio=ratio;path_peak_cycle=cycle;}}
++
++        for(int i=0;i<5;++i){
++            diagnostic_velocity_difference=std::max(diagnostic_velocity_difference,std::abs(g.v[i]-(g.p[i]-before[i])/DT));
++            diagnostic_acceleration_difference=std::max(diagnostic_acceleration_difference,std::abs(g.a[i]-(g.v[i]-previous_v[i])/DT));
++            finite=finite&&std::isfinite(g.p[i])&&std::isfinite(g.v[i])&&std::isfinite(g.a[i]);
++            cap=cap&&std::abs(g.p[i]-before[i])/DT<=Gen::JOINT_VCAP[i]*(1+1e-9);
++            difference=std::max({difference,std::abs(g.p[i]-st.p[i+1]),std::abs(g.v[i]-st.v[i+1]),std::abs(g.a[i]-st.a[i+1])});
++        }
++        difference=std::max({difference,std::abs(g.path_speed-st.path_speed),std::abs(g.path_v-st.path_v),std::abs(g.sigma-st.sigma)});
++        equivalent=equivalent&&g.limited==st.limited&&g.branch==st.branch&&g.latched_mode==st.latched_mode&&g.latched_dir==st.latched_dir;
++        finite=finite&&std::isfinite(g.path_speed);branch_same=branch_same&&g.branch==initial_branch;
++        for(int i=1;i<=3;++i){max_speed=std::max(max_speed,std::abs(g.v[i]));if(std::abs(g.a[i])>max_acceleration){
++            max_acceleration=std::abs(g.a[i]);peak_cycle=cycle;peak_axis=i+1;peak_previous_v=previous_v[i];peak_v=g.v[i];}}
++        min_delta=std::min(min_delta,delta(g.p));const auto w=wrist(g.p);const double r=std::hypot(w[0],w[1]);
++        radius_min=std::min(radius_min,r);radius_max=std::max(radius_max,r);
++        const auto tcp=truth.forward(joints(g.p)).position;
++        line_error=std::max(line_error,std::abs(tcp[mode==1?1:0]-tcp_initial[mode==1?1:0])*1000.);
++        if(g.path_speed==0&&g.limited&&first_stop==0)first_stop=cycle;
++    }
++    double displacement(){return (truth.forward(joints(g.p)).position-tcp_initial).norm()*1000.;}
++    void print(const char* id,int mode,int dir,double speed){
++        std::cout<<id<<" mode="<<mode<<" dir="<<dir<<" speed="<<speed<<" cycles="<<cycle<<" displacement_mm="<<displacement()
++            <<" final_alpha_deg="<<alpha(g.p)<<" min_delta_deg="<<min_delta<<" final_path_speed="<<g.path_speed<<" limited="<<g.limited
++            <<" line_mm="<<line_error<<" finite="<<finite<<" joint_cap="<<cap<<" max_joint_speed="<<max_speed
++            <<" max_joint_acceleration="<<max_acceleration<<" peak_cycle="<<peak_cycle<<" peak_axis="<<peak_axis
++            <<" peak_previous_v="<<peak_previous_v<<" peak_v="<<peak_v<<" first_stop_cycle="<<first_stop
++            <<" radius_min="<<radius_min<<" radius_max="<<radius_max<<" T11_ratio="<<maximum_path_ratio<<" T11_peak_cycle="<<path_peak_cycle<<'\n';
++    }
++};
++
++int main(){
++    std::cout<<std::setprecision(17);
++    const Axes probe{{100,-31.568598207665932,-4,0,0}};
++    const auto w=wrist(probe);std::cout<<"B_NONMONOTONE q2="<<probe[1]<<" q3="<<probe[2]<<" wx="<<w[0]<<" wy="<<w[1]
++        <<" alpha_now="<<alpha(probe)<<" delta_now="<<delta(probe)<<'\n';
++    const auto candidate=[&](double step){
++        Axes q=probe;const double x=w[0]+step,y=w[1];const double r=std::hypot(x,y);
++        const double cosine=std::clamp((r*r-Gen::L1*Gen::L1-Gen::L2*Gen::L2)/(2.*Gen::L1*Gen::L2),-1.,1.);
++        const double elbow=std::acos(cosine);
++        q[1]=(std::atan2(x,-y)-std::atan(Gen::L2*std::sin(elbow)/(Gen::L1+Gen::L2*std::cos(elbow))))/Gen::RAD;
++        q[2]=(elbow-Gen::PI)/Gen::RAD;q[3]=probe[3]+(probe[1]+probe[2])-(q[1]+q[2]);return q;
++    };
++    const auto old_accept=[&](const Axes& q){const auto xy=wrist(q);const double r=std::hypot(xy[0],xy[1]);
++        bool ok=r>=Gen::L1-Gen::L2&&r<=Gen::L1+Gen::L2;
++        for(int i=1;i<=3;++i)ok=ok&&std::abs(q[i]-probe[i])<=Gen::JOINT_VCAP[i]*DT;return ok;};
++    const auto proposed_accept=[&](double step){const auto q=candidate(step);return old_accept(q)&&delta(q)>=delta(probe);};
++    for(double step:{.001,.0025,.004,.005}){
++        const auto q=candidate(step);
++        std::cout<<"B_TRIAL step_mm="<<step<<" alpha_try="<<alpha(q)<<" delta_try="<<delta(q)<<" old_conditions="<<old_accept(q)
++            <<" proposed_accept="<<proposed_accept(step)<<" dq2="<<q[1]-probe[1]<<" dq3="<<q[2]-probe[2]<<" dq4="<<q[3]-probe[3]<<'\n';
++    }
++    double lower=0,upper=.005;
++    for(int n=0;n<Gen::BISECTION_COUNT;++n){const double middle=(lower+upper)/2.;if(proposed_accept(middle))lower=middle;else upper=middle;}
++    std::cout<<"B_BISECTION desired_mm=0.005 accepted_mm="<<lower<<" known_acceptable_mm=0.004\n";
++    result(!proposed_accept(.0025)&&proposed_accept(.004)&&!proposed_accept(.005)&&lower==0,
++        "B nonmonotone witness confirmed; 12 bisections miss an acceptable positive step; implementation stopped by user rule");
++    bool s1=true,s2=true,s3=true,s4=true;
++    for(int mode:{1,2})for(int dir:{1,-1})for(double speed:{5.,30.}){
++        Run r({{100,-9.9812,167.5076,-70.5273,8.0475}},mode,dir,speed);
++        for(int n=0;n<5000;++n)r.tick(mode,dir,speed);
++        r.print("S1",mode,dir,speed);
++        const bool ok=r.finite&&r.cap&&r.line_error<=.01&&r.min_delta>=0&&r.max_acceleration<=200;
++        s1=s1&&ok;s4=s4&&r.max_acceleration<=200;
++    }
++    result(s1,"S1 current third-round generator; B not implemented");
++    const double e=10.*Gen::RAD;
++    const double q2=90.-std::atan(Gen::L2*std::sin(e)/(Gen::L1+Gen::L2*std::cos(e)))/Gen::RAD;
++    for(double speed:{5.,30.}){
++        Run r({{100,q2,-170,37,12}},1,1,speed);
++        for(int n=0;n<5000;++n)r.tick(1,1,speed);
++        r.print("S2_OUT",1,1,speed);const double stop_alpha=std::abs(alpha(r.g.p));
++        for(int n=0;n<3000;++n)r.tick(1,-1,speed);
++        r.print("S2_REVERSE",1,-1,speed);
++        s2=s2&&r.finite&&r.cap&&stop_alpha>=SING_MARGIN&&r.max_acceleration<=200&&r.branch_same&&std::abs(alpha(r.g.p))>stop_alpha;
++        s4=s4&&r.max_acceleration<=200;
++    }
++    result(s2,"S2 current third-round generator; B not implemented");
++    for(int mode:{1,2})for(int dir:{1,-1}){
++        Run r({{100,0,0,0,0}},mode,dir,5);for(int n=0;n<2000;++n){r.tick(mode,dir,5);
++            if(n==0)std::cout<<"S3_START mode="<<mode<<" dir="<<dir<<" delta_now=-5 delta_try="<<delta(r.g.p)
++                <<" limited="<<r.g.limited<<" a2="<<r.g.a[1]<<" a3="<<r.g.a[2]<<" a4="<<r.g.a[3]<<'\n';}
++        r.print("S3",mode,dir,5);
++        const bool inward=mode==2&&dir==1;
++        s3=s3&&r.finite&&r.cap&&(inward?r.displacement()==0&&r.g.limited:r.displacement()>0);
++        s4=s4&&r.max_acceleration<=200;
++    }
++    result(s3,"S3 zero-position direction behavior only; acceleration is tested separately by S4");
++    result(s4,"S4 includes every S1/S2/S3 cycle, including limited and start/reversal cycles");
++    std::cout<<"ST_EQ new_diagnostic_cycles="<<compared_cycles<<" max_difference="<<difference<<" discrete_equal="<<equivalent<<'\n';
++    result(difference==0&&equivalent,"ST/C++ diagnostic cycle equivalence");
++    std::cout<<"T11_DIAGNOSTICS maximum_ratio="<<diagnostic_path_ratio<<" velocity_difference="<<diagnostic_velocity_difference
++        <<" acceleration_difference="<<diagnostic_acceleration_difference<<'\n';
++    result(diagnostic_path_ok&&diagnostic_velocity_difference<=1e-9&&diagnostic_acceleration_difference<=1e-9,"T11 diagnostics with the unchanged second-round rule");
++    std::cout<<"TOTAL failures="<<failures<<"; B stopped, diagnostic failures are not waived\n";return failures?1:0;
++}
+diff --git a/介入机器人/docs/positioning_arm_cartesian_jog_round4_report.md b/介入机器人/docs/positioning_arm_cartesian_jog_round4_report.md
+new file mode 100644
+index 0000000..f5893be
+--- /dev/null
++++ b/介入机器人/docs/positioning_arm_cartesian_jog_round4_report.md
+@@ -0,0 +1,247 @@
++# 第四轮交付：故障释放已修复，奇异制动按规格停止
++
++日期：2026-11-07。修改基准：`713d8830aaf04cd23b1547c3f0da03528f5c5d94`。**本轮整体未通过。修复A完成离线验证；修复B因试探条件不单调，按第四轮§3.3的停止条款未实施。S1、S2、S4未通过。** 第三轮偏航保持TCP的实现已存在，本轮没有重做第三轮。
++
++## 1. 修改与范围
++
++生产代码只修改两个功能块：
++
++- [ArmCartJog.TcPOU:108](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:108>)：错误轴不执行MC_Stop；Disable/Stop的Done、Error或NC轴错误均算该轴完成；阶段60只等待Stop.Busy清除；错误码保留第一个，下一次成功起步清零。
++- [ArmCartesian.TcPOU:228](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartesian.TcPOU:228>)：归零存在相同死锁，按同样规则修改停止和释放；归零曲线的位置、速度、加速度计算语句不变。
++
++新增S5阶段机参考模型、脚本FB接口和逐周期比较；新增S1–S4诊断与非单调反例；现有验收器增加回归采样及全周期加速度统计。没有修改ArmCartJogGen、其C++参考模型、ArmManual、数据端生产代码、上位机、协议、GVL或MAIN。源码不变核对见[scope_and_build_summary.json](acceptance_cart_jog/round4/scope_and_build_summary.json)。
++
++源码差异见[本轮diff](positioning_arm_cartesian_jog_round4.diff)，新基线文件单独保存在tests内，不把二进制嵌入文本diff。没有新增超时、重试、内部数值检查、限幅或替代算法。测试中的NaN/Inf检查只用于离线验收。
++
++## 2. 修复A：停止与复位通路
++
++| 阶段 | 修改后的每轴判据 | 转移 |
++|---|---|---|
++| 40 | Disable.Done OR Disable.Error OR axis.Status.Error | 五轴完成后，正常→60，故障→50 |
++| 50 | 错误轴Execute=FALSE；其余轴MC_Stop；Stop.Done OR Stop.Error OR axis.Status.Error | 五轴完成→60 |
++| 60 | NOT Stop.Busy | 五轴均释放→owned=FALSE、阶段0 |
++
++ArmCartJog的上述代码分别见[108](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:108>)、[112](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:112>)、[114](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:114>)、[125](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:125>)。FB错误仅在error=0时写入，轴循环及Enable/Disable/Stop顺序决定同周期首个错误；驱动就绪检测在FB循环之前，因此该检测先触发时保留3002。后续Stop的0x4650不会覆盖3002。成功起步清零见[66](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:66>)。保留`stage<40`用于从运行进入停止；阶段40/50随后按Done/Error/轴错误完成判据继续转移，不再把FB错误当作驻留条件。
++
++**ArmCartesian确有同类死锁。** 修改前阶段50要求`Stop.Done AND NOT Stop.Error`，阶段60还要求`NOT Stop.Error`；错误轴无法满足，所有权一直不释放。修复后的停止调用、完成条件和释放见[228](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartesian.TcPOU:228>)、[232](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartesian.TcPOU:232>)、[254](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartesian.TcPOU:254>)。归零根因码也只在当前为0时写入，下一条成功归零清零。
++
++ArmManual未改：[73](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmManual.TcPOU:73>)的复位请求在两种owned均为FALSE后设置reset_exec；[86](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmManual.TcPOU:86>)在axis_state=0时执行MC_Reset；其Stop.Error分支在[136](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmManual.TcPOU:136>)已将axis_state归0。因此所有权释放后，仍保持的复位请求能沿原逻辑执行MC_Reset。实际驱动是否能复位仍取决于驱动故障消除情况。
++
++### S5：脚本驱动阶段机
++
++FB的Done/Error/Busy/Enabled与NC轴错误由脚本直接提供，不模拟NC内部。测试代码见[arm_cart_jog_stage_tests.cpp:67](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_tests.cpp:67>)。
++
++| 场景 | 实测 | 判定 |
++|---|---|---|
++| S5.1 阶段25轴2错误，随后Stop也报0x4650 | 错误轴Stop.Execute始终FALSE；其余轴第5周期Done；第6周期Busy仍为TRUE时保持owned；第7周期释放并回到0，距Done为2周期；error保持3002 | PASS |
++| S5.2 阶段40轴3Disable报0x1234，随后另一轴Stop报0x5678 | 第7周期释放，距其余轴Done为2周期；error保持首个0x1234（4660） | PASS |
++| S5.3 正常松开 | 3200周期、2,387,200字节，与修改前ST基线、修改后ST转译和手写参考模型逐位一致 | PASS |
++| 首错保持与再次起步 | 原0x4650在非法请求期间保留；下一次合法且驱动就绪的成功起步清零 | PASS |
++
++累计3232个脚本周期，数值最大差0，序列化字段逐位一致，阶段完成标志逐周期一致。[arm_cart_jog_stage_tests.log](acceptance_cart_jog/round4/arm_cart_jog_stage_tests.log)。
++
++阶段机转译新增时，测试工具曾把ST布尔赋值右侧的`=`误译为C++赋值，已修正并加入断言。正常松开的有效基线是用**上述固定提交中的原始ST**重新转译生成，源码SHA256为`ec5d861a8c24f5faf8251090e1ecd1da1d6091ecf37b2cd54e879b457f068920`，没有用修复后ST生成基线。基线SHA256和提交号已写入[results.json](acceptance_cart_jog/round4/results.json)。
++
++## 3. 修复B停止的可复现证据
++
++第四轮§3.3声称试探条件随步长单调变严，且要求发现不单调时停止。该声称在`δ_now<0`时不成立。
++
++源码腕点公式位于[ArmCartJogGen.TcPOU:86](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJogGen.TcPOU:86>)，X/Y环带、闭式逆解和关节步长条件位于[165](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJogGen.TcPOU:165>)、[183](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJogGen.TcPOU:183>)、[190](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJogGen.TcPOU:190>)。取：
++
++```text
++(q1,q2,q3,q4,q5)=(100,-31.568598207665932,-4,0,0)
++α_now=176°，δ_now=-1°
++W=(-0.00190000000000623,-23.987254484051618) mm
++方向X+，dt=0.001 s，Δσ_des=0.005 mm（慢档5 mm/s）
++```
++
++| 试探步长mm | δ_try (°) | 旧环带与三关节步长 | 新条件δ_try≥δ_now |
++|---:|---:|:---:|:---:|
++| 0.001 | -1.0000000319422497 | 通过 | 拒绝 |
++| 0.0025 | -1.0000000370756368 | 通过 | 拒绝 |
++| 0.004 | -0.9999999908736470 | 通过 | 接受 |
++| 0.005 | -0.9999999315526793 | 关节步长拒绝 | 完整条件拒绝 |
++
++0.004mm试探的三关节增量分别约`0.009554314828° / -9.1264e-9° / -0.009554305702°`，均小于0.01°，是真实可接受的正步长。完整步长0.005mm的轴2增量约0.011942545330°，被旧限速拒绝；二分第一次试0.0025mm又被新δ条件拒绝，于是排除了含0.004mm的上半区。固定12次二分最终接受步长为0，却存在0.004mm可接受步长。
++
++这不是舍入误判：`r(s)²=r0²+2·Wx·s+s²`，Wx<0时半径先减小、越过最近点后增大。在折叠侧奇异区中，δ随半径增大而增加，所以δ先降后升。接受集合不是从零开始的连续前缀；二分的单调前提失败。可复现程序见[arm_cart_jog_round4_diagnostics.cpp:91](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_round4_diagnostics.cpp:91>)，实测见[arm_cart_jog_round4_diagnostics.log](acceptance_cart_jog/round4/arm_cart_jog_round4_diagnostics.log)中的B_NONMONOTONE、B_TRIAL、B_BISECTION。
++
++另一个独立限制：零位Y−的首周期使`δ=-5→-4.999834656422536°`，符合`δ_now<0`分支“只允许离开”的条件，但现有闭式起步前馈加速度为轴2 `-1488.092196896°/s²`、轴3 `-165.343577477°/s²`、轴4 `1653.435774373°/s²`。该分支本身没有加速度约束，不能据此保证S4。没有排除这个周期，也没有为其增加未授权逻辑。
++
++因此模式1/2/5的修复B整体停止；**ArmCartJogGen及参考模型保持原样，没有加入SING_MARGIN或ELBOW_BRAKE_ACC生产常量**。下面S1–S4为当前第三轮发生器的诊断，不是修复B的通过证明。
++
++## 4. 回归与全部测试结果
++
++### 修改前基线
++
++| 场景 | 个数 | 周期 |
++|---|---:|---:|
++| T2（X/Y×3档×3构型） | 18 | 63018 |
++| T3、T5、T6、T7、T8 | 5 | 18601 |
++| T10 Z、俯仰 | 2 | 4000 |
++| Y1（9构型×两方向） | 18 | 63000 |
++| Y2、Y6 | 2 | 11501 |
++| 合计 | 45 | 160120 |
++
++修改后五轴p/v/a、path_speed和limited **0字节差异**。基线文件`tests/arm_cart_jog_round4_baseline.bin`，20,655,848字节，SHA256=`a0673d668432f991c276f6a662fec4af5a8dd6ab918a9637a1f63c1c07cfb877`。既有第二轮基线30场景、99,619周期也通过。归零100组、1700个double及error/already_home为**0 mismatch**。见[arm_cart_jog_round4_regression.log](acceptance_cart_jog/round4/arm_cart_jog_round4_regression.log)、[arm_cart_jog_regression.log](acceptance_cart_jog/round4/arm_cart_jog_regression.log)、[home_regression.log](acceptance_cart_jog/round4/home_regression.log)。
++
++### S1：现场位姿，四方向×慢快档，各5s
++
++q1取100mm，其余轴按用户现场值。下表加速度为轴2/3/4所有周期的最大绝对值；周期从1计。全部有限、关节速度不超限，直线最大偏离`6.662e-13 mm`。
++
++| 方向 | 档位mm/s | TCP位移mm | 最终α° | 最小δ° | 最大关节加速度°/s² | 峰值周期/轴 | 判定 |
++|---|---|---:|---:|---:|---:|---|---|
++| X+ | 慢5 | 22.5 | -23.2652171 | 7.4924 | 5.29302864 | 450/3 | PASS |
++| X+ | 快30 | 131.042027 | -33.0512363 | 7.4924 | 25.9251773 | 344/3 | PASS |
++| X− | 慢5 | 7.93305054 | -0.0037832111 | -4.99621679 | 7471.53941 | 2340/3 | FAIL |
++| X− | 快30 | 7.93304983 | -0.00536106439 | -4.99463894 | 7963.81978 | 1530/3 | FAIL |
++| Y+ | 慢5 | 22.5 | -40.8616447 | 7.4924 | 16.7703134 | 393/3 | PASS |
++| Y+ | 快30 | 52.5179933 | -61.0115183 | 7.4924 | 72.0919093 | 229/3 | PASS |
++| Y− | 慢5 | 2.33847838 | -0.00462401529 | -4.99537598 | 8947.52494 | 1630/3 | FAIL |
++| Y− | 快30 | 2.33846726 | -0.0276211759 | -4.97237882 | 7753.17806 | 1397/3 | FAIL |
++
++X−、Y−进入裕量以内并在边界产生速度跳变，S1整体FAIL。最终路径速度均为0且limited=TRUE，不能据此称为平滑停止。**本轮无法离线确认这些指令加速度是否导致现场轴2的0x4650；故障根因以驱动器自身记录为准。**
++
++### S2：有效肘角10°，径向伸直5s后反向3s
++
++| 档位mm/s | 阶段 | 距初始TCP位移mm | 最终α° | 末路径速度mm/s | 累计最大关节加速度°/s² | 峰值周期/轴 |
++|---|---|---:|---:|---:|---:|---|
++| 慢5 | 向外5s | 1.44200033 | 0.0090650695 | 0 | 3849.05888 | 1324/3 |
++| 慢5 | 再反向3s（累计） | 6.4864715 | 23.4822404 | 5 | 8775.05904 | 5052/3 |
++| 快30 | 向外5s | 1.44199435 | 0.0222796332 | 0 | 9405.96991 | 1130/3 |
++| 快30 | 再反向3s（累计） | 7.47302893 | 24.9058857 | 7.12646484 | 9998.65112 | 5189/3 |
++
++两档均停在接近0°而非≥5°，加速度超200，S2 FAIL。反向后分支保持并离开边界；慢档末速5mm/s，快档仍被关节限速，末速7.12646484375mm/s。
++
++### S3：零位四方向，与第二轮T13对比
++
++| 方向 | 2s位移mm | 末路径速度mm/s | 最大关节加速度°/s² | 最终limited | 与第二轮T13 |
++|---|---:|---:|---:|:---:|---|
++| X+ | 7.5 | 5 | 11.3921624 | 0 | 数值相同 |
++| X− | 2.99535409 | 1.73583984 | 42.0108319 | 1 | 数值相同 |
++| Y+ | 0 | 0 | 0 | 1 | 数值相同 |
++| Y− | 1.13264188 | 1.18652344 | 1653.43577 | 1 | 数值相同 |
++
++X±、Y−产生位移；Y+朝向轴2转轴，不动且limited。方向、有限性等S3条款PASS；Y−首周期加速度超过S4阈值，未豁免。
++
++### S4：全部原有运动用例的每周期统计
++
++下表覆盖受限、到边界、起步和反向周期。周期号在同名用例的所有构型中累计；T13累计6001即零位Y−第1周期，Y5累计2001即负偏航第1周期。Z与俯仰不属于模式1/2/5，无平面加速度条目。
++
++| 用例 | 最大加速度°/s² | 累计周期 / 轴 | 上周期→本周期速度°/s | limited | ≤200 |
++|---|---:|---|---|:---:|:---:|
++| T1 | 0.209892306 | 573 / 3 | 0 → -0.000209892306 | 0 | PASS |
++| T13 | 1653.43577 | 6001 / 4 | 0 → 1.65343577 | 0 | FAIL |
++| T2 | 43.44254 | 10244 / 2 | 7.53723582 → 7.49379328 | 0 | PASS |
++| T3 | 3.27772733 | 2252 / 2 | 0.545338405 → 0.542060677 | 0 | PASS |
++| T4 | 30.7284659 | 32266 / 4 | 5.07218505 → 5.04145658 | 0 | PASS |
++| T5 | 18.9346639 | 4253 / 2 | 4.4140677 → 4.39513304 | 0 | PASS |
++| T6 | 10.2848331 | 2253 / 2 | 1.70395587 → 1.69367104 | 0 | PASS |
++| T7 | 3.13684279 | 2200 / 2 | 0.71328069 → 0.710143847 | 0 | PASS |
++| T8 | 3.30233968 | 2751 / 2 | 0.549413523 → 0.546111183 | 0 | PASS |
++| T9 | 3849.05888 | 1324 / 3 | -3.84905888 → 0 | 1 | FAIL |
++| T9 reverse | 8775.05904 | 52 / 3 | 0 → -8.77505904 | 1 | FAIL |
++| Y1 | 20.6122052 | 45251 / 4 | 3.44298225 → 3.42237005 | 0 | PASS |
++| Y2 | 9.35789282 | 2253 / 4 | 1.54993897 → 1.54058108 | 0 | PASS |
++| Y3 | 30.4081196 | 54502 / 4 | 9.9393974 → 9.96980552 | 0 | PASS |
++| Y4 | 1895.39407 | 1218 / 3 | -9.97566877 → -8.0802747 | 1 | FAIL |
++| Y4 reverse | 8819.79353 | 254 / 3 | 0 → -8.81979353 | 1 | FAIL |
++| Y5 | 2057.47736 | 2001 / 4 | 0 → 2.05747736 | 0 | FAIL |
++| Y6 | 9.47097186 | 5752 / 4 | 1.57794811 → 1.56847714 | 0 | PASS |
++
++新增S1–S3的峰值与具体周期见上表及原始日志，S2快档反向累计第5189周期为`0→-9.99865111748°/s`，加速度`9998.65111748°/s²`。S4整体FAIL。已有T9、Y4在几何边界附近，位置差分速度由接近限速突然降到零或反向重启；零位T13/Y5的闭式解在奇异起步时也产生首周期峰值。这些周期均计入。
++
++### 受影响旧用例的新旧对比
++
++B未实施，发生器源码及以下数值均未变化；35条原始结果行与第三轮日志逐行相同，见[新旧结果对比](acceptance_cart_jog/round4/affected_cases_comparison.json)：
++
++| 用例 | 第二/第三轮结果 → 本轮结果 | 本轮判断 |
++|---|---|---|
++| T9 | 向外运动α=0.009065069502°、末速0；反向2.287s达到5mm/s → 相同 | 原T9几何判据PASS；替代验收S2/S4 FAIL |
++| T13 | X+7.5mm、X−2.99535408713mm、Y+0、Y−1.13264187977mm → 相同 | S3方向PASS；S4 FAIL |
++| Y3 | 27项降速结果均与第三轮日志一致；本轮最大关节速度约10°/s，最大加速度30.408119585°/s² | 原Y3与S4均PASS |
++| Y4 | 向外第1218周期停住；反向3s末速0.5658203125°/s → 相同 | 原几何判据PASS；S4 FAIL |
++| Y5 | 正偏航2s为0、末速0；负偏航−0.161867881708°、末速0.2015625°/s → 相同 | 原Y5几何判据PASS；S4 FAIL |
++
++T1–T13及Y1–Y6的原判据全部重跑PASS（本轮S2/S4阈值仍FAIL）：T1腕点误差`1.25056e-12mm`、逆解`4.61853e-14rad`；T2直线`4.9960e-13mm`；T3达速1.001s、停止0.501s、停止1.25mm；T4停止表不变；T5过渡1.001/0.501s；T6零速换模式0.5s；T7最低3.24000263824mm/s；T8第500周期开始减速；T10连续积分误差≤8.527e-14；T12 Z/俯仰速度表通过。Y1最大TCP误差`1.43729e-12mm`，Y2停止0.2°，Y6锚定周期2500/6000、TCP误差`1.06054e-12mm`。完整每项实测值见[arm_cart_jog_tests.log](acceptance_cart_jog/round4/arm_cart_jog_tests.log)。
++
++T11保持第二轮判据：T7交界第2201周期路径加速度`7.19132176mm/s²`，对应B值`15/15/2.64mm/s²`、允许15.15；比值0.479421450667。全部用例最大`加速度/max(B_j)=0.999998666667`，前馈速度和加速度的差分一致性最大差均0。新增S1–S3的64000周期也按同一T11判据逐周期检查，最大比值`0.99999866666667314`、两项差分误差均0，PASS。
++
++## 5. ST与C++对照及常量
++
++| ArmCartJog ST | 手写参考模型 | 内容 |
++|---|---|---|
++| [29](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:29>) | [14](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_reference.h:14>) | 周期与FirstCycle初始化 |
++| [38](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:38>) | [17](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_reference.h:17>) | alive、请求边界、held、首个参数错误 |
++| [51](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:51>) | [23](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_reference.h:23>) | drive_ready五轴条件 |
++| [58](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:58>) | [27](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_reference.h:27>) | 成功起步、锚定、清错、取得所有权 |
++| [74](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:74>) | [34](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_reference.h:34>) | 失去就绪、使能超时、正常零速退出 |
++| [98](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:98>) | [45](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_reference.h:45>) | Feed方向、三个FB调用 |
++| [111](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:111>) | [52](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_reference.h:52>) | Done/Error/轴错误完成判据、Busy释放、首错保持 |
++| [125](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:125>) | [65](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_reference.h:65>) | 10/40/50/60阶段转移 |
++| [137](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJog.TcPOU:137>) | [71](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_stage_reference.h:71>) | 状态映射与诊断字段 |
++
++Gen未改，逐段对照延续[第三轮报告](positioning_arm_cartesian_jog_round3_report.md)。本轮在原T/Y测试的共同tick中直接比较ST转译和参考模型，覆盖实际T1–T13、Y1–Y6的**301853周期**；S1–S3另比较**64000周期**；既有混合/边界等价套件**761218周期**。三组数值最大差均0，limited、branch、mode、dir逐周期一致。S5另3232周期、数值差0。
++
++| 常量 | ST | C++ | 本轮状态 |
++|---|---|---|---|
++| ALIVE_TIMEOUT | ArmCartJog:6，0.5s | JogStageReference:6，0.5s | 未变，static_assert对照 |
++| ENABLE_TIMEOUT | ArmCartJog:7，2.0s | JogStageReference:6，2.0s | 未变，static_assert对照 |
++| SING_MARGIN | 未加入生产发生器 | 仅诊断判据用5° | B停止；不声称实现 |
++| ELBOW_BRAKE_ACC | 未加入 | 未加入 | B停止；不声称实现 |
++
++T_ACC/T_DEC、JOINT_VCAP、INITIAL_BRANCH、工具参数等Gen常量全未变，既有逐项static_assert和数组比较继续通过。
++
++静态自查全部通过：XML可解析；IF/FOR/WHILE/CASE嵌套平衡；MAIN调用顺序与1ms任务不变；驱动就绪条件一致；纯Gen无轴I/O；仅使用工程已有Tc2_MC2 FB/函数及已有的`G.arm_axis[i].Status.Error`；40/50按Error完成，60仅等待Busy；ArmManual源码未改；不存在TcUnit，未引入。ST转译消费Gen 1735个token、ArmCartJog 1109个token，无未处理语句。静态自查不能代替TwinCAT类型检查和NC执行。见[st_static_audit_round4.log](acceptance_cart_jog/round4/st_static_audit_round4.log)。
++
++## 6. 单周期最坏计算量（当前第三轮Gen未改）
++
++按ST源码调用次数给出上界，未假设编译器会合并相同SIN/COS；三角函数包括ACOS、ATAN。完整试探1次+二分12次=**最多13次闭式逆解**；落在环带外的试探会跳过逆解，所以实际可能更少。
++
++| 模式 | 常规周期最多逆解 | SIN | COS | ACOS | ATAN | 三角调用总数 | SQRT |
++|---|---:|---:|---:|---:|---:|---:|---:|
++| X/Y | 13 | 13 | 13 | 13 | 26 | 65 | 13 |
++| 偏航保持TCP | 13 | 39 | 39 | 13 | 26 | 117 | 13 |
++| Z/俯仰 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
++
++重新锚定最多另加4次SIN、5次COS（9次三角调用），因此含重锚定的源码上界为X/Y **74次**、偏航 **126次**。start=TRUE锚定后直接RETURN，仅9次、无逆解。依据：锚定[86](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJogGen.TcPOU:86>)，偏航试探[100](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJogGen.TcPOU:100>)，X/Y试探[162](<D:/Work_files/Vessel intervention Robot/主从分机软件包_20261008_211541/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJogGen.TcPOU:162>)。角度展开的WHILE次数随多圈角值变化，函数调用计数不能换算成PLC最坏执行时间；本机没有测量1ms任务运行时间。
++
++## 7. 构建、复现与未执行项
++
++| 项目 | 结果 | 证据 |
++|---|---|---|
++| MasterConsole Release/x64 | 0警告、0错误 | [masterconsole_build.log](acceptance_cart_jog/round4/masterconsole_build.log) |
++| VI.Control.Tests.slnx Release/x64，warnaserror | 0警告、0错误 | [wpf_build.log](acceptance_cart_jog/round4/wpf_build.log) |
++| VI.Control.Tests WPF回归 | 全部通过 | [wpf_tests.log](acceptance_cart_jog/round4/wpf_tests.log) |
++| ADS.sln Release/x64 Rebuild | 退出0，无编译/链接警告或错误 | [ads_build.log](acceptance_cart_jog/round4/ads_build.log) |
++| C++17离线程序 | 编译均通过；诊断与S4按实际失败返回1 | [results.json](acceptance_cart_jog/round4/results.json) |
++| ADS mock/运动学 | PASS；运动学20/20 | [arm_ads_tests.log](acceptance_cart_jog/round4/arm_ads_tests.log)、[kinematics_tests.log](acceptance_cart_jog/round4/kinematics_tests.log) |
++| PLC | **未构建** | [environment.log](acceptance_cart_jog/round4/environment.log) |
++| NC仿真/Scope/真机 | 未执行 | 本机无XAE编译器、未连接现场PLC |
++
++本机`D:/Work_software/Twincat3_ADS/3.1/Components/Plc`只有Managed Libraries，没有PLC编译器/targets；未发现VS TwinCAT XAE扩展。未下载、未激活、未运行ADS生产程序。用户需在工程机编译、下载并激活PLC，才能让修复A实际生效。没有把桌面C++逐周期相同表述为TwinCAT运行时一致性已验证。
++
++可复现命令（仓库根目录，正常验收不要传capture参数）：
++
++```powershell
++python 'B数据端/工程/PositioningArmKinematics/tests/run_cart_jog_acceptance.py' --round4
++$taskDotnet = & './A主端/工程/tools/Get-ViDotnet.ps1'
++& $taskDotnet build 'A主端/工程/master/MasterConsole.sln' -c Release -p:Platform=x64 -warnaserror -m:2 -v:minimal
++& $taskDotnet build 'A主端/工程/master/VI.Control.Tests.slnx' -c Release -p:Platform=x64 -warnaserror -m:2 -v:minimal
++& './A主端/工程/build/Release/bin/VI.Control.Tests/VI.Control.Tests.exe' 'B数据端/工程/PositioningArmKinematics/build-cart-jog/UiChecks'
++& 'D:/Work_software/VS2022/MSBuild/Current/Bin/MSBuild.exe' 'B数据端/工程/ADS项目/ADS.sln' /t:Rebuild /p:Configuration=Release /p:Platform=x64 /nologo /verbosity:minimal
++```
++
++总验收脚本预期退出1，因为S1/S2/S4确实失败；results.json逐项保留退出码，没有豁免失败项。生产源码之外的父目录造影机器人子模块已有改动未触碰。
++
++## 8. 现场验证步骤（用户执行）
++
++**当前交付只有A修复，B仍未实现且S1/S4失败；以下事故位姿运动步骤待B规格与验收完成后执行，不能把本轮作为奇异区域真机运动已通过的版本。**
++
++- [ ] 工程机Build PLC，确认0错误且不新增警告；下载并激活修复A，确认接口版本1。
++- [ ] 先在NC仿真或设备允许的静止条件下制造驱动故障/断使能，记录首个error；确认40→50→60→0、owned释放；故障轴的Stop.Execute=FALSE，健康轴照常Stop，60等待Busy结束。
++- [ ] 故障消除后发复位，确认MC_Reset执行、单轴点动与末端点动可恢复；对归零中同类故障也检查arm_curve_owned释放和复位恢复。恢复能力仍须工程机实际验证。
++- [ ] B完成后，在用户给定轴2~5位姿分别复现X+、X−、Y+、Y−，慢/快档各5s；Scope记录p/v/a、有效α、δ、path_speed、limited，逐项核对S1，不省略边界与反向周期。
++- [ ] B完成后覆盖偏航模式5、零位起步与S2反向；核对所有轴2/3/4前馈加速度≤200°/s²及PLC任务执行时间。
++
++未验证：TwinCAT编译、运行时/Scope、真实驱动故障恢复及0x4650物理根因。剩余风险：奇异区与边界急停问题仍在，不能认定本轮全部完成。

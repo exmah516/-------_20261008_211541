@@ -40,6 +40,18 @@ Axes seed(int mode, double effective_elbow)
     return {{100, q2 + (mode == 2 ? 90.0 : 0.0), effective_elbow - 180, 37, 12}};
 }
 
+Axes yaw_seed(double elbow, double q5)
+{
+    Axes p = seed(1, elbow);
+    p[4] = q5;
+    const double wx = Gen::L1*std::sin(p[1]*Gen::RAD)+Gen::L2*std::sin((p[1]+p[2])*Gen::RAD+Gen::PI);
+    const double wy = -Gen::L1*std::cos(p[1]*Gen::RAD)-Gen::L2*std::cos((p[1]+p[2])*Gen::RAD+Gen::PI);
+    const double psi = std::atan2(wy, wx)/Gen::RAD
+        - std::atan2(-Gen::TOOL_LENGTH_MM*std::cos(q5*Gen::RAD), Gen::TOOL_LATERAL_OFFSET_MM)/Gen::RAD;
+    p[3] = psi-p[1]-p[2]+90.0;
+    return p;
+}
+
 Gen begin(int mode, int dir, double speed, Axes p)
 {
     Gen g;
@@ -60,8 +72,14 @@ void record(std::uint32_t id, std::uint32_t cycles, Gen& g, Update update)
 
 int main(int argc, char** argv)
 {
-    if (argc < 2 || argc > 3) return 2;
-    const char magic[8] = {'A','R','M','J','O','G','3','\0'};
+    if (argc < 2 || argc > 4) return 2;
+    bool capture = false, round4 = false;
+    for (int i = 2; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--capture") == 0) capture = true;
+        else if (std::strcmp(argv[i], "--round4") == 0) round4 = true;
+        else return 2;
+    }
+    const char magic[8] = {'A','R','M','J','O','G',round4 ? '4' : '3','\0'};
     append(magic, sizeof(magic));
     std::uint32_t case_id = 0;
 
@@ -101,12 +119,14 @@ int main(int argc, char** argv)
         state.step(false, held, 1, held ? 1 : 0, held ? 5 : 0, state.p, 0.001);
     });
 
+    if (!round4) {
     const double e = 10 * Gen::RAD;
     const double q2 = -std::atan(Gen::L2 * std::sin(e) / (Gen::L1 + Gen::L2 * std::cos(e))) / Gen::RAD;
     g = begin(1, 1, 5, Axes{{100, q2 + 90, -170, 37, 12}});
     record(105, 6000, g, [](Gen& state, std::uint32_t n) {
         state.step(false, true, 1, n <= 3000 ? 1 : -1, 5, state.p, 0.001);
     });
+    }
 
     for (int mode = 3; mode <= 4; ++mode) {
         const double speed = mode == 3 ? 3 : 1.2;
@@ -116,15 +136,33 @@ int main(int argc, char** argv)
         });
     }
 
-    for (int mode : {1, 2}) for (int dir : {1, -1}) {
+    if (!round4) for (int mode : {1, 2}) for (int dir : {1, -1}) {
         g = begin(mode, dir, 5, Axes{{100, 0, 0, 0, 0}});
         record(130 + static_cast<std::uint32_t>((mode - 1) * 2 + (dir < 0)), 2000, g,
             [=](Gen& state, std::uint32_t) { state.step(false, true, mode, dir, 5, state.p, 0.001); });
     }
 
+    if (round4) {
+        std::uint32_t id = 200;
+        for (double elbow : {30.,90.,150.}) for (double q5 : {0.,30.,-30.}) for (int dir : {1,-1}) {
+            g = begin(5, dir, .8, yaw_seed(elbow,q5));
+            record(id++, 3500, g, [=](Gen& state, std::uint32_t n) {
+                state.step(false, n <= 3000, 5, dir, .8, state.p, .001);
+            });
+        }
+        g = begin(5, 1, .8, yaw_seed(90,0));
+        record(220, 2501, g, [](Gen& state, std::uint32_t n) {
+            state.step(false, n <= 2000, n <= 2000 ? 5 : 0, n <= 2000 ? 1 : 0,
+                n <= 2000 ? .8 : 0, state.p, .001);
+        });
+        g = begin(1, 1, 5, yaw_seed(90,0));
+        record(221, 9000, g, [](Gen& state, std::uint32_t n) {
+            const int mode = n <= 2000 ? 1 : n <= 5500 ? 5 : 2;
+            state.step(false, true, mode, 1, mode == 5 ? .8 : 5, state.p, .001);
+        });
+    }
+
     const std::vector<unsigned char> bytes = baseline;
-    const bool capture = argc == 3 && std::strcmp(argv[2], "--capture") == 0;
-    if (argc == 3 && !capture) return 2;
     if (capture) {
         std::ofstream output(argv[1], std::ios::binary);
         output.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
@@ -137,7 +175,8 @@ int main(int argc, char** argv)
     const std::vector<unsigned char> expected((std::istreambuf_iterator<char>(input)), {});
     const auto mismatch = std::mismatch(bytes.begin(), bytes.end(), expected.begin(), expected.end());
     const bool equal = bytes.size() == expected.size() && mismatch.first == bytes.end();
-    std::cout << (equal ? "PASS" : "FAIL") << " second-round bitwise regression scenarios=30 cycles=" << total_cycles
+    std::cout << (equal ? "PASS" : "FAIL") << (round4 ? " pre-round4 bitwise regression scenarios=45 cycles="
+        : " second-round bitwise regression scenarios=30 cycles=") << total_cycles
         << " bytes=" << bytes.size() << " baseline_bytes=" << expected.size() << '\n';
     if (!equal) std::cout << "first differing byte=" << std::distance(bytes.begin(), mismatch.first) << '\n';
     return equal ? 0 : 1;
