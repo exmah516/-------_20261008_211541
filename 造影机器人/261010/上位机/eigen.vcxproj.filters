@@ -1,0 +1,71 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="源文件">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="头文件">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="头文件\Vrep">
+      <UniqueIdentifier>{20702b33-bc52-477d-a921-3c35fa51bd1f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\ADS">
+      <UniqueIdentifier>{9496f23a-ba6d-4ce9-943b-06a96d682697}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Vrep\CoppeliaSim.cpp">
+      <Filter>头文件\Vrep</Filter>
+    </ClCompile>
+    <ClCompile Include="Vrep\robot.cpp">
+      <Filter>头文件\Vrep</Filter>
+    </ClCompile>
+    <ClCompile Include="ADS\ADSComm.cpp">
+      <Filter>头文件\ADS</Filter>
+    </ClCompile>
+    <ClCompile Include="copleycan.cpp">
+      <Filter>头文件</Filter>
+    </ClCompile>
+    <ClCompile Include="DSA.cpp">
+      <Filter>头文件</Filter>
+    </ClCompile>
+    <ClCompile Include="screw.cpp">
+      <Filter>头文件</Filter>
+    </ClCompile>
+    <ClCompile Include="手柄.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="可视化.hpp">
+      <Filter>头文件\Vrep</Filter>
+    </ClInclude>
+    <ClInclude Include="Vrep\CoppeliaSim.h">
+      <Filter>头文件\Vrep</Filter>
+    </ClInclude>
+    <ClInclude Include="Vrep\robot.h">
+      <Filter>头文件\Vrep</Filter>
+    </ClInclude>
+    <ClInclude Include="ADS\ADSComm1.h">
+      <Filter>头文件\ADS</Filter>
+    </ClInclude>
+    <ClInclude Include="ADS\TcAdsAPI.h">
+      <Filter>头文件\ADS</Filter>
+    </ClInclude>
+    <ClInclude Include="ADS\TcAdsDef.h">
+      <Filter>头文件\ADS</Filter>
+    </ClInclude>
+    <ClInclude Include="copleycan.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="DSA.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="screw.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
