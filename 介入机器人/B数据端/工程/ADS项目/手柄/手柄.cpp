@@ -2,8 +2,8 @@
 #include "remote_handle_bridge.h"
 #include <stdio.h>
 
-// 允许短暂网络抖动；真正断流超过3秒才进入既有重连流程。
-static constexpr ULONGLONG kRemoteMaxAgeMs = 3000;
+// 允许短暂网络抖动；真正断流超过5秒才进入既有重连流程。
+static constexpr ULONGLONG kRemoteMaxAgeMs = 5000;
 
 Handle::Handle(DWORD serial)
 	: serial_number_(serial)
@@ -48,7 +48,11 @@ bool Handle::poll()
 		return false;
 	}
 	if (last_sample_rx_ms_ != 0 && sample.rx_ms > last_sample_rx_ms_ &&
-		sample.rx_ms - last_sample_rx_ms_ > 250) rebase_requested_ = true;
+		sample.rx_ms - last_sample_rx_ms_ > 1500)
+	{
+		sample_gap_ms_ = sample.rx_ms - last_sample_rx_ms_;
+		rebase_requested_ = true;
+	}
 	last_sample_rx_ms_ = sample.rx_ms;
 	for (int i = 0; i < 2; ++i)
 	{
@@ -67,6 +71,7 @@ void Handle::clear_cache()
 {
 	last_sample_rx_ms_ = 0;
 	rebase_requested_ = false;
+	sample_gap_ms_ = 0;
 	objData.buttons2 = 0;
 	objData.encoders2[0] = 0;
 	objData.encoders2[1] = 0;
@@ -81,8 +86,10 @@ void Handle::clear_cache()
 
 void Handle::close()
 {
-	iID1 = -1;
-	clear_cache();
+    iID1 = -1;
+    const ULONGLONG before_disconnect = last_sample_rx_ms_;
+    clear_cache();
+    last_sample_rx_ms_ = before_disconnect;
 	// 关闭时撤销经 Zenoh force Topic 回传主端的力目标，重复关闭也保持清零。
 	remote_handle_bridge::set_output(remote_handle_bridge::slot_of(serial_number_), remote_handle_bridge::Output());
 }

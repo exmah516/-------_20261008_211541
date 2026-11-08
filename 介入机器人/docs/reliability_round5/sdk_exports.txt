@@ -1,0 +1,51 @@
+Microsoft (R) COFF/PE Dumper Version 14.44.35228.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\A主端\工程\FLCatheter.dll
+
+File Type: DLL
+
+  Section contains the following exports for FLCatheter.dll
+
+    00000000 characteristics
+    FFFFFFFF time date stamp
+        0.00 version
+           1 ordinal base
+          23 number of functions
+          23 number of names
+
+    ordinal hint RVA      name
+
+          1    0 00006460 ?getEncoderDirDelta@@YAXQEAH0H@Z
+          2    1 000058E0 PauseDevice
+          3    2 00005920 ResumeDevice
+          4    3 00005A40 closeDevice
+          5    4 00006150 deviceStatus
+          6    5 000060C0 enableForces
+          7    6 00006660 getEncVel
+          8    7 000063E0 getEncoders
+          9    8 00006810 getEndFrame
+         10    9 00006790 getJoints
+         11    A 000069D0 getPose
+         12    B 00006910 getPositionAndAngle
+         13    C 00006120 getSerialNumber
+         14    D 00006090 getServoLoopRate
+         15    E 00006700 getSwitch
+         16    F 000060F0 isForcesEnabled
+         17   10 00006070 isServoLoopRunning
+         18   11 00005680 openDevice
+         19   12 000061E0 sendForce
+         20   13 00006180 sendZeroForce
+         21   14 00005AD0 startServoLoop
+         22   15 00005EC0 stopServoLoop
+         23   16 00006500 zeroEncoders
+
+  Summary
+
+        1000 .data
+        1000 .pdata
+        3000 .rdata
+        1000 .reloc
+      5EF000 .rsrc
+        9000 .text

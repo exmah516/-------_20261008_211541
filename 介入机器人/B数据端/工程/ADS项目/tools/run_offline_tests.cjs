@@ -76,9 +76,14 @@ if (selected === 'all' || selected === 'recovery') {
         output: between(source, '\t\t\tauto apply_planned_return_outputs =', '\t\t\tauto enter_planned_return_retry ='),
         refresh: between(source, '\t\t\tauto refresh_planned_return_leg =', '\t\t\tauto planned_return_targets_safe ='),
         failure: between(source, '\t\t\tauto fail_planned_return =', '\t\tauto begin_planned_return ='),
+        begin: between(source, '\t\tauto begin_planned_return =', '\t\t\tauto planned_return_settle_wait_ms ='),
+        safety: between(source, '\t\t\tauto planned_return_targets_safe =', '\t\t\tauto rebase_planned_return ='),
+        recovery_gate: between(source, '        // 回退自动恢复门控。', '\t\t// 8) 当启动已完成'),
+        resume: between(source, '            else if (return_recovery.resume_pending())', '\t\t\telse if (planned_return.active())').replace('else if', 'if'),
+        estop: between(source, '\t\tif (estop_hold_req != estop_hold_active)', '\n\t\tif (estop_hold_active)'),
         retry: between(source, '\t\t\tauto enter_planned_return_retry =', '\t\t\tauto step_planned_return ='),
         step: between(source, '\t\t\tauto step_planned_return =', '\t\t\tauto compute_axis7_cmd_rel ='),
-        reinit: between(source, '\t\tif (handle_reinit_req && !last_handle_reinit_req', '\t\t// 8) 当启动已完成'),
+        reinit: between(source, '\t\tif (handle_reinit_req && !last_handle_reinit_req', '        // 回退自动恢复门控。'),
         reconnect: between(source, '\t\tif (ads_stats.reconnect_count != handled_reconnect_count)', '\t\t// 运动控制只依赖位置快照'),
         connection: between(source, '\t\tconst bool connection_hold_active =', '\t\tif (!initial_sync_done)'),
         exit: between(source, '\t\tconst DWORD spacing_recovery_exit_elapsed_ms =', '\t\tconst bool axis4_manual_error_now =')
@@ -92,6 +97,13 @@ if (selected === 'all' || selected === 'recovery') {
     fs.writeFileSync(path.join(build,'main_start.inc'),between(source,'\t\t\t\tcase VisCommandType::SelectDirectControl:','\t\t\t\t\tcase VisCommandType::SetGravityCompensation:').split('\n').slice(1).join('\n'),'utf8');
     run('main_recovery_test',['tools/main_recovery_test.cpp']);
     run('return_recovery_test',['tools/return_recovery_test.cpp']);
+    fs.writeFileSync(path.join(build,'return_recovery_crawl.inc'),between(header,'struct CrawlState','struct ForceFeedbackState'),'utf8');
+    run('round5_main_recovery_test',['../../../tools/reliability_round5/main_recovery_tests.cpp']);
+    fs.writeFileSync(path.join(build,'homing_record_events.inc'),between(source,'        // 寻参记录只消费既有坐标刷新成功事件','\t\tif (ads_self_check_valid && !homing_restore_submitted) last_self_check_done'),'utf8');
+    run('homing_record_events_test',['../../../tools/reliability_round5/homing_record_events_tests.cpp']);
+    fs.writeFileSync(path.join(build,'homing_restore_ack.inc'),between(source,'        if (homing_restore_submitted && ads_self_check_valid)','\t\t// 1) 采样逻辑手柄输入'),'utf8');
+    fs.writeFileSync(path.join(build,'homing_app_name.inc'),between(source,'\t\tif ((ads_motion_cycle_valid || (homing_reuse_pending','\n\t\tif (ads_stats.plc_restart_count'),'utf8');
+    run('homing_restore_ack_test',['../../../tools/reliability_round5/homing_restore_ack_tests.cpp']);
 }
 if (selected === 'all' || selected === 'cylinder') {
     const source = read('main.cpp'), ads = read('ads_communication.cpp'), header = read('ads_communication.h');
@@ -120,6 +132,8 @@ if (selected === 'all' || selected === 'ads') {
 }
 if (selected === 'all' || selected === 'handle') {
     run('remote_handle_test', ['tools/remote_handle_test.cpp', '手柄/手柄.cpp']);
+    run('handle_velocity_test', ['../../../tools/reliability_round5/handle_velocity_tests.cpp'], '/DNOMINMAX /I"' + project + '"');
+    if (report) fs.copyFileSync(path.join(build,'handle_velocity_test.csv'),path.join(report,'handle_velocity_test.csv'));
 }
 if (selected === 'all' || selected === 'recording') {
     fs.writeFileSync(path.join(build,'recording_start.inc'),between(read('main.cpp'),'\tExperimentStartInfo recording_info{};','\n\twhile (true)'),'utf8');

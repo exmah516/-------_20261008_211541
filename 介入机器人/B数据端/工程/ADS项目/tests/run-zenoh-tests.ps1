@@ -33,7 +33,7 @@ if ($LASTEXITCODE -ne 0) { throw 'C++ 黄金样本测试失败。' }
 # 使用真实 Zenoh 服务和内存快照；测试程序没有链接 ADS/PLC 库。
 $service = Join-Path $project 'zenoh_service.cpp'
 Build-Cpp 'service_tests' @((Join-Path $source 'service_tests.cpp'), $service) -Zenoh
-Build-Cpp 'simulated_ads' @((Join-Path $source 'simulated_ads.cpp'), $service) -Zenoh
+Build-Cpp 'simulated_ads' @((Join-Path $source 'simulated_ads.cpp'), $service, (Join-Path $project '手柄/手柄.cpp')) -Zenoh
 Copy-Item -LiteralPath (Join-Path $sdk 'bin\zenohc.dll') -Destination $output -Force
 & (Join-Path $output 'service_tests.exe')
 if ($LASTEXITCODE -ne 0) { throw 'C++ 服务边界测试失败。' }

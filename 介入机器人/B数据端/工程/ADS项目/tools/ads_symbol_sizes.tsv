@@ -95,3 +95,14 @@ G.v_limit	56
 TwinCAT_SystemInfoVarList._AppInfo.AppName	64
 TwinCAT_SystemInfoVarList._TaskInfo[1].CycleCount	4
 TwinCAT_SystemInfoVarList._TaskInfo[1].DcTaskTime	8
+
+# 第五轮新增源码接口：BOOL数组无额外元素填充，UDINT/DINT为4字节
+G.err_backoff_active	7
+G.err_backoff_failed	7
+G.axis2_sync_error	1
+G.axis2_sync_error_id	4
+G.homing_restore_req	1
+G.homing_restore_leftlimit	56
+G.homing_restore_init_pos	56
+G.homing_restore_status	4
+G.homing_restore_reject_reason	4

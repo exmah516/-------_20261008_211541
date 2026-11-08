@@ -3,6 +3,16 @@
   <GVL Name="G" Id="{ccabbda2-7ae2-40eb-8293-a1b7a36c29fa}">
     <Declaration><![CDATA[{attribute 'qualified_only'}
 VAR_GLOBAL
+	// 第五轮恢复诊断与寻参复用接口。
+	err_backoff_active : ARRAY[1..7] OF BOOL;
+	err_backoff_failed : ARRAY[1..7] OF BOOL;
+	axis2_sync_error : BOOL;
+	axis2_sync_error_id : UDINT;
+	homing_restore_req : BOOL;
+	homing_restore_leftlimit : ARRAY[1..7] OF LREAL;
+	homing_restore_init_pos : ARRAY[1..7] OF LREAL;
+	homing_restore_status : DINT;
+	homing_restore_reject_reason : DINT;
 	//专有变量
 	gen_state			:	state := _init;
 	axis				:	ARRAY[1..7] OF axis_REF;
@@ -165,6 +175,17 @@ VAR_GLOBAL
 	estop_diag_feed_pos : ARRAY[1..7] OF LREAL;
 	estop_diag_feed_vel : ARRAY[1..7] OF LREAL;
 	estop_diag_refer_abs : ARRAY[1..7] OF LREAL;
+END_VAR
+VAR_GLOBAL CONSTANT
+	rslimit_distance : ARRAY[1..7] OF LREAL := [99.0, 0.0, 666.0, 0.0, 688.0, 688.0, 0.0];
+	recovery_wait_timeout : TIME := T#2S;
+	recovery_max_retries : UINT := 3;
+	err_backoff_distance : LREAL := 2.0;
+	err_backoff_velocity : LREAL := 5.0;
+	err_backoff_acc : LREAL := 50.0;
+	axis15_reset_pulse : TIME := T#200MS;
+	axis15_reset_interval : TIME := T#2S;
+	return_clear_error_id : UDINT := 16#80005001;
 END_VAR]]></Declaration>
   </GVL>
 </TcPlcObject>

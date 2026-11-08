@@ -13,7 +13,7 @@
     <ProjectReference Include="..\VI.Service.Net\VI.Service.Net.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\FLCatheter.dll" Link="FLCatheter.dll" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\Runtime\VC142\*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Remove="Services\FlCatheterNative.cs" />
+    <ProjectReference Include="..\VI.HandleHost\VI.HandleHost.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>

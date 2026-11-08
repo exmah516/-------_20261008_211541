@@ -1,4 +1,5 @@
 #include "../../zenoh_service.h"
+#include "../../手柄/Handle.h"
 #include <atomic>
 #include <iostream>
 #include <string>
@@ -83,7 +84,7 @@ int wmain(int argc, wchar_t** argv)
     }
     ZenohService service;
     if (!service.start(config)) { std::cerr << "SIM_START_FAILED\n"; return 1; }
-    std::atomic<bool> paused{false}, stopped{false};
+    std::atomic<bool> paused{false}, stopped{false}, check_handles{false};
     std::thread control([&]
     {
         VisState state{};
@@ -95,16 +96,29 @@ int wmain(int argc, wchar_t** argv)
         state.axis6_window_start_from_left_mm = 611; state.axis6_window_end_from_left_mm = 643;
         RemoteExtraState extra;
         extra.initial_sync_done = true;
+        Handle handle582(582), handle587(587);
+        bool selected_control = false;
         while (!stopped)
         {
             VisCommand command;
             for (int budget = 0; budget < 64 && service.poll_command(command); ++budget)
             {
                 simulate_command(state, extra, command);
+                if (command.type == VisCommandType::SelectDirectControl) selected_control = true;
                 service.command_processed();
             }
             remote_handle_bridge::set_output(0, {true, 1, .5, .01});
             remote_handle_bridge::set_output(1, {true, 2, .25, .02});
+            if (check_handles)
+            {
+                bool valid582 = (handle582.is_open() || handle582.init()) && handle582.poll();
+                bool valid587 = (handle587.is_open() || handle587.init()) && handle587.poll();
+                if (!valid582) handle582.close();
+                if (!valid587) handle587.close();
+                bool rebase = handle582.take_rebase_request() || handle587.take_rebase_request();
+                state.control_active = selected_control && valid582 && valid587;
+                if (rebase) strcpy_s(state.recovery_text, "V6：采样间隔超过5s后，在当前位置重建基准");
+            }
             if (!paused) service.publish_state(state, extra);
             Sleep(10);
         }
@@ -117,6 +131,7 @@ int wmain(int argc, wchar_t** argv)
         else if (input == "resume") { paused = false; std::cout << "SIM_RESUMED\n" << std::flush; }
         else if (input == "pause-handles") { ZenohServiceTestAccess::pause_handles(service, true); }
         else if (input == "resume-handles") { ZenohServiceTestAccess::pause_handles(service, false); }
+        else if (input == "check-handles") { check_handles = true; }
         else if (input == "quit") break;
     }
     stopped = true;

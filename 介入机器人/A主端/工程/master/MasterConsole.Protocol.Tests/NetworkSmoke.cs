@@ -13,6 +13,18 @@ namespace MasterConsole.Protocol.Tests
 {
     internal static partial class Program
     {
+        private sealed class NetworkHandles : IHandleService
+        {
+            internal volatile bool Valid = true;
+            public bool SdkMissing => false;
+            public bool IsOnline(int slot) => Valid;
+            public HandleSample GetSample(int slot) => new HandleSample { Valid = Valid, Joint0 = .125f };
+            public void SetHaptic(int slot, HapticOut output) { }
+            public void ClearHaptic() { }
+            public void Start() { }
+            public void Stop() { }
+            public void Dispose() { }
+        }
         static partial void NetworkSmoke(string[] args, byte[] key)
         {
             string simulator = Option(args, "--simulator");
@@ -116,6 +128,11 @@ namespace MasterConsole.Protocol.Tests
                     process.StandardInput.WriteLine("resume"); process.StandardInput.Flush();
                     Check("长中断后重新认证恢复", Wait(() => link.IsConnected, 10000));
                     Check("重新认证后自动恢复此前已申请的控制权", Wait(() => link.HasControl, 7000));
+                    int acquireBeforeClosedSession = commands.Count(frame => frame.Command == ZenohCommand.Acquire);
+                    var transportField = typeof(RemoteRobotLink).GetField("_zenoh", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                    ((ZenohSession)transportField.GetValue(link)).Dispose();
+                    Check("V7关闭会话后自动重建并重新认证", Wait(() => link.IsConnected, 10000));
+                    Check("V7重新认证后恢复控制权申请", Wait(() => link.HasControl && commands.Count(frame => frame.Command == ZenohCommand.Acquire) > acquireBeforeClosedSession, 7000));
                     Check("释放控制权", Result(link.ReleaseControlAsync(), 7000).Ok);
                     Check("主动释放后保持无控制权", Wait(() => !link.HasControl, 3000));
                     process.StandardInput.WriteLine("pause"); process.StandardInput.Flush();
@@ -127,6 +144,30 @@ namespace MasterConsole.Protocol.Tests
                     link.ConnectAsync().GetAwaiter().GetResult();
                     Check("同一对象重新连接", Wait(() => link.IsConnected, 10000));
                     link.Disconnect();
+                }
+                process.StandardInput.WriteLine("check-handles"); process.StandardInput.Flush();
+                using var restartObserver = new ZenohSession(endpoint);
+                restartObserver.Subscribe<CommandFrame>(ZenohProtocol.CommandTopic, frame => commands.Enqueue(frame));
+                int hellosBefore = commands.Count(frame => frame.Command == ZenohCommand.Hello);
+                var handles = new NetworkHandles();
+                using (var restartedMaster = new RemoteRobotLink(new RemoteLinkSettings { Host = "127.0.0.1", Endpoint = endpoint, Token = token }, handles))
+                {
+                    int active = 0, rebuilt = 0;
+                    restartedMaster.StatusReceived += (_, state) =>
+                    {
+                        Volatile.Write(ref active, (state.Flags & StatusFlags.ControlActive) != 0 ? 1 : 0);
+                        if (state.RecoveryText.Contains("V6")) Volatile.Write(ref rebuilt, 1);
+                    };
+                    restartedMaster.ConnectAsync().GetAwaiter().GetResult();
+                    Check("V6新主端对象重新Hello/认证/Acquire", Result(restartedMaster.AcquireControlAsync(), 7000).Ok &&
+                        Wait(() => commands.Count(frame => frame.Command == ZenohCommand.Hello) > hellosBefore, 2000));
+                    Check("V6数据端保持先前控制状态", Wait(() => Volatile.Read(ref active) == 1, 3000));
+                    handles.Valid = false;
+                    Check("V6 valid=false持续6s进入断柄保持", Wait(() => Volatile.Read(ref active) == 0, 6500));
+                    Thread.Sleep(1000);
+                    handles.Valid = true;
+                    Check("V6六秒断流后无需重启数据端恢复控制", Wait(() => Volatile.Read(ref active) == 1 && Volatile.Read(ref rebuilt) == 1, 3000));
+                    Check("V6恢复过程中模拟器进程保持运行", !process.HasExited);
                 }
                 StopSimulator(process); process.Dispose(); process = null;
                 var unavailableClock = Stopwatch.StartNew();

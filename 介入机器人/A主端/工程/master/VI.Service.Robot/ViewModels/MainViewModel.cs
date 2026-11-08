@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Threading.Tasks;
@@ -384,6 +385,8 @@ namespace MasterConsole.ViewModels
 
         /// <summary>主端本机手柄：两只都在线时指示灯亮；SDK 缺失时文字提示。</summary>
         public bool HandlesOnline => _stats.Handle582Online && _stats.Handle587Online;
+        public string RecoveryText => string.Join("；", new[] { _stats.HandleRecoveryText, _s.RecoveryText }
+            .Where(text => !string.IsNullOrWhiteSpace(text)));
         public string HandleText => _stats.HandleSdkMissing
             ? "手柄 SDK 未加载（缺 FLCatheter.dll）"
             : "582 " + (_stats.Handle582Online ? "在线" : "离线") + " / 587 " + (_stats.Handle587Online ? "在线" : "离线");
@@ -471,6 +474,7 @@ namespace MasterConsole.ViewModels
             OnPropertyChanged(nameof(AdsText));
             OnPropertyChanged(nameof(HandlesOnline));
             OnPropertyChanged(nameof(HandleText));
+            OnPropertyChanged(nameof(RecoveryText));
             OnPropertyChanged(nameof(ModeText));
             OnPropertyChanged(nameof(Axis1NetDistance));
             OnPropertyChanged(nameof(Axis6NetDistance));
@@ -514,7 +518,7 @@ namespace MasterConsole.ViewModels
             nameof(ArmCartesianJogStatusText),
             nameof(EstopHold), nameof(ControlActive), nameof(FfEnabled), nameof(FfZeroing), nameof(YValveClosed),
             nameof(CatheterFfEnabled), nameof(GuidewireFfEnabled), nameof(ForceHoldEnabled), nameof(ForceHoldCaption),
-            nameof(AdsHealthy), nameof(ModeText), nameof(PhaseText), nameof(CanStartControl),
+            nameof(AdsHealthy), nameof(ModeText), nameof(PhaseText), nameof(RecoveryText), nameof(CanStartControl),
             nameof(Force582F), nameof(Force582N), nameof(Force587F), nameof(Force587N),
             nameof(Axis1NetDistance), nameof(Axis6NetDistance),
             nameof(Axis2PointerX), nameof(Axis2PointerY), nameof(Axis7PointerX), nameof(Axis7PointerY),

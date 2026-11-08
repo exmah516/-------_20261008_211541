@@ -52,6 +52,7 @@ namespace MasterConsole.Protocol
         public int Phase;
         public int SelfCheckStatus;
         public int AdsState;
+        public string RecoveryText;
         public ushort Cylinder1, Cylinder2, Cylinder3, Cylinder4;
         public byte CylinderManualMask;
         public sbyte InjectorActive1, InjectorActive2;

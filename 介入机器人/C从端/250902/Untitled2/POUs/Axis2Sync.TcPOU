@@ -3,6 +3,10 @@
   <POU Name="Axis2Sync" Id="{b5eb0f0a-28b5-4f69-a0a5-8a6a1d8c4e21}" SpecialFunc="None">
     <Declaration><![CDATA[FUNCTION_BLOCK Axis2Sync
 VAR
+	reset_pulse : TON;
+	reset_interval : TON;
+	reset_execute : BOOL;
+	had_axis_error : BOOL;
 	fb_power : MC_Power;
 	fb_gear : MC_GearIn;
 	fb_reset : MC_Reset;
@@ -14,9 +18,33 @@ END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[G.axis2_sync_axis();
 
+G.axis2_sync_error := G.axis2_sync_axis.Status.Error OR G.axis2_sync_axis.Status.DriveDeviceError;
+G.axis2_sync_error_id := G.axis2_sync_axis.Status.ErrorID;
+IF G.axis2_sync_error THEN
+    reset_interval(IN:=TRUE, PT:=G.axis15_reset_interval);
+    IF NOT had_axis_error THEN
+        reset_execute := TRUE;
+    ELSIF reset_interval.Q THEN
+        reset_execute := TRUE;
+        reset_interval(IN:=FALSE);
+    END_IF
+	reset_pulse(IN:=reset_execute, PT:=G.axis15_reset_pulse);
+	IF reset_pulse.Q THEN reset_execute := FALSE; END_IF
+ELSE
+	reset_execute := FALSE;
+	reset_pulse(IN:=FALSE);
+	reset_interval(IN:=FALSE);
+	IF had_axis_error THEN
+		gear_execute := FALSE;
+		gear_active := FALSE;
+		gear_done := FALSE;
+		gear_failed := FALSE;
+	END_IF
+END_IF
+had_axis_error := G.axis2_sync_error;
 fb_reset(
 	Axis:=G.axis2_sync_axis,
-	Execute:=G.axis_Reset[2].Execute
+	Execute:=G.axis_Reset[2].Execute OR reset_execute
 );
 
 fb_power(
@@ -31,7 +59,7 @@ IF NOT (G.power_[2].Enable AND G.power_output[2].Done AND fb_power.Status) THEN
 	gear_active := FALSE;
 	gear_done := FALSE;
 	gear_failed := FALSE;
-ELSIF fb_power.Status AND G.power_output[2].Done AND NOT gear_done AND NOT gear_failed AND NOT gear_active
+ELSIF NOT G.axis2_sync_error AND fb_power.Status AND G.power_output[2].Done AND NOT gear_done AND NOT gear_failed AND NOT gear_active
 	AND (ABS(G.axis[2].NcToPlc.ActVelo) <= 0.01)
 	AND (ABS(G.axis2_sync_axis.NcToPlc.ActVelo) <= 0.01) THEN
 	gear_execute := TRUE;

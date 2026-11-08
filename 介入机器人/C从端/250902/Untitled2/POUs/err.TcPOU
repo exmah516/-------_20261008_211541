@@ -3,6 +3,7 @@
   <POU Name="err" Id="{c264bb0b-28ae-4266-9c6d-88cfb4405e12}" SpecialFunc="None">
     <Declaration><![CDATA[FUNCTION_BLOCK err
 VAR_INPUT
+	enter : BOOL;
 END_VAR
 VAR_OUTPUT
 END_VAR
@@ -15,6 +16,15 @@ VAR
 	has_power_not_ready:BOOL;
 	has_other_error:BOOL;
 	all_powered:BOOL;
+	backoff_move : ARRAY[1..7] OF MC_MoveRelative;
+	backoff_exec : ARRAY[1..7] OF BOOL;
+	backoff_distance : ARRAY[1..7] OF LREAL;
+	backoff_attempts : ARRAY[1..7] OF UINT;
+	backoff_blocked : BOOL;
+	backoff_needed : BOOL;
+	backoff_finished : BOOL;
+	backoff_error : BOOL;
+	backoff_disabled : BOOL;
 	power_not_ready_errid : UDINT := 16#00004650;
 END_VAR
 ]]></Declaration>
@@ -54,12 +64,80 @@ FOR i:=1 TO 7 DO
 	END_IF
 END_FOR
 
-IF G.axis2_sync_axis.Status.Error OR G.axis2_sync_axis.Status.DriveDeviceError THEN
-	has_err := TRUE;
-	has_other_error := TRUE;
-END_IF
-
 G.estop_hold_req := TRUE;
+IF enter THEN
+	FOR i:=1 TO 7 DO
+		backoff_attempts[i] := 0;
+		backoff_exec[i] := FALSE;
+		G.err_backoff_failed[i] := FALSE;
+		G.err_backoff_active[i] := FALSE;
+	END_FOR
+END_IF
+FOR i:=1 TO 7 DO
+	backoff_move[i](Axis:=G.axis[i], Execute:=backoff_exec[i],
+		Distance:=backoff_distance[i], Velocity:=G.err_backoff_velocity,
+		Acceleration:=G.err_backoff_acc, Deceleration:=G.err_backoff_acc);
+END_FOR
+backoff_blocked := FALSE;
+backoff_needed := FALSE;
+IF G.self_check_done AND ((step = 1) OR (step = 3) OR (step = 11)) AND NOT has_err AND all_powered THEN
+	backoff_disabled := TRUE;
+	FOR i:=1 TO 7 DO
+		IF ((i = 1) OR (i = 3) OR (i = 5) OR (i = 6)) AND G.axis[i].Status.DriveLimitActive
+			AND G.SetPointGenDisable[i].Enabled THEN backoff_disabled := FALSE; END_IF
+	END_FOR
+	IF NOT backoff_disabled THEN
+		FOR i:=1 TO 7 DO
+			G.SetPointGenEnable[i].Execute := FALSE;
+			G.SetPointGenDisable[i].Execute := TRUE;
+		END_FOR
+		RETURN;
+	END_IF
+	FOR i:=1 TO 7 DO
+		IF ((i = 1) OR (i = 3) OR (i = 5) OR (i = 6)) AND G.axis[i].Status.DriveLimitActive THEN
+			backoff_blocked := TRUE;
+			IF backoff_attempts[i] < G.recovery_max_retries THEN
+				IF G.axis[i].NcToPlc.ActPos - G.leftlimit[i] <=
+					G.leftlimit[i] + G.rslimit_distance[i] - G.axis[i].NcToPlc.ActPos THEN
+					backoff_distance[i] := G.err_backoff_distance;
+				ELSE
+					backoff_distance[i] := -G.err_backoff_distance;
+				END_IF
+				backoff_attempts[i] := backoff_attempts[i] + 1;
+				backoff_exec[i] := TRUE;
+				G.err_backoff_active[i] := TRUE;
+				backoff_needed := TRUE;
+			ELSE
+				G.err_backoff_failed[i] := TRUE;
+			END_IF
+		END_IF
+	END_FOR
+	IF backoff_needed THEN step := 20; END_IF
+END_IF
+IF step = 20 THEN
+	backoff_finished := TRUE;
+	backoff_error := has_err;
+	FOR i:=1 TO 7 DO
+		G.SetPointGenEnable[i].Execute := FALSE;
+		G.SetPointGenDisable[i].Execute := TRUE;
+		IF G.err_backoff_active[i] THEN
+			IF backoff_move[i].Error OR backoff_move[i].CommandAborted THEN
+				backoff_error := TRUE;
+			ELSIF NOT backoff_move[i].Done THEN
+				backoff_finished := FALSE;
+			END_IF
+		END_IF
+	END_FOR
+	IF backoff_error OR backoff_finished THEN
+		FOR i:=1 TO 7 DO
+			backoff_exec[i] := FALSE;
+			G.err_backoff_active[i] := FALSE;
+		END_FOR
+		// 重置流程提供下降沿；仍压限位时按本次进入err的剩余次数再退离。
+		step := 0;
+	END_IF
+	RETURN;
+END_IF
 
 CASE step OF
 0:
@@ -77,7 +155,7 @@ CASE step OF
 		G.SetPointGenDisable[i].Execute := FALSE;
 	END_FOR
 
-	IF (NOT has_err) AND all_powered THEN
+	IF (NOT has_err) AND all_powered AND NOT backoff_blocked THEN
 		step := 0;
 		G.gen_state := _clear_err;
 		RETURN;
@@ -122,7 +200,7 @@ CASE step OF
 3:
 	retry_timer(IN:=TRUE);
 
-	IF (NOT has_err) AND all_powered THEN
+	IF (NOT has_err) AND all_powered AND NOT backoff_blocked THEN
 		retry_timer(IN:=FALSE);
 		step := 0;
 		G.gen_state := _clear_err;
@@ -165,7 +243,7 @@ CASE step OF
 
 	retry_timer(IN:=TRUE);
 
-	IF (NOT has_err) AND all_powered THEN
+	IF (NOT has_err) AND all_powered AND NOT backoff_blocked THEN
 		retry_timer(IN:=FALSE);
 		step := 0;
 		G.gen_state := _clear_err;

@@ -8,6 +8,8 @@
 #include <cassert>
 #include <cmath>
 #include <limits>
+#include <future>
+#include <chrono>
 #define private public
 #include "../ads_communication.h"
 #undef private
@@ -19,9 +21,14 @@ void copy_positions(const double* source, double* destination, int count) {
 
 namespace {
     std::unordered_map<unsigned long, std::string> symbols;
-    unsigned long next_handle = 1;
-    std::uint32_t cycle = 10;
-    bool fail_read = false, fail_transport = false, stall = false, nonfinite = false;
+    std::atomic<unsigned long> next_handle{1};
+    std::mutex symbols_mutex;
+    std::atomic<unsigned int> closes{0}, heartbeats{0};
+    std::atomic<bool> low_started{false};
+    std::atomic<std::uint32_t> cycle{10};
+    std::atomic<bool> fail_read{false}, fail_transport{false}, stall{false}, nonfinite{false};
+    std::atomic<bool> fail_read_once{false};
+    std::atomic<unsigned int> single_read_failures{0};
     bool fail_local = false, fail_remote = false;
     std::string missing_symbol, nonfinite_velocity;
     const std::unordered_map<std::string,double> velocities = {
@@ -34,9 +41,10 @@ namespace {
         if(!nonfinite_velocity.empty() && symbol==nonfinite_velocity)
             *static_cast<double*>(out)=std::numeric_limits<double>::quiet_NaN();
     }
-    std::string fail_item, error;
+    std::string fail_item;
+    thread_local std::string error;
     std::vector<double> targets;
-    unsigned int committed = 0;
+    std::atomic<unsigned int> committed{0};
     const std::unordered_map<std::string, unsigned long> plc_sizes = {
 #include "ads_symbol_sizes.inc"
     };
@@ -58,18 +66,20 @@ CADSComm::~CADSComm() {}
 bool CADSComm::IsCommOpen() const { return m_bOpen; }
 bool CADSComm::OpenCommInsideReadOnly() { if (fail_local) { error = "LOCAL_READ_STATE 1861"; return false; } m_bOpen = true; return true; }
 bool CADSComm::OpenCommReadOnly() { if (fail_remote) { error = "REMOTE_READ_STATE 29"; return false; } m_bOpen = true; return true; }
-bool CADSComm::CloseComm() { m_bOpen = false; error.clear(); return true; }
+bool CADSComm::CloseComm() { m_bOpen = false; ++closes; error.clear(); return true; }
 bool CADSComm::SetTimeout(unsigned long) { return true; }
 bool CADSComm::ReadDeviceState(unsigned short& a, unsigned short& d) { a = ADSSTATE_RUN; d = 0; return true; }
 std::string CADSComm::GetLastErrorCopy() const { return error; }
 std::string CADSComm::ConnectionDescription() const { return "target=offline:851 timeout_ms=300"; }
 unsigned long CADSComm::ADSGetAddr(const char* name) {
+    std::lock_guard<std::mutex> lock(symbols_mutex);
     if (name == missing_symbol) { error = "HNDBYNAME 1808 symbol=" + missing_symbol; return 0; }
     for (auto& entry : symbols) if (entry.second == name) return entry.first;
-    symbols[next_handle] = name;
-    return next_handle++;
+    const auto handle = next_handle++; symbols[handle] = name;
+    return handle;
 }
 bool CADSComm::ADSRead(const char* name, unsigned long size, void* out) {
+    if (std::string(name) == "Test.Block") { low_started = true; Sleep(2000); }
     validate_size(name, size);
     std::memset(out, 0, size);
     fill_velocity(name, out);
@@ -85,15 +95,17 @@ bool CADSComm::ADSWriteSum(const char* const*, const unsigned long*, const void*
 bool CADSComm::ADSAddNotification(const char* name, unsigned long size, PAdsNotificationFuncEx, std::uint32_t, unsigned long* h, ADSTRANSMODE, unsigned long, unsigned long) { validate_size(name, size); *h = next_handle++; return true; }
 bool CADSComm::ADSDeleteNotification(unsigned long) { return true; }
 bool CADSComm::ADSReadSumByHandle(const unsigned long* handles, const unsigned long* sizes, void* const* out, unsigned long count) {
+    if (fail_read_once.exchange(false)) { ++single_read_failures; error = "injected single read failure"; return false; }
     if (fail_read) { error = "injected read timeout code=1861"; return false; }
     if (!stall) ++cycle;
     for (unsigned long i = 0; i < count; ++i) {
         std::memset(out[i], 0, sizes[i]);
-        const auto& s = symbols.at(handles[i]);
+        std::string s; { std::lock_guard<std::mutex> lock(symbols_mutex); s = symbols.at(handles[i]); }
         validate_size(s, sizes[i]);
         fill_velocity(s, out[i]);
-        if (s.find("CycleCount") != std::string::npos) *static_cast<std::uint32_t*>(out[i]) = cycle;
-        if (s.find("DcTaskTime") != std::string::npos) *static_cast<std::int64_t*>(out[i]) = static_cast<std::int64_t>(cycle) * 10000000;
+        if (s == "G.self_check_done" || s == "G.handle_reinit_done") *static_cast<bool*>(out[i]) = true;
+        if (s.find("CycleCount") != std::string::npos) *static_cast<std::uint32_t*>(out[i]) = cycle.load();
+        if (s.find("DcTaskTime") != std::string::npos) *static_cast<std::int64_t*>(out[i]) = static_cast<std::int64_t>(cycle.load()) * 10000000;
         if (nonfinite && s == "G.axis[1].NcToPlc.ActPos") *static_cast<double*>(out[i]) = std::numeric_limits<double>::quiet_NaN();
     }
     error.clear(); return true;
@@ -103,11 +115,12 @@ bool CADSComm::ADSWriteSumByHandle(const unsigned long* handles, const unsigned 
     if (fail_transport) { error = "injected write timeout code=1861"; return false; }
     bool ok = true;
     for (unsigned long i = 0; i < count; ++i) {
-        const auto& s = symbols.at(handles[i]);
+        std::string s; { std::lock_guard<std::mutex> lock(symbols_mutex); s = symbols.at(handles[i]); }
         validate_size(s, sizes[i]);
         results[i] = s == fail_item ? 1797 : 0;
         if (results[i]) { ok = false; error = "injected item code=1797 symbol=" + s; }
         if (s.find("TargetAbs") != std::string::npos) { assert(sizes[i] == sizeof(double)); targets.push_back(*static_cast<const double*>(in[i])); }
+        if (s == "G.host_heartbeat_sequence") ++heartbeats;
         if (s.find(".Req") != std::string::npos && *static_cast<const bool*>(in[i])) ++committed;
     }
     if (ok) error.clear();
@@ -233,4 +246,57 @@ int main() {
     service.on_notification(kNotifyGenState, &oversized_state, sizeof(oversized_state));
     check(service.event_state().gen_state == 6, "wrong-size state notification is rejected");
     service.running_.store(false);
+    {
+        CADSComm fast;
+        AdsCommunicationService threaded(fast);
+        auto wait = [&](auto predicate, int timeout) {
+            const auto start=GetTickCount64();
+            while(GetTickCount64()-start < static_cast<ULONGLONG>(timeout)) { if(predicate()) return true; Sleep(1); }
+            return predicate();
+        };
+        check(threaded.start(nullptr,nullptr), "V3 start production fast and slow threads");
+        check(wait([&]{return threaded.stats().state==AdsConnectionState::Running;},3000), "V3 first full cycle Running");
+        AdsPlannedReturnCommand queued{}; queued.operation=AdsPlannedReturnOperation::Prepare; queued.leg_count=1;
+        queued.legs[0]={0,20,5,50,50,100};
+        const unsigned int single_close_before=closes.load();
+        fail_read_once=true;
+        check(wait([&]{return threaded.stats().state==AdsConnectionState::SoftHold;},500), "V3 exactly one failed snapshot enters SoftHold");
+        const auto single_sequence=threaded.submit_planned_return_command(queued);
+        auto single_low=std::async(std::launch::async,[&]{int value=0;return threaded.read("Test.SinglePending",sizeof(value),&value,50);});
+        bool single_done=false,single_ok=false; std::uint8_t single_mask=0;
+        check(wait([&]{threaded.planned_return_command_result(single_sequence,single_done,single_ok,single_mask);return single_done;},1000) && single_ok, "V3 single failed cycle preserves queued return");
+        check(single_low.get() && single_read_failures==1 && closes==single_close_before, "V3 one failed cycle preserves low-frequency request without CloseComm");
+        for(bool write_failure:{false,true}) for(int duration : {20,500,1200}) {
+            const unsigned int close_before=closes.load();
+            if(write_failure) fail_transport=true; else fail_read=true;
+            check(wait([&]{return threaded.stats().state==AdsConnectionState::SoftHold;},500), "V3 failure enters SoftHold");
+            const auto sequence=threaded.submit_planned_return_command(queued);
+            auto low=std::async(std::launch::async,[&]{ int value=0; return threaded.read("Test.Pending",sizeof(value),&value,50); });
+            Sleep(duration);
+            bool done=false, ok=false; std::uint8_t started_mask=0;
+            threaded.planned_return_command_result(sequence,done,ok,started_mask);
+            if(duration<1000) {
+                check(!done && closes==close_before, "V3 short failure preserves return queue and connection");
+                check(low.wait_for(std::chrono::milliseconds(0))==std::future_status::timeout, "V3 SoftHold preserves low-frequency queue beyond API timeout");
+            } else check(done && !ok && closes>close_before, "V3 1.2s failure closes communication and fails queue");
+            fail_read=false; fail_transport=false;
+            check(wait([&]{return threaded.stats().state==AdsConnectionState::Running;},3000), "V3 complete successful cycle restores Running");
+            if(duration<1000) {
+                check(wait([&]{threaded.planned_return_command_result(sequence,done,ok,started_mask);return done;},1000) && ok, "V3 queued return succeeds after short failure");
+                check(low.get(), "V3 queued low-frequency request succeeds after short failure");
+            } else check(!low.get(), "V3 disconnected low-frequency request fails");
+        }
+        low_started=false;
+        auto blocking=std::async(std::launch::async,[&]{int value=0;return threaded.read("Test.Block",sizeof(value),&value);});
+        check(wait([&]{return low_started.load();},2000), "V3 low-frequency mock blocks for2s");
+        const auto before=threaded.stats().latest_rtt_us;
+        AdsFastSnapshot first,last; threaded.latest_snapshot(first);
+        const auto heartbeat_before=heartbeats.load();
+        check(blocking.get(), "V3 blocked low-frequency operation completes");
+        threaded.latest_snapshot(last);
+        const auto heartbeat_delta=heartbeats.load()-heartbeat_before;
+        std::cout << "V3 2s block: fast_snapshot_delta=" << last.attempt_sequence-first.attempt_sequence << " heartbeat_delta=" << heartbeat_delta << " rtt_us=" << before << std::endl;
+        check(last.attempt_sequence-first.attempt_sequence>=170 && heartbeat_delta>=170, "V3 low-frequency blocking cannot block fast snapshot or heartbeat");
+        threaded.stop();
+    }
 }

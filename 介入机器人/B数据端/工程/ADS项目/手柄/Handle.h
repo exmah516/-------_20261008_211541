@@ -28,6 +28,8 @@ public:
 	// 抖动恢复时通知主循环重建当前位置基准，避免追赶断流期间的手柄位移。
 	bool take_rebase_request() { const bool value = rebase_requested_; rebase_requested_ = false; return value; }
 
+	ULONGLONG sample_gap_ms() const { return sample_gap_ms_; }
+	ULONGLONG sample_age_ms() const { return last_sample_rx_ms_ == 0 ? 0 : GetTickCount64() - last_sample_rx_ms_; }
 	void clear_cache();
 	void close();
 
@@ -49,4 +51,5 @@ private:
 	DWORD serial_number_;
 	ULONGLONG last_sample_rx_ms_ = 0;
 	bool rebase_requested_ = false;
+	ULONGLONG sample_gap_ms_ = 0;
 };

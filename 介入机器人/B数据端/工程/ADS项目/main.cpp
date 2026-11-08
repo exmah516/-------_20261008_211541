@@ -1,9 +1,12 @@
 #include "control_types.h"
+#include "return_recovery.h"
+#include "homing_record.h"
 #include "ads_communication.h"
 #include "arm_manual_ads_service.h"
 #include "delivery_tracking.h"
 #include "handle_net_distance.h"
 #include "experiment_recorder.h"
+#include "handle_velocity_recorder.h"
 #include "force_calibration.h"
 #include "force_feedback.h"
 #include "guidewire_mode.h"
@@ -49,7 +52,7 @@ int main()
 		<< "；故障记录位于 ADS.exe 同目录的 ads_fault_diagnostics.log" << std::endl;
 	constexpr DWORD serial_axis1_handle = 587;
 	constexpr DWORD serial_axis6_handle = 582;
-	// 主循环允许通信线程最多 300 ms 产出下一帧，避免低频 ADS 请求占用期间误触发连接保持。
+	// 主循环等待下一份快照仍为300ms；独立于1s断线判定。
 	constexpr DWORD ads_snapshot_wait_timeout_ms = 300;
 	// Zenoh 状态约 30 Hz；手柄与力反馈由服务独立保持 100 Hz。
 	constexpr std::int64_t vis_publish_rate_hz = 30;
@@ -59,6 +62,16 @@ int main()
 
 	ControlConfig cfg;
 	const CylinderPreset cyl;
+    const std::filesystem::path run_directory = std::filesystem::path(diagnostic_exe).parent_path();
+    const auto homing_record_path = run_directory / L"homing_record.json";
+    const bool homing_reuse_enabled = homing::enabled(run_directory / L"reliability_config.json");
+    homing::Record homing_record = homing::load(homing_record_path);
+    std::string plc_application_name;
+    bool homing_reuse_pending = false, homing_restore_submitted = false;
+    bool control_before_plc_restart = false, homing_restore_applied = false;
+    ULONGLONG homing_record_update_ms = 0;
+    bool homing_record_pending = false;
+    std::uint64_t homing_record_refresh_generation = 0;
 
 	// B7 选择当前物理手柄语义，选中后对应手柄的 B6 电平决定递送或撤出。
 
@@ -69,6 +82,12 @@ int main()
 	DeliveryTrackingController tracking_controller;
 	HandleNetDistance axis1_net_distance, axis6_net_distance;
 	ExperimentRecorder experiment_recorder;
+	HandleVelocityRecorder handle_velocity_recorder;
+	const auto handle_velocity_path = run_directory / (L"handle_velocity_" + std::to_wstring(GetTickCount64()) + L".csv");
+	if (handle_velocity_recorder.start(handle_velocity_path))
+		std::cout << "手柄接收速度100Hz记录：" << handle_velocity_path.u8string() << std::endl;
+	else
+		std::cerr << "手柄接收速度记录文件打开失败。" << std::endl;
 	ZenohService zenoh_service;
 	HandleFilterState axis1_handle_filter;
 	HandleFilterState axis6_handle_filter;
@@ -494,7 +513,13 @@ int main()
 	GuidewireMode requested_guidewire_mode_prev = GuidewireMode::None;
 	bool axis1_fast_return = false; // 轴1快退旁路标志（写入 G.axis1_fast_return）
 	bool axis6_fast_retract = false; // 轴6快退旁路标志（写入 G.axis6_fast_retract）
-	bool return_ads_fault_hold = false; // 回退 ADS 故障后保持停控，重启上位机并重新检查后解除
+	bool return_ads_fault_hold = false; // 回退故障恢复中，PLC确认Clear并就绪后自动解除
+    ReturnRecovery return_recovery;
+    PlannedReturnMode interrupted_return_mode = PlannedReturnMode::None;
+    PlannedReturnRebaseScope interrupted_return_scope = PlannedReturnRebaseScope::Axis1;
+    DualHandoffRequest original_return_intent;
+    bool resuming_return = false;
+    std::string recovery_event_text;
 	// PLC ErrorId 可能比 Error 边沿晚一个 Notification 到达；短暂保留本次错误上下文用于补报。
 	int pending_return_error_axis = -1;
 	std::uint64_t pending_return_error_event_sequence = 0;
@@ -1293,12 +1318,22 @@ int main()
 					baseline_rebuilt = motion_sync::sync_axis1(ctx, 1, false);
 				}
 			}
+            const bool recovered_ads_snapshot = ads_soft_hold_active;
 			ads_soft_hold_active = !baseline_rebuilt;
 			if (baseline_rebuilt)
 			{
 				axis1_fast_return = false;
 				axis6_fast_retract = false;
-				std::cout << "ADS 快照已恢复：实际位置、手柄基准与当前稳定模式已重建。" << std::endl;
+                if (recovered_ads_snapshot) recovery_event_text = "ADS 快照恢复";
+                else if (handle_rebase_requested)
+                {
+                    std::ostringstream reason;
+                    if (handle1_rebase_requested) reason << "手柄587采样间隔 " << handle_axis1.sample_gap_ms() << " ms 后重建；";
+                    if (handle6_rebase_requested) reason << "手柄582采样间隔 " << handle_axis6.sample_gap_ms() << " ms 后重建；";
+                    recovery_event_text = reason.str();
+                }
+                else recovery_event_text = "连接保持结束";
+                std::cout << recovery_event_text << "：实际位置与手柄基准已重建。" << std::endl;
 			}
 		}
 
@@ -1347,19 +1382,25 @@ int main()
 			}
 		}
 
-		if (ads_motion_cycle_valid && !plc_app_name_read)
+		if ((ads_motion_cycle_valid || (homing_reuse_pending && ads_self_check_valid && ads_snapshot.valid)) && !plc_app_name_read)
 		{
 			char app_name_buf[64] = { 0 };
 			if (ads_communication.read(AdsSymbol::app_name, sizeof(app_name_buf), app_name_buf, 50))
 			{
 				app_name_buf[sizeof(app_name_buf) - 1] = '\0';
 				std::cout << "ADS 目标 PLC 应用: " << app_name_buf << std::endl;
+                plc_application_name = app_name_buf;
 				plc_app_name_read = true;
 			}
 		}
 
 		if (ads_stats.plc_restart_count != handled_plc_restart_count)
 		{
+            control_before_plc_restart = control_active;
+            homing_reuse_pending = true;
+            homing_restore_submitted = false;
+            homing_record_pending = false;
+            plc_app_name_read = false;
 			handled_plc_restart_count = ads_stats.plc_restart_count;
 			plc_restart_recovery_latched = false;
 			ff.set_enabled(0, false);
@@ -1372,6 +1413,86 @@ int main()
 			clear_force_output();
 			std::cout << "检测到 PLC 重启或应用重载：已重置运行状态，进入待机准备。" << std::endl;
 		}
+        if (homing_reuse_pending && !homing_restore_submitted && ads_self_check_valid &&
+            !self_check_done && ads_events.gen_state == 7 && ads_events.selfcheck_status == 1 && plc_app_name_read)
+        {
+            bool ready = true;
+            const char* symbols[35] = {};
+            std::string names[35];
+            unsigned long sizes[35] = {};
+            bool values[35] = {};
+            void* outputs[35] = {};
+            for (int axis = 0; axis < 7; ++axis)
+            {
+                names[axis * 5] = "G.power_output[" + std::to_string(axis + 1) + "].Done";
+                names[axis * 5 + 1] = "G.axis[" + std::to_string(axis + 1) + "].Status.Error";
+                names[axis * 5 + 2] = "G.axis[" + std::to_string(axis + 1) + "].Status.DriveDeviceError";
+                names[axis * 5 + 3] = "G.power_output[" + std::to_string(axis + 1) + "].Error";
+                names[axis * 5 + 4] = "G.reset_output[" + std::to_string(axis + 1) + "].Error";
+            }
+            for (int i = 0; i < 35; ++i) { symbols[i] = names[i].c_str(); sizes[i] = sizeof(bool); outputs[i] = &values[i]; }
+            ready = ads_communication.read_sum(symbols, sizes, outputs, 35);
+            for (int axis = 0; axis < 7; ++axis)
+                ready = ready && values[axis * 5] && !values[axis * 5 + 1] && !values[axis * 5 + 2] && !values[axis * 5 + 3] && !values[axis * 5 + 4];
+            if (ready)
+            {
+                double current_abs[7] = {};
+                // _self_check等待态不刷新G.Act_pos，复用必须读取NC当前绝对位置。
+                for (int axis = 0; axis < 7; ++axis)
+                {
+                    names[axis] = "G.axis[" + std::to_string(axis + 1) + "].NcToPlc.ActPos";
+                    symbols[axis] = names[axis].c_str(); sizes[axis] = sizeof(double); outputs[axis] = &current_abs[axis];
+                }
+                const bool absolute_read = ads_communication.read_sum(symbols, sizes, outputs, 7);
+                const std::string reason = absolute_read
+                    ? homing::reject_reason(homing_reuse_enabled, homing_record, plc_application_name, current_abs)
+                    : "NC绝对位置读取失败";
+                if (!reason.empty())
+                {
+                    recovery_event_text = "拒绝复用寻参：" + reason;
+                    homing_reuse_pending = false;
+                    std::cout << recovery_event_text << std::endl;
+                }
+                else
+                {
+                    const std::int32_t idle = 0;
+                    const char* restore_symbols[] = { "G.homing_restore_leftlimit", "G.homing_restore_init_pos", "G.homing_restore_status" };
+                    const unsigned long restore_sizes[] = { sizeof(double) * 7, sizeof(double) * 7, sizeof(idle) };
+                    const void* restore_values[] = { homing_record.leftlimit.data(), homing_record.init_pos.data(), &idle };
+                    const bool request = true;
+                    homing_restore_submitted = ads_communication.write_sum(restore_symbols, restore_sizes, restore_values, 3) &&
+                        ads_communication.write("G.homing_restore_req", sizeof(request), &request);
+                    if (!homing_restore_submitted)
+                    {
+                        homing_reuse_pending = false;
+                        recovery_event_text = "拒绝复用寻参：恢复接口写入失败";
+                        std::cout << recovery_event_text << std::endl;
+                    }
+                }
+            }
+        }
+        if (homing_restore_submitted && ads_self_check_valid)
+        {
+            std::int32_t status = 0, reason = 0;
+            const char* symbols[] = { "G.homing_restore_status", "G.homing_restore_reject_reason" };
+            const unsigned long sizes[] = { sizeof(status), sizeof(reason) };
+            void* outputs[] = { &status, &reason };
+            if (ads_communication.read_sum(symbols, sizes, outputs, 2) && status != 0)
+            {
+                homing_restore_submitted = false;
+                homing_reuse_pending = false;
+                if (status == 1)
+                {
+                    recovery_event_text = "寻参已复用";
+                    homing_restore_applied = true;
+                    last_self_check_done = false;
+                    startup.completed = control_before_plc_restart;
+                    startup.phase = control_before_plc_restart ? StartupPhase::Done : StartupPhase::WaitForEnter;
+                }
+                else recovery_event_text = "拒绝复用寻参：PLC原因码 " + std::to_string(reason);
+                std::cout << recovery_event_text << std::endl;
+            }
+        }
 		// 1) 采样逻辑手柄输入，并生成按键边沿触发状态。
 		if (!handle_soft_hold_active)
 		{
@@ -1648,6 +1769,13 @@ int main()
 			{
 				estop_hold_active = true;
 				control_active = false;
+                if (planned_return.active())
+                {
+                    bool unfinished = false;
+                    for (int leg = 0; leg < planned_return.leg_count; ++leg) unfinished = unfinished || !planned_return.legs[leg].done;
+                    return_recovery.interrupted("本体急停打断回退", unfinished);
+                    return_ads_fault_hold = true;
+                }
 				(void)cancel_active_return_motion(true);
 				clear_force_output();
 				// 完成原有停止处理后再写文件，不增加ADS请求。
@@ -1799,7 +1927,7 @@ int main()
 		requested_guidewire_mode_prev = requested_guidewire_mode;
 
 		// 6) 自检和重同步请求均由 Notification 驱动，不再做周期单读。
-		if (ads_self_check_valid && has_self_check_flag && self_check_done != last_self_check_done)
+		if (ads_self_check_valid && !homing_restore_submitted && has_self_check_flag && self_check_done != last_self_check_done)
 		{
 			if (last_self_check_done && !self_check_done)
 			{
@@ -1812,6 +1940,11 @@ int main()
 			}
 			else if (!last_self_check_done && self_check_done)
 			{
+                if (!homing_restore_applied)
+                {
+                    homing_record_pending = true;
+                    homing_record_refresh_generation = ads_communication.coordinate_refresh_generation();
+                }
 				const bool coordinates_refreshed = ads_communication.refresh_coordinates();
 				if (!coordinates_refreshed)
 				{
@@ -1827,14 +1960,16 @@ int main()
 				guidewire_mode = GuidewireMode::None;
 				axis6_crawl.enabled = false;
 				axis6_window_locked = false;
-				startup.phase = StartupPhase::Done;
-				startup.completed = true;
+                const bool restored_homing = homing_restore_applied;
+                homing_restore_applied = false;
+                startup.completed = !restored_homing || control_before_plc_restart;
+                startup.phase = startup.completed ? StartupPhase::Done : StartupPhase::WaitForEnter;
 				startup.direct_positioning = false;
 				startup.prompted = false;
 				if (coordinates_refreshed && !estop_hold_active &&
 					!ads_soft_hold_active && sync_all(30))
 				{
-					control_active = true;
+                    control_active = startup.completed && startup.phase == StartupPhase::Done;
 					plc_restart_recovery_latched = false;
 					std::cout << "PLC 自检已完成，已自动进入手柄控制。" << std::endl;
 				}
@@ -1844,7 +1979,33 @@ int main()
 				}
 			}
 		}
-		if (ads_self_check_valid) last_self_check_done = self_check_done;
+        // 寻参记录只消费既有坐标刷新成功事件；刷新失败时等待既有后台刷新。
+        if (homing_record_pending && ads_self_check_valid && ads_snapshot.valid && self_check_done && plc_app_name_read &&
+            ads_communication.coordinate_refresh_generation() > homing_record_refresh_generation)
+        {
+            homing_record_pending = false;
+            homing_record.complete = true;
+            homing_record.application = plc_application_name;
+            homing_record.completed_time_unix_ms = homing::now_ms();
+            homing_record.last_abs_time_unix_ms = homing_record.completed_time_unix_ms;
+            for (int axis = 0; axis < 7; ++axis)
+            {
+                homing_record.leftlimit[axis] = ads_snapshot.leftlimit[axis];
+                homing_record.init_pos[axis] = ads_snapshot.init_pos[axis];
+                homing_record.last_abs[axis] = ads_snapshot.act_pos_rel[axis] + ads_snapshot.init_pos[axis];
+            }
+            homing_record_update_ms = GetTickCount64();
+            if (!homing::save(homing_record_path, homing_record)) std::cout << "寻参记录原子写入失败。" << std::endl;
+        }
+        if (!homing_record_pending && !homing_reuse_pending && !homing_restore_submitted && homing_record.complete &&
+            ads_self_check_valid && ads_snapshot.valid && self_check_done && GetTickCount64() - homing_record_update_ms >= 1000)
+        {
+            homing_record_update_ms = GetTickCount64();
+            homing_record.last_abs_time_unix_ms = homing::now_ms();
+            for (int axis = 0; axis < 7; ++axis) homing_record.last_abs[axis] = ads_snapshot.act_pos_rel[axis] + ads_snapshot.init_pos[axis];
+            if (!homing::save(homing_record_path, homing_record)) std::cout << "寻参位置记录原子更新失败。" << std::endl;
+        }
+		if (ads_self_check_valid && !homing_restore_submitted) last_self_check_done = self_check_done;
 
 		// 正在回退时由原交接阶段重建基准，重同步请求不能取消 PLC 中的回退。
 		if (handle_reinit_req && !last_handle_reinit_req && !planned_return.active())
@@ -1860,6 +2021,47 @@ int main()
 			}
 		}
 		last_handle_reinit_req = handle_reinit_req;
+
+        // 回退自动恢复门控。
+        if (return_ads_fault_hold)
+        {
+            ReturnRecoveryConditions conditions;
+            conditions.ads_running = ads_stats.state == AdsConnectionState::Running;
+            conditions.snapshot_valid = ads_motion_cycle_valid && ads_snapshot.valid;
+            conditions.snapshot_sequence = ads_snapshot.attempt_sequence;
+            if (return_recovery.clear_sequence() != 0)
+            {
+                bool completed = false, success = false;
+                std::uint8_t mask = 0;
+                if (ads_communication.planned_return_command_result(return_recovery.clear_sequence(), completed, success, mask) && completed)
+                    return_recovery.clear_result(success, ads_snapshot.attempt_sequence);
+            }
+            conditions.estop = estop_hold_active || ads_snapshot.estop_hold_req;
+            conditions.host_timeout = ads_snapshot.host_comm_timeout;
+            conditions.handle_reinit_done = ads_snapshot.handle_reinit_done;
+            conditions.handles_valid = !handle_soft_hold_active;
+            conditions.startup_active = startup.is_active();
+            conditions.exclusive_task = planned_return.active() || spacing_recovery.active() ||
+                spacing_recovery.requested || emergency_retract_active || ads_events.axis4_manual_busy;
+            for (int slot = 0; slot < 2; ++slot)
+            { conditions.req[slot] = ads_snapshot.return_req[slot]; conditions.busy[slot] = ads_snapshot.return_busy[slot]; }
+            if (conditions.ads_running && has_new_ads_snapshot && ads_snapshot.valid && return_recovery.clear_due(GetTickCount64(), conditions.req))
+            {
+                AdsPlannedReturnCommand clear;
+                clear.operation = AdsPlannedReturnOperation::Clear;
+                for (int slot = 0; slot < 2; ++slot) if (return_recovery.mask() & (1 << slot))
+                    clear.legs[clear.leg_count++].axis_index = slot == 0 ? 0 : 5;
+                return_recovery.clear_submitted(ads_communication.submit_planned_return_command(clear));
+            }
+            if (return_recovery.can_restore(conditions) && sync_all(20))
+            {
+                return_ads_fault_hold = false;
+                control_active = startup.completed && startup.phase == StartupPhase::Done;
+                return_recovery.restored();
+                recovery_event_text = "回退故障已恢复：" + return_recovery.reason();
+                std::cout << recovery_event_text << std::endl;
+            }
+        }
 
 		// 8) 当启动已完成但控制未激活时，通过全量重同步恢复。
 		const bool motion_startup_active = startup.is_active();
@@ -2278,6 +2480,7 @@ int main()
 				bool attempt_request_clear)
 			{
 				(void)attempt_request_clear;
+                return_recovery.interrupted(reason, !planned_return_all_done());
 				return_ads_fault_hold = true;
 				control_active = false;
 				clear_force_output();
@@ -2344,6 +2547,15 @@ int main()
 					planned_return.reset();
 					return false;
 				}
+                if (!resuming_return)
+                {
+                    return_recovery.original_trigger(static_cast<std::uint8_t>((axis1_active ? 1 : 0) | (axis6_active ? 2 : 0)));
+                    interrupted_return_mode = mode;
+                    interrupted_return_scope = rebase_scope;
+                    original_return_intent = dual_handoff;
+                    original_return_intent.reverse = axis1_reverse_pressed;
+                    original_return_intent.wire_reverse = axis6_effective_reverse_pressed;
+                }
 				if (axis1_active) ff.capture_clamp_hold(
 					1, axis1_reverse_pressed, ff.force_587_f, ff.force_587_n);
 				if (axis6_active) ff.capture_clamp_hold(
@@ -2890,6 +3102,7 @@ int main()
 								// 回退完成后的附加映射只在后续正常导管前推中生效。
 								arm_axis1_delivery_mapping();
 							}
+                            return_recovery.completed();
 							reset_planned_return();
 						}
 					}
@@ -3446,6 +3659,43 @@ int main()
 					}
 				}
 			}
+            else if (return_recovery.resume_pending())
+            {
+                return_recovery.consume_resume();
+                const bool axis1_leg = (return_recovery.mask() & 1) != 0;
+                const bool axis6_leg = (return_recovery.mask() & 2) != 0;
+                const bool reverse = original_return_intent.reverse;
+                double target1 = reverse ? axis1_crawl.min_abs() : axis1_crawl.max_abs();
+                double target6 = axis6_abs;
+                double window6_left = axis6_crawl.min_abs(), window6_right = axis6_crawl.max_abs();
+                if (interrupted_return_mode == PlannedReturnMode::GuidewireDelivery ||
+                    interrupted_return_mode == PlannedReturnMode::GuidewireRetraction)
+                    target6 = interrupted_return_mode == PlannedReturnMode::GuidewireRetraction ? window6_left : window6_right;
+                else
+                {
+                    motion_sync::calculate_axis6_window_from_axis5_abs(ctx, axis5_abs, window6_left, window6_right);
+                    if (interrupted_return_mode == PlannedReturnMode::Dual)
+                    {
+                        const double gmin = cfg.catheter_axis6_window_min_gap_from_axis5_mm;
+                        const double gmax = gmin + motion_sync::axis6_window_size_mm(ctx);
+                        const double axis1_after = axis1_leg ? target1 : axis1_abs;
+                        const double remaining = (std::max)(0.0, reverse ? axis1_crawl.max_abs() - axis1_after : axis1_after - axis1_crawl.min_abs());
+                        const double passive = (std::min)(cfg.axis6_passive_distance_limit_mm, cfg.axis6_passive_clearance_mm + remaining);
+                        const double gap = original_return_intent.wire_caused
+                            ? (original_return_intent.wire_reverse ? cfg.axis6_active_retraction_gap_mm : cfg.axis6_active_delivery_gap_mm)
+                            : (reverse ? gmin + passive : gmax - passive);
+                        target6 = (std::min)(plc_leftlimit[5] + axis5_abs - plc_leftlimit[4] + gap,
+                            plc_leftlimit[5] + cfg.axis6_soft_limit_from_left_mm);
+                    }
+                    else target6 = clamp_double(axis6_abs - (target1 - axis1_abs), window6_left, window6_right);
+                }
+                resuming_return = true;
+                const bool resumed = begin_planned_return(interrupted_return_mode, interrupted_return_scope,
+                    axis1_leg, target1, axis6_leg, target6);
+                resuming_return = false;
+                if (resumed) { apply_planned_return_outputs(); std::cout << "计划回退已从当前位置重新规划，自动续做一次。" << std::endl; }
+                else std::cout << "计划回退续做未通过原目标安全校验，已恢复当前位置控制。" << std::endl;
+            }
 			else if (planned_return.active())
 			{
 				// 四种普通业务模式的计划回退和交接统一由单一协调器推进。
@@ -4495,6 +4745,22 @@ int main()
 			vs.axis1_fast_return = axis1_fast_return;
 			vs.axis6_fast_retract = axis6_fast_retract;
 			vs.self_check_done = self_check_done;
+            std::ostringstream recovery_status;
+            if (return_ads_fault_hold) recovery_status << "回退故障恢复中：" << return_recovery.reason() << "；";
+            if (estop_hold_active) recovery_status << "本体急停恢复中；";
+            if (!handle1_poll_ok) recovery_status << "手柄587无有效样本或采样断开；";
+            if (!handle6_poll_ok) recovery_status << "手柄582无有效样本或采样断开；";
+            if (handle1_poll_ok && handle_axis1.sample_age_ms() > 250) recovery_status << "手柄587采样中断 " << handle_axis1.sample_age_ms() << " ms；";
+            if (handle6_poll_ok && handle_axis6.sample_age_ms() > 250) recovery_status << "手柄582采样中断 " << handle_axis6.sample_age_ms() << " ms；";
+            if (ads_stats.state != AdsConnectionState::Running) recovery_status << "ADS 重连/保持中，状态=" << static_cast<int>(ads_stats.state) << "；";
+            if (ads_snapshot.axis15_error) recovery_status << "Axis15错误 " << ads_snapshot.axis15_error_id << "，自行复位中；";
+            for (int axis = 0; axis < 7; ++axis)
+            {
+                if (ads_snapshot.err_backoff_active[axis]) recovery_status << "轴" << axis + 1 << "限位退离中；";
+                if (ads_snapshot.err_backoff_failed[axis]) recovery_status << "轴" << axis + 1 << "限位退离失败；";
+            }
+            const std::string recovery_status_text = recovery_status.str().empty() ? recovery_event_text : recovery_status.str();
+            strncpy_s(vs.recovery_text, recovery_status_text.c_str(), _TRUNCATE);
 			vs.selfcheck_status = selfcheck_command_error && !self_check_done ? 4 :
 				selfcheck_start_pending ? 5 : ads_events.selfcheck_status;
 			vs.ff_enabled = ff.enabled();
@@ -5170,6 +5436,7 @@ int main()
 	AdsFastSnapshot shutdown_snapshot{};
 	(void)ads_communication.wait_for_snapshot(ads_snapshot_sequence, 50, shutdown_snapshot);
 	clear_force_output();
+	handle_velocity_recorder.stop();
 	experiment_recorder.stop_and_wait("program_exit");
 	arm_manual_ads.stop();
 	ads_communication.stop();

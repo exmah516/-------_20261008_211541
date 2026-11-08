@@ -1,6 +1,8 @@
 // 由运行脚本从 main.cpp 提取实际状态门控代码；运动同步替身只计数，不访问设备。
 #include <iostream>
 #include <cstdlib>
+#include <sstream>
+#include <string>
 enum class AdsConnectionState { Running = 2, Reconnecting = 4 };
 enum class StartupPhase { WaitForEnter, Done };
 enum class GuidewireMode { None, Independent };
@@ -23,7 +25,9 @@ struct Fixture {
     struct { bool self_check_done = true; } ads_events;
     bool initial_sync_done = true, control_active = true;
     bool connection_hold_active = false, connection_hold_active_prev = true, single_handle_mode = false;
-    bool handle_rebase_requested = false;
+    bool handle_rebase_requested = false, handle1_rebase_requested = false, handle6_rebase_requested = false;
+    std::string recovery_event_text;
+    struct GapHandle { int sample_gap_ms() const { return 1600; } } handle_axis1, handle_axis6;
     bool axis1_fast_return = false, axis6_fast_retract = false;
     int ctx = 0;
     struct Filter {
@@ -146,4 +150,11 @@ int main() {
     fresh.startup.completed = false;
     fresh.auto_resume();
     check(!fresh.control_active && fresh.sync_count == 0, "fresh startup does not auto-select control");
+    check(f.recovery_event_text == "ADS 快照恢复", "R3 ADS recovery reason is separate");
+    Fixture gap; gap.handle_rebase_requested=gap.handle1_rebase_requested=true;
+    gap.recover();
+    check(gap.recovery_event_text.find("手柄587采样间隔 1600 ms")!=std::string::npos,
+          "R3 sample-gap reason includes physical handle and milliseconds");
+    Fixture connection; connection.recover();
+    check(connection.recovery_event_text=="连接保持结束", "R3 connection-hold end has its own reason");
 }

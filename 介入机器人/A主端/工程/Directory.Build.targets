@@ -1,0 +1,10 @@
+<Project>
+  <Target Name="CopyHandleHost" AfterTargets="Build;Publish"
+          Condition="'$(MSBuildProjectName)' == 'VI.Control' Or '$(MSBuildProjectName)' == 'VI.Control.Tests' Or '$(MSBuildProjectName)' == 'MasterConsole.Protocol.Tests' Or '$(MSBuildProjectName)' == 'VI.Service.Robot'">
+    <ItemGroup>
+      <HandleHostFiles Include="$(MSBuildThisFileDirectory)build\$(Configuration)\bin\VI.HandleHost\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(HandleHostFiles)" DestinationFolder="$(TargetDir)HandleHost\" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(HandleHostFiles)" DestinationFolder="$(PublishDir)HandleHost\" SkipUnchangedFiles="true" Condition="'$(PublishDir)' != '' And Exists('$(PublishDir)')" />
+  </Target>
+</Project>

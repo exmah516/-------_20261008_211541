@@ -1081,7 +1081,7 @@ void ZenohService::publish_state_frame()
         frame.axis6_net_distance_mm = std::isfinite(extra_.axis6_net_distance_mm) ? extra_.axis6_net_distance_mm : 0.0;
         frame.prepare_task_state = prepare_task_state_; frame.prepare_task_command_id = prepare_task_command_id_;
         frame.start_task_state = start_task_state_; frame.start_task_command_id = start_task_command_id_;
-        frame.results = results_; frame.event_text.clear();
+        frame.results = results_; frame.event_text = state_.recovery_text;
         frame.axis6_window_start_from_left_mm = std::isfinite(static_cast<float>(state_.axis6_window_start_from_left_mm))
             ? static_cast<float>(state_.axis6_window_start_from_left_mm) : 0.0f;
         frame.axis6_window_end_from_left_mm = std::isfinite(static_cast<float>(state_.axis6_window_end_from_left_mm))

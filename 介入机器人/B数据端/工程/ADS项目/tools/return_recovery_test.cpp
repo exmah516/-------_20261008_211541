@@ -1,9 +1,13 @@
+#include "../return_recovery.h"
 // 抽取真实取消、恢复进入/退出及完整回退推进分支；PLC 与 ADS 仅使用内存替身。
 #include <algorithm>
+enum class ExperimentEventCode { SpacingRecoveryStart };
+static void record_experiment_event(ExperimentEventCode, int) {}
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <sstream>
 using DWORD = unsigned long;
 using ULONGLONG = unsigned long long;
 constexpr double Rad = 57.29577951308232;
@@ -32,6 +36,7 @@ static void check(bool ok, const char* text) {
     if (!ok) { std::cerr << "FAIL " << text << '\n'; std::exit(1); }
 }
 struct Fixture {
+    ReturnRecovery return_recovery;
     ControlConfig cfg;
     CylinderPreset cyl;
     PlannedReturnCoordinator planned_return;
@@ -56,11 +61,16 @@ struct Fixture {
     bool initial_sync_done=true, ads_soft_hold_active=false, handle_soft_hold_active=false;
     bool handle_reinit_req=false,last_handle_reinit_req=false;
     bool connection_hold_active_prev=false, handle_rebase_requested=false;
-    struct { unsigned int reconnect_count=0; } ads_stats;
+    bool handle1_rebase_requested=false,handle6_rebase_requested=false;
+    std::string recovery_event_text;
+    struct GapHandle { int sample_gap_ms() const { return 1600; } } handle_axis1,handle_axis6;
+    struct { unsigned int reconnect_count=0; int state=2; } ads_stats;
     unsigned int handled_reconnect_count=0;
     struct ForceFeedbackStub {
         int completed[3]={};
         double position[3]={};
+        double force_587_f=0,force_587_n=0,force_582_f=0,force_582_n=0;
+        void capture_clamp_hold(int,bool,double,double) {}
         void complete_clamp_hold(int channel,double axis_abs) {
             ++completed[channel]; position[channel]=axis_abs;
         }
@@ -348,4 +358,5 @@ int main() {
         check(f.commits==0&&f.plc_act_pos[0]==before&&!f.planned_return.active(),"subsequent recovery presses never replay the old full-window return");
     }
     std::cout<<"PASS "<<assertions<<" assertions; return/recovery crossover in both directions and dual-leg returns\n";
+    return 0;
 }

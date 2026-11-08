@@ -52,6 +52,7 @@ namespace MasterConsole.Services
         private ulong _lastForceSequence;
         private bool _hasForceSequence;
         private long _lastHandshakeMs;
+        private long _lastRebuildMs = -1000;
         private bool _reportedConnected;
         private bool _authenticated;
         private long _statusCount;
@@ -116,13 +117,37 @@ namespace MasterConsole.Services
 
         public async Task ConnectAsync()
         {
-            ZenohSession session;
+            int rebuildDelay;
             lock (_lock)
             {
-                if (_zenoh != null) return;
+                if (_zenoh != null && _zenoh.IsAvailable) return;
+                rebuildDelay = _zenoh != null || _handleThread != null ? (int)Math.Max(0, 1000 - (NowMs - _lastRebuildMs)) : 0;
+            }
+            ReleaseClosedSession();
+            if (rebuildDelay > 0) await Task.Delay(rebuildDelay).ConfigureAwait(false);
+            ZenohSession session = OpenSession();
+            SendHello();
+            // 界面随后立即申请控制权，必须先等认证后的状态帧建立连接。
+            long started = NowMs;
+            while (!IsConnected)
+            {
+                if (_zenoh != session || !session.IsAvailable)
+                    throw new InvalidOperationException("等待 ADS 状态时 Zenoh 会话已断开。");
+                if (NowMs - started >= 10000)
+                    throw new TimeoutException("10 秒内未收到通过认证的 ADS 状态帧，请检查数据端程序及两端认证密钥。");
+                await Task.Delay(10).ConfigureAwait(false);
+            }
+        }
+
+        private ZenohSession OpenSession()
+        {
+            lock (_lock)
+            {
+                if (_zenoh != null) return _zenoh;
                 if (_cfg.Token == null || _cfg.Token.Length < 16) throw new InvalidOperationException("连接认证密钥缺失或长度不足。");
                 string endpoint = string.IsNullOrWhiteSpace(_cfg.Endpoint) ? "tcp/" + _cfg.Host + ":7447" : _cfg.Endpoint;
                 _initializing = true;
+                _lastRebuildMs = NowMs;
                 int generation = ++_callbackGeneration;
                 try
                 {
@@ -155,25 +180,42 @@ namespace MasterConsole.Services
                 _commandSequence = 0;
                 _acceptingCallbacks = true;
                 _initializing = false;
-                _cts = new CancellationTokenSource();
-                CancellationToken token = _cts.Token;
-                _handleThread = new Thread(() => HandleLoop(token)) { IsBackground = true, Name = "Zenoh-Handle-100Hz" };
-                _handleThread.Start();
-                session = _zenoh;
+                if (_handleThread == null)
+                {
+                    _cts = new CancellationTokenSource();
+                    CancellationToken token = _cts.Token;
+                    _handleThread = new Thread(() => HandleLoop(token)) { IsBackground = true, Name = "Zenoh-Handle-100Hz" };
+                    _handleThread.Start();
+                }
+                return _zenoh;
             }
+        }
+
+        private void SendHello()
+        {
             SendCommand(ZenohCommand.Hello, 0, 0, 0, 0, "", _nonceClient, null, null, 0);
             Log("info", "已打开 Zenoh 会话，等待 ADS 状态帧。");
             ConnectionChanged?.Invoke(this, EventArgs.Empty);
-            // 界面随后立即申请控制权，必须先等认证后的状态帧建立连接。
-            long started = NowMs;
-            while (!IsConnected)
+        }
+
+        private void ReleaseClosedSession()
+        {
+            ZenohSession old;
+            lock (_lock)
             {
-                if (_zenoh != session || !session.IsAvailable)
-                    throw new InvalidOperationException("等待 ADS 状态时 Zenoh 会话已断开。");
-                if (NowMs - started >= 10000)
-                    throw new TimeoutException("10 秒内未收到通过认证的 ADS 状态帧，请检查数据端程序及两端认证密钥。");
-                await Task.Delay(10).ConfigureAwait(false);
+                old = _zenoh;
+                if (old == null || old.IsAvailable) return;
+                _acceptingCallbacks = false;
+                ++_callbackGeneration;
+                ++_controlRequestGeneration;
+                _zenoh = null; _handlePublisher = null; _commandPublisher = null;
+                _authenticated = _hasControl = _forceGateOpen = false;
+                _inj1 = _inj2 = _axis4 = 0;
+                _handles?.ClearHaptic();
             }
+            // 释放会等待回调结束；回调需要主端锁，因此必须在锁外释放。
+            old.Dispose();
+            RejectPending("Zenoh 会话已关闭，命令不补发");
         }
 
         public void Disconnect() => Shutdown("链路已断开。", "warn");
@@ -276,6 +318,7 @@ namespace MasterConsole.Services
                     Handle582Online = _handles != null && _handles.IsOnline(0),
                     Handle587Online = _handles != null && _handles.IsOnline(1),
                     HandleSdkMissing = _handles != null && _handles.SdkMissing,
+                    HandleRecoveryText = (_handles as HandleService)?.RecoveryText ?? "",
                 };
             }
         }
@@ -430,7 +473,7 @@ namespace MasterConsole.Services
                 status = new StatusFrame
                 {
                     EchoTsMs = (uint)Math.Min(uint.MaxValue, f.EchoMainMonotonicMs), Flags = (StatusFlags)f.Flags,
-                    Mode = f.Mode, Phase = f.Phase, SelfCheckStatus = f.SelfCheckStatus, AdsState = f.AdsState,
+                    Mode = f.Mode, Phase = f.Phase, SelfCheckStatus = f.SelfCheckStatus, AdsState = f.AdsState, RecoveryText = f.EventText,
                     Cylinder1 = f.Cylinder1, Cylinder2 = f.Cylinder2, Cylinder3 = f.Cylinder3, Cylinder4 = f.Cylinder4,
                     CylinderManualMask = f.CylinderManualMask, InjectorActive1 = f.Injector1Direction,
                     InjectorActive2 = f.Injector2Direction, Axis4Active = f.Axis4Direction,
@@ -493,6 +536,17 @@ namespace MasterConsole.Services
 
         private void CheckConnection(long now)
         {
+            bool rebuild;
+            lock (_lock) rebuild = !_initializing && _handleThread != null &&
+                (_zenoh == null || !_zenoh.IsAvailable) && now - _lastRebuildMs >= 1000;
+            if (rebuild)
+            {
+                _lastRebuildMs = now;
+                ReleaseClosedSession();
+                try { OpenSession(); SendHello(); }
+                catch (InvalidOperationException ex) { Log("warn", "Zenoh 会话重建失败：" + ex.Message); }
+                return;
+            }
             byte[] nonce = null;
             bool reset = false;
             lock (_lock)

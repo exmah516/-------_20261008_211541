@@ -13,7 +13,7 @@
 namespace
 {
 	constexpr std::uint32_t kCommunicationRateHz = 100;
-	constexpr std::uint32_t kHardTimeoutMs = 300;
+	constexpr std::uint32_t kHardTimeoutMs = 1000;
 	constexpr std::uint32_t kDeviceStateCheckPeriodCycles = 10;
 	constexpr std::uint32_t kMaxStalledPlcSnapshots = 3;
 	constexpr std::size_t kSnapshotQueueCapacity = 2048;
@@ -213,10 +213,13 @@ bool AdsCommunicationService::start(const double* initial_init_pos, const double
 	try
 	{
 		worker_ = std::thread(&AdsCommunicationService::run, this);
+		low_frequency_worker_ = std::thread(&AdsCommunicationService::run_low_frequency, this);
 	}
 	catch (...)
 	{
 		running_.store(false, std::memory_order_release);
+		SetEvent(stop_event_);
+		if (worker_.joinable()) worker_.join();
 		return false;
 	}
 	return true;
@@ -230,6 +233,7 @@ void AdsCommunicationService::stop()
 	if (was_running && stop_event_ != nullptr) SetEvent(stop_event_);
 	if (was_running) snapshot_cv_.notify_all();
 	if (worker_.joinable()) worker_.join();
+	if (low_frequency_worker_.joinable()) low_frequency_worker_.join();
 	// worker退出后再由当前线程排空，避免两个消费者同时推进固定环形队列。
 	fail_queued_planned_return_commands();
 	unregister_notifications();
@@ -424,6 +428,7 @@ bool AdsCommunicationService::refresh_coordinates(DWORD timeout_ms)
 	std::copy(init_pos, init_pos + 7, init_pos_);
 	std::copy(leftlimit, leftlimit + 7, leftlimit_);
 	coordinate_cache_valid_ = true;
+	coordinate_refresh_generation_.fetch_add(1, std::memory_order_release);
 	return true;
 }
 
@@ -558,7 +563,7 @@ bool AdsCommunicationService::submit_low_frequency_request(
 	if (request == nullptr) return false;
 	{
 		std::lock_guard<std::mutex> stats_lock(stats_mutex_);
-		if (stats_.state != AdsConnectionState::Running) return false;
+		if (stats_.state != AdsConnectionState::Running && stats_.state != AdsConnectionState::SoftHold) return false;
 	}
 	try
 	{
@@ -571,56 +576,10 @@ bool AdsCommunicationService::submit_low_frequency_request(
 		return false;
 	}
 
-	std::unique_lock<std::mutex> request_lock(request->mutex);
-	const auto started_or_completed = [&]()
-	{
-		return request->started || request->completed;
-	};
-	bool signalled = false;
-	if (timeout_ms == INFINITE)
-	{
-		request->cv.wait(request_lock, started_or_completed);
-		signalled = true;
-	}
-	else
-	{
-		signalled = request->cv.wait_for(
-			request_lock,
-			std::chrono::milliseconds(timeout_ms),
-			started_or_completed);
-	}
-
-	if (!signalled && !request->started && !request->completed)
-	{
-		request_lock.unlock();
-		bool cancelled = false;
-		{
-			std::lock_guard<std::mutex> queue_lock(low_frequency_mutex_);
-			std::lock_guard<std::mutex> state_lock(request->mutex);
-			if (!request->started && !request->completed)
-			{
-				const auto it = std::find(
-					low_frequency_requests_.begin(), low_frequency_requests_.end(), request);
-				if (it != low_frequency_requests_.end())
-				{
-					low_frequency_requests_.erase(it);
-					request->cancelled = true;
-					request->completed = true;
-					request->success = false;
-					cancelled = true;
-				}
-			}
-		}
-		if (cancelled)
-		{
-			request->cv.notify_all();
-			return false;
-		}
-		request_lock.lock();
-	}
-
-	// 超时前已经开始的 ADS 请求必须等待完成，避免调用方缓冲区提前失效。
-	request->cv.wait(request_lock, [&]() { return request->completed; });
+    // 排队不能因SoftHold或慢通道占用而失败；仅断线、重启、停止会清失败队列。
+    (void)timeout_ms;
+    std::unique_lock<std::mutex> request_lock(request->mutex);
+    request->cv.wait(request_lock, [&]() { return request->completed; });
 	return request->success;
 }
 
@@ -901,13 +860,6 @@ void AdsCommunicationService::run()
 			}
 		}
 
-		if (coordinate_refresh_pending_.exchange(false, std::memory_order_acq_rel))
-		{
-			if (!refresh_coordinate_cache_now())
-			{
-				coordinate_refresh_pending_.store(true, std::memory_order_release);
-			}
-		}
 
 		bool device_state_ok = true;
 		if (++cycles_since_state_check >= kDeviceStateCheckPeriodCycles)
@@ -942,8 +894,6 @@ void AdsCommunicationService::run()
 		if (!device_state_ok)
 		{
 			record_failure("READ_DEVICE_STATE", ads_.GetLastErrorCopy());
-			fail_queued_low_frequency_requests();
-			fail_queued_planned_return_commands();
 			AdsFastSnapshot state_failure_snapshot{};
 			state_failure_snapshot.attempt_sequence = ++attempt_sequence_;
 			QueryPerformanceCounter(&now);
@@ -958,6 +908,8 @@ void AdsCommunicationService::run()
 			publish_snapshot(state_failure_snapshot);
 			if (hard_timeout)
 			{
+				fail_queued_planned_return_commands();
+				fail_queued_low_frequency_requests();
 				clear_runtime_connection_state();
 				ads_.CloseComm();
 				connection_initialized = false;
@@ -980,7 +932,7 @@ void AdsCommunicationService::run()
 		}
 		bool planned_return_processed = false;
 		const bool write_ok = read_ok && !restart_reconnect_pending_
-			? write_output_cycle(planned_return_processed)
+			? write_output_cycle(planned_return_processed, stats().state == AdsConnectionState::Running)
 			: false;
 		const bool cycle_ok = device_state_ok && read_ok && write_ok;
 		update_rate(snapshot.qpc_ticks, snapshot.rtt_us, cycle_ok);
@@ -1040,17 +992,11 @@ void AdsCommunicationService::run()
 		}
 		// 先提交状态再唤醒快照消费者，避免消费者看到“新快照 + 旧 Running 状态”。
 		publish_snapshot(snapshot);
-		if (process_low_frequency)
-		{
-			if (!planned_return_processed) process_one_low_frequency_request();
-		}
-		else
+
+		if (disconnect)
 		{
 			fail_queued_planned_return_commands();
 			fail_queued_low_frequency_requests();
-		}
-		if (disconnect)
-		{
 			clear_runtime_connection_state();
 			ads_.CloseComm();
 			connection_initialized = false;
@@ -1347,6 +1293,20 @@ bool AdsCommunicationService::resolve_fast_handles()
 	fast_direct_read_handles_[19] = init_pos;
 	fast_direct_read_handles_[20] = leftlimit;
 	fast_direct_read_handles_[21] = cycle;
+	const char* recovery_symbols[] = {
+        "G.return_cmd[1].Req", "G.return_cmd[6].Req", "G.return_cmd[1].Busy", "G.return_cmd[6].Busy",
+        "G.handle_reinit_done", "G.err_backoff_active", "G.err_backoff_failed",
+        "G.axis2_sync_error", "G.axis2_sync_error_id", "G.self_check_done"
+    };
+    for (std::size_t index = 0; index < _countof(recovery_symbols); ++index)
+    {
+        unsigned long handle = 0;
+        if (!required_handle(recovery_symbols[index], handle)) return false;
+        fast_direct_read_handles_[21 + index] = handle;
+        fast_fallback_read_handles_[15 + index] = handle;
+    }
+    fast_direct_read_handles_[31] = cycle;
+    fast_fallback_read_handles_[25] = cycle;
 	use_direct_nc_position_ = true;
 	for (int axis = 0; axis < 7; ++axis)
 	{
@@ -1451,8 +1411,8 @@ bool AdsCommunicationService::read_fast_snapshot(AdsFastSnapshot& snapshot, bool
 	QueryPerformanceCounter(&before);
 	double nc_absolute[7] = {};
 	double relative_fallback[7] = {};
-	std::array<unsigned long, 22> lengths{};
-	std::array<void*, 22> outputs{};
+	std::array<unsigned long, 32> lengths{};
+	std::array<void*, 32> outputs{};
 	auto read_snapshot = [&](const unsigned long* handles, bool direct_nc_position)
 	{
 		std::size_t count = 0;
@@ -1487,6 +1447,16 @@ bool AdsCommunicationService::read_fast_snapshot(AdsFastSnapshot& snapshot, bool
 		append(sizeof(snapshot.host_comm_timeout), &snapshot.host_comm_timeout);
 		append(sizeof(snapshot.init_pos), snapshot.init_pos);
 		append(sizeof(snapshot.leftlimit), snapshot.leftlimit);
+        append(sizeof(bool), &snapshot.return_req[0]);
+        append(sizeof(bool), &snapshot.return_req[1]);
+        append(sizeof(bool), &snapshot.return_busy[0]);
+        append(sizeof(bool), &snapshot.return_busy[1]);
+        append(sizeof(snapshot.handle_reinit_done), &snapshot.handle_reinit_done);
+        append(sizeof(snapshot.err_backoff_active), snapshot.err_backoff_active);
+        append(sizeof(snapshot.err_backoff_failed), snapshot.err_backoff_failed);
+        append(sizeof(snapshot.axis15_error), &snapshot.axis15_error);
+        append(sizeof(snapshot.axis15_error_id), &snapshot.axis15_error_id);
+        append(sizeof(snapshot.self_check_done), &snapshot.self_check_done);
 		append(sizeof(snapshot.plc_cycle_end), &snapshot.plc_cycle_end);
 		return ads_.ADSReadSumByHandle(
 			handles, lengths.data(), outputs.data(), static_cast<unsigned long>(count));
@@ -1506,10 +1476,6 @@ bool AdsCommunicationService::read_fast_snapshot(AdsFastSnapshot& snapshot, bool
 		return false;
 	}
 	snapshot.plc_cycle_span = snapshot.plc_cycle_end - snapshot.plc_cycle_begin;
-	{
-		std::lock_guard<std::mutex> lock(event_mutex_);
-		snapshot.self_check_done = event_state_.self_check_done;
-	}
 
 	bool positions_finite = true;
 	for (int axis = 0; axis < 7; ++axis)
@@ -1585,7 +1551,7 @@ bool AdsCommunicationService::read_fast_snapshot(AdsFastSnapshot& snapshot, bool
 	return snapshot.position_valid;
 }
 
-bool AdsCommunicationService::write_output_cycle(bool& planned_return_processed)
+bool AdsCommunicationService::write_output_cycle(bool& planned_return_processed, bool allow_planned_return)
 {
 	AdsOutputCommand output{};
 	AdsOutputCommand last_sent_output{};
@@ -1609,7 +1575,8 @@ bool AdsCommunicationService::write_output_cycle(bool& planned_return_processed)
 		planned_return_read_index_.load(std::memory_order_relaxed);
 	PlannedReturnQueueSlot planned_slot{};
 	bool has_planned_return = false;
-	for (;;)
+	// SoftHold先用核心读写完成一个成功周期，下一拍才消费尚未开始的专用命令。
+	for (; allow_planned_return; )
 	{
 		const std::uint64_t planned_write_index =
 			planned_return_write_index_.load(std::memory_order_acquire);
@@ -2059,6 +2026,7 @@ void AdsCommunicationService::clear_runtime_connection_state()
 
 void AdsCommunicationService::mark_plc_restart(bool reconnect_required)
 {
+	low_frequency_epoch_.fetch_add(1, std::memory_order_release);
 	const bool first_detection = !plc_restart_active_;
 	plc_restart_active_ = true;
 	restart_reconnect_pending_ = restart_reconnect_pending_ || reconnect_required;
@@ -2074,7 +2042,80 @@ void AdsCommunicationService::mark_plc_restart(bool reconnect_required)
 	}
 }
 
-void AdsCommunicationService::process_one_low_frequency_request()
+
+void AdsCommunicationService::run_low_frequency()
+{
+	std::uint64_t epoch = low_frequency_epoch_.load(std::memory_order_acquire);
+	ULONGLONG next_connect = 0;
+	unsigned int failures = 0;
+	while (running_.load(std::memory_order_acquire))
+	{
+		const auto current_epoch = low_frequency_epoch_.load(std::memory_order_acquire);
+		if (current_epoch != epoch)
+		{
+			low_frequency_ads_.CloseComm();
+			epoch = current_epoch;
+			failures = 0;
+		}
+		const auto state = stats().state;
+		if (state != AdsConnectionState::Running)
+		{
+			WaitForSingleObject(stop_event_, 1);
+			continue;
+		}
+		if (!low_frequency_ads_.IsCommOpen())
+		{
+			if (GetTickCount64() < next_connect)
+			{
+				WaitForSingleObject(stop_event_, 1);
+				continue;
+			}
+			next_connect = GetTickCount64() + kReconnectIntervalMs;
+			if (!low_frequency_ads_.SetTimeout(300)) continue;
+			// 沿用快通道既有路由选择；两个实例各自拥有AMS端口与句柄。
+			if (!low_frequency_ads_.OpenCommInsideReadOnly() && !low_frequency_ads_.OpenCommReadOnly()) continue;
+		}
+		if (coordinate_refresh_pending_.exchange(false, std::memory_order_acq_rel))
+		{
+			double init[7] = {}, left[7] = {};
+			const char* symbols[] = { AdsSymbol::init_pos, AdsSymbol::leftlimit };
+			const unsigned long sizes[] = { sizeof(init), sizeof(left) };
+			void* values[] = { init, left };
+			if (low_frequency_ads_.ADSReadSum(symbols, sizes, values, 2))
+			{
+				std::lock_guard<std::mutex> lock(coordinate_mutex_);
+				std::copy(init, init + 7, init_pos_);
+				std::copy(left, left + 7, leftlimit_);
+				coordinate_cache_valid_ = true;
+				coordinate_refresh_generation_.fetch_add(1, std::memory_order_release);
+                failures = 0;
+			}
+			else
+            {
+                coordinate_refresh_pending_.store(true, std::memory_order_release);
+                if (++failures >= 2)
+                {
+                    low_frequency_ads_.CloseComm();
+                    next_connect = GetTickCount64() + kReconnectIntervalMs;
+                    failures = 0;
+                    continue;
+                }
+            }
+		}
+		const int processed = process_one_low_frequency_request();
+		if (processed > 0) failures = 0;
+		else if (processed < 0 && ++failures >= 2)
+		{
+			low_frequency_ads_.CloseComm();
+			next_connect = GetTickCount64() + kReconnectIntervalMs;
+			failures = 0;
+		}
+		WaitForSingleObject(stop_event_, 1);
+	}
+	low_frequency_ads_.CloseComm();
+}
+
+int AdsCommunicationService::process_one_low_frequency_request()
 {
 	std::shared_ptr<LowFrequencyRequest> request;
 	{
@@ -2093,24 +2134,25 @@ void AdsCommunicationService::process_one_low_frequency_request()
 			break;
 		}
 	}
-	if (request == nullptr) return;
+	if (request == nullptr) return 0;
 	request->cv.notify_all();
 
+    const auto request_epoch = low_frequency_epoch_.load(std::memory_order_acquire);
 	bool success = false;
-	if (running_.load(std::memory_order_acquire) && ads_.IsCommOpen())
+	if (running_.load(std::memory_order_acquire) && low_frequency_ads_.IsCommOpen())
 	{
 		try
 		{
 			switch (request->operation)
 			{
 			case LowFrequencyOperation::Read:
-				success = ads_.ADSRead(
+				success = low_frequency_ads_.ADSRead(
 					request->symbols[0].c_str(),
 					request->lengths[0],
 					request->buffers[0].data());
 				break;
 			case LowFrequencyOperation::Write:
-				success = ads_.ADSWrite(
+				success = low_frequency_ads_.ADSWrite(
 					request->symbols[0].c_str(),
 					request->lengths[0],
 					request->buffers[0].data());
@@ -2124,7 +2166,7 @@ void AdsCommunicationService::process_one_low_frequency_request()
 					symbols[i] = request->symbols[i].c_str();
 					outputs[i] = request->buffers[i].data();
 				}
-				success = ads_.ADSReadSum(
+				success = low_frequency_ads_.ADSReadSum(
 					symbols.data(),
 					request->lengths.data(),
 					outputs.data(),
@@ -2140,7 +2182,7 @@ void AdsCommunicationService::process_one_low_frequency_request()
 					symbols[i] = request->symbols[i].c_str();
 					inputs[i] = request->buffers[i].data();
 				}
-				success = ads_.ADSWriteSum(
+				success = low_frequency_ads_.ADSWriteSum(
 					symbols.data(),
 					request->lengths.data(),
 					inputs.data(),
@@ -2154,13 +2196,14 @@ void AdsCommunicationService::process_one_low_frequency_request()
 			success = false;
 		}
 	}
-	if (!running_.load(std::memory_order_acquire)) success = false;
+    if (!running_.load(std::memory_order_acquire) || request_epoch != low_frequency_epoch_.load(std::memory_order_acquire)) success = false;
 	{
 		std::lock_guard<std::mutex> state_lock(request->mutex);
 		request->success = success;
 		request->completed = true;
 	}
 	request->cv.notify_all();
+	return success ? 1 : -1;
 }
 
 void AdsCommunicationService::fail_queued_low_frequency_requests()

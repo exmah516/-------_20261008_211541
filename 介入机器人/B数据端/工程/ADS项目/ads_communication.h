@@ -46,6 +46,11 @@ struct AdsFastSnapshot
 	short fn_1_value = 0;
 	short fn_2_value = 0;
 	short ft_2_value = 0;
+	bool return_req[2] = {}, return_busy[2] = {};
+	bool handle_reinit_done = false;
+	bool err_backoff_active[7] = {}, err_backoff_failed[7] = {};
+	bool axis15_error = false;
+	std::uint32_t axis15_error_id = 0;
 	bool estop_hold_req = false;
 	bool host_comm_timeout = false;
 	bool self_check_done = false; // 与本次快照绑定，避免断线清空通知缓存后产生伪边沿。
@@ -192,6 +197,7 @@ public:
 		std::uint8_t& possibly_started_mask) const;
 	void request_coordinate_refresh();
 	bool refresh_coordinates(DWORD timeout_ms = 250);
+	std::uint64_t coordinate_refresh_generation() const { return coordinate_refresh_generation_.load(std::memory_order_acquire); }
 	void request_watchdog_recovery();
 	bool read(const char* symbol, unsigned long length, void* output, DWORD timeout_ms = 250);
 	bool write(const char* symbol, unsigned long length, const void* input, DWORD timeout_ms = 250);
@@ -217,13 +223,14 @@ public:
 
 private:
 	void run();
+	void run_low_frequency();
 	bool ensure_connection(bool reconnecting);
 	bool initialize_connection();
 	bool resolve_fast_handles();
 	void clear_fast_handles();
 	bool refresh_coordinate_cache_now();
 	bool read_fast_snapshot(AdsFastSnapshot& snapshot, bool handles_fresh);
-	bool write_output_cycle(bool& planned_return_processed);
+	bool write_output_cycle(bool& planned_return_processed, bool allow_planned_return = true);
 	void fail_queued_planned_return_commands();
 	void complete_planned_return_command(
 		std::uint64_t sequence,
@@ -233,7 +240,7 @@ private:
 	void unregister_notifications();
 	void clear_runtime_connection_state();
 	void mark_plc_restart(bool reconnect_required);
-	void process_one_low_frequency_request();
+	int process_one_low_frequency_request();
 	void fail_queued_low_frequency_requests();
 	void publish_snapshot(const AdsFastSnapshot& snapshot);
 	void set_connection_state(AdsConnectionState state);
@@ -300,10 +307,13 @@ private:
 		DWORD timeout_ms);
 
 	CADSComm& ads_;
+	CADSComm low_frequency_ads_;
+	std::atomic<std::uint64_t> low_frequency_epoch_{ 0 };
 	mutable std::mutex lifecycle_mutex_;
 	std::atomic<bool> running_{ false };
 	HANDLE stop_event_ = nullptr;
 	std::thread worker_;
+	std::thread low_frequency_worker_;
 	std::int64_t qpc_frequency_ = 1;
 	std::uint32_t host_session_id_ = 1;
 	std::uint32_t heartbeat_sequence_ = 0;
@@ -350,9 +360,10 @@ private:
 	double leftlimit_[7] = {};
 	bool coordinate_cache_valid_ = false;
 	std::atomic<bool> coordinate_refresh_pending_{ false };
+	std::atomic<std::uint64_t> coordinate_refresh_generation_{ 0 };
 	bool use_direct_nc_position_ = true;
-	std::array<unsigned long, 22> fast_direct_read_handles_{};
-	std::array<unsigned long, 16> fast_fallback_read_handles_{};
+	std::array<unsigned long, 32> fast_direct_read_handles_{};
+	std::array<unsigned long, 26> fast_fallback_read_handles_{};
 	std::array<unsigned long, 16> fast_write_handles_{};
 	// 每行依次为 Req、TargetAbs、Velocity、Acc、Dec、Jerk；第0/1行为axis1/axis6。
 	std::array<std::array<unsigned long, kPlannedReturnFieldsPerAxis>, 2>

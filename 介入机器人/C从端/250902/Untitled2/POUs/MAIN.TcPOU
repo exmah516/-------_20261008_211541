@@ -24,6 +24,12 @@ VAR
 	host_heartbeat_changed : BOOL;
 	host_heartbeat_seen : BOOL;
 	i:INT;
+	last_dispatched_state : state := _init;
+	dispatched_state : state;
+	restore_ready : BOOL;
+	restore_pending : BOOL;
+	restore_disabled : BOOL;
+	restore_disable_error : BOOL;
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[FOR i:=1 TO 7 DO
@@ -111,10 +117,63 @@ IF G.gen_state <> _self_check THEN
 	G.selfcheck_status := 0;
 END_IF
 
+dispatched_state := G.gen_state;
 CASE G.gen_state OF
 	_init:			init_();
 	_self_check:
-		IF NOT selfcheck_started THEN
+        IF G.homing_restore_req THEN
+            G.homing_restore_req := FALSE;
+            G.homing_restore_status := 0;
+            G.homing_restore_reject_reason := 0;
+            restore_pending := TRUE;
+        END_IF
+        IF restore_pending THEN
+            restore_ready := NOT selfcheck_started AND NOT G.selfcheck_start_req;
+            restore_disabled := TRUE;
+            restore_disable_error := FALSE;
+            FOR i:=1 TO 7 DO
+                IF NOT G.power_output[i].Done OR G.axis[i].Status.Error OR G.axis[i].Status.DriveDeviceError
+                    OR G.power_output[i].Error OR G.reset_output[i].Error THEN restore_ready := FALSE; END_IF
+                G.SetPointGenEnable[i].Execute := FALSE;
+                G.SetPointGenDisable[i](Axis:=G.axis[i], Execute:=TRUE);
+                IF G.SetPointGenDisable[i].Error THEN restore_disable_error := TRUE; END_IF
+                IF NOT (G.SetPointGenDisable[i].Done OR NOT G.SetPointGenDisable[i].Enabled) THEN restore_disabled := FALSE; END_IF
+            END_FOR
+            IF NOT restore_ready OR restore_disable_error THEN
+                restore_pending := FALSE;
+                G.homing_restore_status := 2;
+                IF restore_disable_error THEN G.homing_restore_reject_reason := 2;
+                ELSE G.homing_restore_reject_reason := 1; END_IF
+                FOR i:=1 TO 7 DO G.SetPointGenDisable[i].Execute := FALSE; END_FOR
+            ELSE
+			IF restore_disabled THEN
+				G.leftlimit := G.homing_restore_leftlimit;
+				G.init_pos := G.homing_restore_init_pos;
+				G.cylinder1_value := 1000;
+				G.cylinder2_value := 150;
+				G.cylinder3_value := 1000;
+				G.cylinder4_value := 150;
+				G.self_check_done := TRUE;
+				G.startup_loading_ready := FALSE;
+				G.handle_reinit_req := TRUE;
+				FOR i:=1 TO 7 DO
+					G.SetPointGenDisable[i](Axis:=G.axis[i], Execute:=FALSE);
+					G.Act_pos[i] := G.axis[i].NcToPlc.ActPos - G.init_pos[i];
+					G.act_pos_from_left[i] := G.axis[i].NcToPlc.ActPos - G.leftlimit[i];
+					G.refer[i] := G.Act_pos[i];
+					G.ref_slow[i] := G.Act_pos[i];
+					G.act_h[i] := G.Act_pos[i];
+					G.act_hf[i] := G.Act_pos[i];
+					G.refer_from_left[i] := G.act_pos_from_left[i];
+				END_FOR
+				G.homing_restore_status := 1;
+				G.homing_restore_reject_reason := 0;
+				G.gen_state := _handle;
+				restore_pending := FALSE;
+                END_IF
+            END_IF
+        END_IF
+		IF (G.gen_state = _self_check) AND NOT selfcheck_started AND NOT restore_pending THEN
 			IF G.selfcheck_status <> 3 THEN G.selfcheck_status := 1; END_IF
 			IF G.selfcheck_start_req THEN
 				G.selfcheck_start_req := FALSE;
@@ -139,9 +198,10 @@ CASE G.gen_state OF
 	_handle:		handle1_();	
 		SETPOSITIONGEN();
 	_clear_err:		clear_err_();	
-	_err:			err_();	
+	_err:			err_(enter := last_dispatched_state <> _err);
 	_reset:			reset_();
-END_CASE]]></ST>
+END_CASE
+last_dispatched_state := dispatched_state;]]></ST>
     </Implementation>
     <Folder Name="block" Id="{8d2a06f7-1a45-482f-85f8-8678060c15b3}" />
     <Action Name="POWERED" Id="{98a6d293-ca3a-4d71-85c7-080c2df57892}" FolderPath="block\">

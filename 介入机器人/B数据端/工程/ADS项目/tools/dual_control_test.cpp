@@ -1,3 +1,5 @@
+#include "../return_recovery.h"
+static ReturnRecovery return_recovery;
 // 生产分支由run_offline_tests.cjs抽取，设备读写仅用内存替身。
 #include <algorithm>
 #include <array>
@@ -9,6 +11,9 @@
 using DWORD = unsigned long;
 using ULONGLONG = unsigned long long;
 enum class GuidewireMode { None, Independent };
+enum class ModeSelection { CatheterDelivery, CatheterRetraction, GuidewireDelivery, GuidewireRetraction };
+enum class ExperimentEventCode { ModeSwitch };
+static void record_experiment_event(ExperimentEventCode, int) {}
 enum class PlannedReturnMode { Dual, CatheterDelivery, CatheterRetraction };
 enum class PlannedReturnRebaseScope { Both };
 struct Config {

@@ -79,14 +79,14 @@ int main()
     check(a.fVels2[0] == 0.0 && a.fVels2[1] == 0.0, "stale sample velocity is not repeated during the gap");
     sa.joints[0] = 8.0f;
     put_sample(0, sa);
-    check(a.poll() && a.fJoints2[0] == 8.0 && a.take_rebase_request() && !a.take_rebase_request(),
-          "first fresh sample after a gap requests one current-position rebase");
+    check(a.poll() && a.fJoints2[0] == 8.0 && !a.take_rebase_request(),
+          "500 ms gap retains the existing baseline");
     {
         auto& st = detail::state();
         std::lock_guard<std::mutex> lock(st.m);
-        st.samples[0].rx_ms = GetTickCount64() - 3001;
+        st.samples[0].rx_ms = GetTickCount64() - 5001;
     }
-    check(!a.poll() && b.poll(), "a sample older than 3 seconds is still rejected per handle");
+    check(!a.poll() && b.poll(), "a sample older than 5 seconds is still rejected per handle");
     a.close();
     check(!a.is_open() && !a.poll() && a.buttons2 == 0 && a.encoders2[0] == 0 &&
           a.encoders2[1] == 0 && a.fJoints2[0] == 0.0 && a.fJoints2[1] == 0.0 &&
@@ -99,7 +99,39 @@ int main()
     put_sample(0, sa);
     check(a.init() && a.poll(), "a fresh sample allows reconnection");
     put_sample(0, Sample());
-    check(!a.poll(), "an invalid sample interrupts an opened handle");
+    check(a.poll(), "invalid=false preserves the latest valid sample and its timestamp");
+    for (ULONGLONG gap : {1000ULL, 1600ULL, 4000ULL, 6000ULL}) {
+        put_sample(0, sa);
+        a.close(); check(a.init() && a.poll(), "gap fixture is open");
+        auto& state = detail::state();
+        const ULONGLONG old = GetTickCount64() - gap;
+        { std::lock_guard<std::mutex> guard(state.m); state.samples[0].rx_ms = old; }
+        // 消费旧时刻模拟暂停前最后一次采样；再将缓存龄期推进到指定间隔。
+        a.clear_cache();
+        if (gap <= 5000) check(a.poll(), "1s/1.6s/4s gap remains connected");
+        else check(!a.poll(), "6s gap disconnects");
+        // last_sample_rx_ms_ 应保留暂停前的接收时刻；使用测试接收时刻代替墙钟等待。
+        if (gap > 5000) {
+            { std::lock_guard<std::mutex> guard(state.m); state.samples[0].rx_ms = GetTickCount64(); }
+            check(a.poll(), "6s gap can reconnect without process restart");
+        }
+        put_sample(0, sa);
+        if (gap <= 5000) check(a.poll() && a.take_rebase_request() == (gap > 1500), "rebase threshold is strictly greater than 1500ms");
+    }
+    put_sample(0, sa);
+    Sample retained;
+    check(get_sample(0, retained, 5000), "valid sample is present");
+    put_sample(0, Sample());
+    Sample after_invalid;
+    check(get_sample(0, after_invalid, 5000) && retained.rx_ms == after_invalid.rx_ms, "invalid frame cannot refresh receive time");
+    for(ULONGLONG age:{300ULL,6000ULL}) {
+        const auto before=GetTickCount64()-age;
+        { auto& state=detail::state(); std::lock_guard<std::mutex> guard(state.m); state.samples[0].rx_ms=before; }
+        put_sample(0,Sample());
+        check(a.poll()==(age==300),"R3 invalid frames for0.3s preserve connection and6s disconnect");
+        { auto& state=detail::state(); std::lock_guard<std::mutex> guard(state.m);
+          check(state.samples[0].rx_ms==before,"R3 invalid stream never makes cached sample fresh"); }
+    }
     a.close();
     a.close();
     a.setforce(8.0, 3.0);

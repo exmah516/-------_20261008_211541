@@ -6,7 +6,7 @@ namespace MasterConsole.Services
     /// <summary>
     /// FLCatheter.dll（手柄 SDK，x64）的原生调用。签名与 手柄/include/FLCatheter.h 一一对应：
     /// C++ 的 long 在 Windows x64 上是 32 位，因此编码器数组用 int[]；bool 是 1 字节。
-    /// DLL 由 VI.Service.Robot.csproj 复制到输出目录。
+    /// 仅由 VI.HandleHost 编译并调用，DLL 复制到独立宿主目录。
     /// </summary>
     internal static class FlCatheterNative
     {

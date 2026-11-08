@@ -58,7 +58,7 @@ namespace remote_handle_bridge
 	// ---- 采样：网关写入，Handle 读取 ----
 	inline void put_sample(int slot, Sample s)
 	{
-		if (slot < 0 || slot > 1) return;
+		if (slot < 0 || slot > 1 || !s.valid) return;
 		s.rx_ms = GetTickCount64();
 		auto& st = detail::state();
 		std::lock_guard<std::mutex> lock(st.m);

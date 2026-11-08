@@ -17,6 +17,7 @@ namespace MasterConsole.Protocol.Tests
         {
             try
             {
+                if (args.Length > 0 && args[0] == "--handle-host-stub") return HandleHostStub(args);
                 string fixtures = args.Length > 0 ? args[0] : FindFixtures();
                 byte[] key = ReadAuth(fixtures, "session_key");
                 Golden(fixtures, "handle", NewHandle(), key);
@@ -65,6 +66,7 @@ namespace MasterConsole.Protocol.Tests
                 Check("错误密钥拒绝", !ZenohWire.Verify(ZenohWire.Deserialize<HandleFrame>(frameBytes), wrongKey));
                 Check("空密钥拒绝", !ZenohWire.Verify(ZenohWire.Deserialize<HandleFrame>(frameBytes), new byte[0]));
                 RobotServiceTests();
+                HandleHostTests();
                 if (args.Contains("--network")) NetworkSmoke(args, key);
             }
             catch (Exception e)

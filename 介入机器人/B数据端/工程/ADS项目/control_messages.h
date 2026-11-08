@@ -146,6 +146,7 @@ struct VisState
 	std::uint32_t arm_cjog_error;
 	bool arm_cjog_limited;
 	double arm_cjog_path_speed;
+	char recovery_text[768];
 };
 #pragma pack(pop)
 
