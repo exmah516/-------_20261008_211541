@@ -1,0 +1,262 @@
+H old gap-only rebase
+HEAD B数据端/工程/ADS项目/手柄/手柄.cpp
+50: 	if (last_sample_rx_ms_ != 0 && sample.rx_ms > last_sample_rx_ms_ &&
+51: 		sample.rx_ms - last_sample_rx_ms_ > 1500)
+52: 	{
+53: 		sample_gap_ms_ = sample.rx_ms - last_sample_rx_ms_;
+54: 		rebase_requested_ = true;
+55: 	}
+
+H existing filter reset and N premature completion branch
+HEAD B数据端/工程/ADS项目/main.cpp
+1290: 		else if ((ads_soft_hold_active || handle_rebase_requested || (connection_hold_active_prev && initial_sync_done)) &&
+1291: 			!planned_return.active())
+1292: 		{
+1293: 			if (!handle_soft_hold_active)
+1294: 			{
+1295: 				axis1_handle_filter.reset(axis1_input_handle->fJoints2[0], axis1_input_handle->fJoints2[1]);
+1296: 				axis6_handle_filter.reset(axis6_input_handle->fJoints2[0], axis6_input_handle->fJoints2[1]);
+1297: 				axis1_prev_linear_filtered = axis1_handle_filter.axis0_filtered;
+1298: 				axis6_prev_linear_filtered = axis6_handle_filter.axis0_filtered;
+1299: 				axis1_prev_rot_filtered = axis1_handle_filter.axis1_filtered;
+1300: 				axis6_prev_rot_filtered = axis6_handle_filter.axis1_filtered;
+1301: 			}
+1302: 			load_pos_from_actual();
+1303: 			bool baseline_rebuilt = true;
+1304: 			// 首次连接只走下方 sync_all，禁止先用尚未初始化的旋转保持值写 refer。
+1305: 			// ADS 或手柄恢复时重建当前反馈基准，不追赶中断前的旋转目标。
+1306: 			if (!handle_soft_hold_active && initial_sync_done)
+1307: 			{
+1308: 				if (!single_handle_mode)
+1309: 				{
+1310: 					baseline_rebuilt = motion_sync::rebase_dual_after_return(ctx);
+1311: 				}
+1312: 				else if (guidewire_mode == GuidewireMode::Independent)
+1313: 				{
+1314: 					baseline_rebuilt = motion_sync::sync_axis6(ctx, 1, false, false, false);
+1315: 				}
+1316: 				else
+1317: 				{
+1318: 					baseline_rebuilt = motion_sync::sync_axis1(ctx, 1, false);
+1319: 				}
+1320: 			}
+1321:             const bool recovered_ads_snapshot = ads_soft_hold_active;
+1322: 			ads_soft_hold_active = !baseline_rebuilt;
+1323: 			if (baseline_rebuilt)
+1324: 			{
+1325: 				axis1_fast_return = false;
+1326: 				axis6_fast_retract = false;
+1327:                 if (recovered_ads_snapshot) recovery_event_text = "ADS 快照恢复";
+1328:                 else if (handle_rebase_requested)
+1329:                 {
+1330:                     std::ostringstream reason;
+1331:                     if (handle1_rebase_requested) reason << "手柄587采样间隔 " << handle_axis1.sample_gap_ms() << " ms 后重建；";
+1332:                     if (handle6_rebase_requested) reason << "手柄582采样间隔 " << handle_axis6.sample_gap_ms() << " ms 后重建；";
+1333:                     recovery_event_text = reason.str();
+1334:                 }
+1335:                 else recovery_event_text = "连接保持结束";
+1336:                 std::cout << recovery_event_text << "：实际位置与手柄基准已重建。" << std::endl;
+1337: 			}
+1338: 		}
+1339: 
+
+H real linear and rotational baselines
+CURRENT B数据端/工程/ADS项目/motion_sync.cpp
+225: 	bool rebase_dual_after_return(AppContext& ctx)
+226: 	{
+227: 		if (ctx.axis6_handle_filter == nullptr ||
+228: 			(!ctx.axis6_handle_filter->inited && ctx.axis6_input_handle == nullptr) ||
+229: 			ctx.axis6_prev_linear_filtered == nullptr || ctx.axis6_prev_rot_filtered == nullptr)
+230: 		{
+231: 			return false;
+232: 		}
+233: 		// axis1 侧基准、axis2/7 保持、axis3/5 镜像基准与 axis6 命令/窗口一并重建。
+234: 		if (!rebase_axis1_after_return(ctx)) return false;
+235: 
+236: 		if (!ctx.axis6_handle_filter->inited && ctx.axis6_input_handle != nullptr)
+237: 		{
+238: 			ctx.axis6_handle_filter->reset(
+239: 				ctx.axis6_input_handle->fJoints2[0],
+240: 				ctx.axis6_input_handle->fJoints2[1]);
+241: 		}
+242: 		ctx.axis6_crawl->handle_ref = ctx.axis6_handle_filter->axis0_filtered;
+243: 		ctx.axis6_crawl->rot_ref = ctx.axis6_handle_filter->axis1_filtered;
+244: 		*ctx.axis6_prev_linear_filtered = ctx.axis6_handle_filter->axis0_filtered;
+245: 		*ctx.axis6_prev_rot_filtered = ctx.axis6_handle_filter->axis1_filtered;
+246: 		ctx.axis6_crawl->base_rel = ctx.plc_act_pos[5];
+247: 		ctx.axis6_crawl->rot_base_rel = *ctx.axis7_hold_rel;
+248: 		return true;
+249: 	}
+250: 
+
+H SDK signature lacks length/wrap contract
+CURRENT A主端/工程/手柄/include/FLCatheter.h
+29: 	FLCATHETER_API void getJoints(double joints[], int id = 0);
+30: 	FLCATHETER_API void getEndFrame(double EndFrame[], int id = 0);
+31: 	FLCATHETER_API void getPositionAndAngle(double pos[], double& Angle, int id = 0);
+32: 	FLCATHETER_API void getPose(double rot[], int id = 0);
+33: 
+
+N local ADS route
+CURRENT B数据端/工程/ADS项目/ADSComm.cpp
+877: bool CADSComm::OpenCommLocalMode()
+878: {
+879: 	std::lock_guard<std::recursive_mutex> lock(m_mutex);
+880: 	if (m_adsPort > 0 || m_bOpen)
+881: 	{
+882: 		CloseComm();
+883: 	}
+884: 	ClearLastErrorLocked();
+885: 
+886: 	m_adsPort = AdsPortOpenEx();
+887: 	if (m_adsPort <= 0)
+888: 	{
+889: 		m_adsPort = 0;
+890: 		sprintf_s(m_lastError, sizeof(m_lastError), "Error: AdsPortOpenEx failed\n");
+891: 		return false;
+892: 	}
+893: 
+894: 	long nErr = AdsSyncSetTimeoutEx(m_adsPort, static_cast<long>(m_timeoutMs));
+895: 	if (nErr != 0)
+896: 	{
+897: 		sprintf_s(m_lastError, sizeof(m_lastError), "Error: AdsSyncSetTimeoutEx: %ld\n", nErr);
+898: 		AdsPortCloseEx(m_adsPort);
+899: 		m_adsPort = 0;
+900: 		return false;
+901: 	}
+902: 
+903: 	nErr = AdsGetLocalAddressEx(m_adsPort, m_PAmsAddr);
+904: 	if (nErr != 0)
+905: 	{
+906: 		sprintf_s(m_lastError, sizeof(m_lastError), "Error: AdsGetLocalAddressEx: %ld\n", nErr);
+907: 		AdsPortCloseEx(m_adsPort);
+908: 		m_adsPort = 0;
+909: 		return false;
+910: 	}
+911: 	m_PAmsAddr->port = 851;
+912: 
+913: 	unsigned short adsState = 0;
+914: 	unsigned short deviceState = 0;
+915: 	nErr = AdsSyncReadStateReqEx(m_adsPort, m_PAmsAddr, &adsState, &deviceState);
+916: 	if (nErr != 0)
+917: 	{
+918: 		sprintf_s(m_lastError, sizeof(m_lastError), "Error: AdsSyncReadStateReqEx: %ld\n", nErr);
+919: 		AdsPortCloseEx(m_adsPort);
+920: 		m_adsPort = 0;
+921: 		return false;
+922: 	}
+923: 	m_bOpen = true;
+924: 	ClearLastErrorLocked();
+925: 	return true;
+926: }
+927: 
+
+N remote ADS route
+CURRENT B数据端/工程/ADS项目/ADSComm.cpp
+820: bool CADSComm::OpenCommRemoteMode()
+821: {
+822: 	std::lock_guard<std::recursive_mutex> lock(m_mutex);
+823: 	if (m_adsPort > 0 || m_bOpen)
+824: 	{
+825: 		CloseComm();
+826: 	}
+827: 	ClearLastErrorLocked();
+828: 
+829: 	const AmsNetId remoteId = { 169, 254, 119, 135, 1, 1 };
+830: 	m_PAmsAddr->netId = remoteId;
+831: 	m_PAmsAddr->port = 851;
+832: 
+833: 	m_adsPort = AdsPortOpenEx();
+834: 	if (m_adsPort <= 0)
+835: 	{
+836: 		m_adsPort = 0;
+837: 		sprintf_s(m_lastError, sizeof(m_lastError), "Error: AdsPortOpenEx failed\n");
+838: 		return false;
+839: 	}
+840: 
+841: 	long nErr = AdsSyncSetTimeoutEx(m_adsPort, static_cast<long>(m_timeoutMs));
+842: 	if (nErr != 0)
+843: 	{
+844: 		sprintf_s(m_lastError, sizeof(m_lastError), "Error: AdsSyncSetTimeoutEx: %ld\n", nErr);
+845: 		AdsPortCloseEx(m_adsPort);
+846: 		m_adsPort = 0;
+847: 		return false;
+848: 	}
+849: 
+850: 	unsigned short adsState = 0;
+851: 	unsigned short deviceState = 0;
+852: 	nErr = AdsSyncReadStateReqEx(m_adsPort, m_PAmsAddr, &adsState, &deviceState);
+853: 	if (nErr != 0)
+854: 	{
+855: 		sprintf_s(m_lastError, sizeof(m_lastError), "Error: AdsSyncReadStateReqEx: %ld\n", nErr);
+856: 		AdsPortCloseEx(m_adsPort);
+857: 		m_adsPort = 0;
+858: 		return false;
+859: 	}
+860: 	m_bOpen = true;
+861: 	ClearLastErrorLocked();
+862: 	return true;
+863: }
+864: 
+
+N connection selection and RUN gate
+CURRENT B数据端/工程/ADS项目/ads_communication.cpp
+1015: bool AdsCommunicationService::ensure_connection(bool reconnecting)
+1016: {
+1017: 	// 服务只被动建立路由，禁止在后台把人工 STOP/故障 STOP 自动切回 RUN。
+1018: 	// 握手连接阶段使用 1000 ms 宽容超时
+1019: 	if (!ads_.SetTimeout(1000))
+1020: 	{
+1021: 		record_failure("SET_TIMEOUT", ads_.GetLastErrorCopy());
+1022: 		return false;
+1023: 	}
+1024: 	if (!ads_.IsCommOpen() && !ads_.OpenCommInsideReadOnly())
+1025: 	{
+1026: 		// 后备路由失败不能覆盖首次本地连接错误，两条路径分别保留。
+1027: 		const std::string local_failure = ads_.ConnectionDescription() + " " + ads_.GetLastErrorCopy();
+1028: 		if (!ads_.OpenCommReadOnly())
+1029: 		{
+1030: 			record_failure("CONNECT", "local={" + local_failure + "} fallback={" +
+1031: 				ads_.ConnectionDescription() + " " + ads_.GetLastErrorCopy() + "}");
+1032: 			return false;
+1033: 		}
+1034: 	}
+1035: 	unsigned short ads_state = ADSSTATE_INVALID;
+1036: 	unsigned short device_state = 0;
+1037: 	if (!ads_.ReadDeviceState(ads_state, device_state))
+1038: 	{
+1039: 		record_failure("CONNECT_STATE", ads_.GetLastErrorCopy());
+1040: 		clear_runtime_connection_state();
+1041: 		ads_.CloseComm();
+1042: 		return false;
+1043: 	}
+1044: 	if (ads_state != ADSSTATE_RUN)
+1045: 	{
+1046: 		record_failure("CONNECT_PLC_STATE", "ads_state=" + std::to_string(ads_state));
+1047: 		if (reconnecting) mark_plc_restart(false);
+1048: 		clear_runtime_connection_state();
+1049: 		ads_.CloseComm();
+1050: 		return false;
+1051: 	}
+1052: 	if (!initialize_connection())
+1053: 	{
+1054: 		record_failure("INITIALIZE", ads_.GetLastErrorCopy());
+1055: 		clear_runtime_connection_state();
+1056: 		ads_.CloseComm();
+1057: 		return false;
+1058: 	}
+1059: 	// 运行期允许单次 ADS 调用等待 300 ms，短时调度抖动不直接升级为断线。
+1060: 	if (!ads_.SetTimeout(300))
+1061: 	{
+1062: 		record_failure("SET_TIMEOUT", ads_.GetLastErrorCopy());
+1063: 		clear_runtime_connection_state();
+1064: 		ads_.CloseComm();
+1065: 		return false;
+1066: 	}
+1067: 	return true;
+1068: }
+1069: 
+
+Protocol existing v1 expansion convention
+HEAD B数据端/工程/ADS项目/protocol/PROTOCOL.md
+131: 末端点动状态沿用版本 1 的字段扩展惯例；主端和数据端须同步部署。严格解码只接受 55 项，不兼容旧长度。命令格式未改变。

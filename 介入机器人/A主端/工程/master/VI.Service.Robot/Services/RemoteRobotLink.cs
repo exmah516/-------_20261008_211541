@@ -414,7 +414,7 @@ namespace MasterConsole.Services
                                 Encoder587_1 = b.Encoder1, Joint587_0 = b.Joint0, Joint587_1 = b.Joint1,
                                 Velocity587_0 = b.Vel0, Velocity587_1 = b.Vel1,
                                 Injector1Direction = control.Injector1Dir, Injector2Direction = control.Injector2Dir,
-                                Axis4Direction = control.Axis4Dir, AuthTag = new byte[0]
+                                Axis4Direction = control.Axis4Dir, DeviceEpoch582 = a.DeviceEpoch, DeviceEpoch587 = b.DeviceEpoch, AuthTag = new byte[0]
                             };
                             frame.AuthTag = ZenohWire.Sign(frame, key);
                             publisher.Publish(frame);

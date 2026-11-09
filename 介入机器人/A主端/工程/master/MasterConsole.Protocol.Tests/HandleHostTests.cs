@@ -15,18 +15,21 @@ namespace MasterConsole.Protocol.Tests
             using var memory = new HandleHostMemory(args[1], false);
             var started = Stopwatch.StartNew();
             long sequence = 0;
+            ulong epochA = memory.NextDeviceEpoch(0), epochB = memory.NextDeviceEpoch(1);
             while (!memory.Stop)
             {
                 if (args[2] == "crash" && started.ElapsedMilliseconds > 250) return 42;
                 if (args[2] == "stall" && started.ElapsedMilliseconds > 250) Thread.Sleep(1500);
                 var sample = new HostSample { Valid = 1, Tick = Environment.TickCount64,
                     Sequence = ++sequence, Encoder0 = 582 };
-                memory.Write(HandleHostMemory.SampleOffset, new HostSamples { A = sample, B = sample });
+                memory.Write(HandleHostMemory.SampleOffset, new HostSamples { A = WithEpoch(sample, epochA), B = WithEpoch(sample, epochB) });
                 memory.Heartbeat = Environment.TickCount64;
                 Thread.Sleep(5);
             }
             return 0;
         }
+        private static HostSample WithEpoch(HostSample sample, ulong epoch)
+        { sample.DeviceEpoch = epoch; return sample; }
         private static void HandleHostTests()
         {
             foreach (string fault in new[] { "crash", "stall", "usb", "remove" })
@@ -45,6 +48,7 @@ namespace MasterConsole.Protocol.Tests
                 }, false);
                 service.Start();
                 Check("宿主替身启动采样 " + fault, HostWait(() => service.GetSample(0).Valid, 3000));
+                ulong epochBefore = service.GetSample(0).DeviceEpoch;
                 service.SetHaptic(0, new HapticOut { Enable = true, ForceN = 2, Axis = 1 });
                 if (fault == "usb" || fault == "remove")
                 {
@@ -52,6 +56,7 @@ namespace MasterConsole.Protocol.Tests
                     Check("拔插通知立即使两柄invalid " + fault, !service.GetSample(0).Valid && !service.GetSample(1).Valid);
                 }
                 Check("宿主自动重启并恢复采样 " + fault, HostWait(() => launches >= 2 && service.IsOnline(0) && service.IsOnline(1), 5000));
+                Check("宿主重启递增设备会话 " + fault, service.GetSample(0).DeviceEpoch == epochBefore + 1);
                 Check("宿主重启间隔至少1s " + fault, secondStart - firstStart >= 1000);
                 Console.WriteLine("V5替身 " + fault + " launch到双柄有效=" + (Environment.TickCount64 - secondStart) + "ms");
                 var watch = Stopwatch.StartNew();
@@ -101,6 +106,7 @@ namespace MasterConsole.Protocol.Tests
                 HostWait(() => values.ReadDouble(24) == 2, 1000);
                 service.SetHaptic(1, new HapticOut { Enable = true, Axis = 1, ForceN = 3, TorqueNm = .5f });
                 Check("V5拔出前双路非零力", HostWait(() => values.ReadDouble(24) == 2 && values.ReadDouble(56) == 3, 1000));
+                ulong nativeEpochA = service.GetSample(0).DeviceEpoch, nativeEpochB = service.GetSample(1).DeviceEpoch;
                 int beforeRestart = service.RestartCount;
                 var removedClock = Stopwatch.StartNew();
                 service.DeviceChanged(false);
@@ -110,6 +116,7 @@ namespace MasterConsole.Protocol.Tests
                 Console.WriteLine("V5拔出通知到双路清力=" + removedClock.Elapsed.TotalMilliseconds.ToString("F1") + "ms");
                 Check("V5真实宿主拔出通知重启恢复双柄", HostWait(() => service.RestartCount > beforeRestart && service.IsOnline(0) && service.IsOnline(1), 3000));
                 Console.WriteLine("V5真实宿主 remove launch到双柄有效=" + ((Stopwatch.GetTimestamp() - lastLaunch) * 1000.0 / Stopwatch.Frequency).ToString("F1") + "ms");
+                Check("H真实宿主重开两柄递增各自设备会话", service.GetSample(0).DeviceEpoch == nativeEpochA + 1 && service.GetSample(1).DeviceEpoch == nativeEpochB + 1);
                 Check("V5重启不补发拔出前或重启期间力", values.ReadDouble(24) == 0 && values.ReadDouble(56) == 0);
                 beforeRestart = service.RestartCount;
                 service.DeviceChanged(true);

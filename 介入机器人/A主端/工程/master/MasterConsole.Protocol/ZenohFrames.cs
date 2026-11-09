@@ -48,7 +48,9 @@ namespace MasterConsole.Protocol
         [Key(20)] public sbyte Injector1Direction { get; set; }
         [Key(21)] public sbyte Injector2Direction { get; set; }
         [Key(22)] public sbyte Axis4Direction { get; set; }
-        [Key(23)] public byte[] AuthTag { get; set; } = new byte[0];
+        [Key(23)] public ulong DeviceEpoch582 { get; set; }
+        [Key(24)] public ulong DeviceEpoch587 { get; set; }
+        [Key(25)] public byte[] AuthTag { get; set; } = new byte[0];
     }
 
     [MessagePackObject]

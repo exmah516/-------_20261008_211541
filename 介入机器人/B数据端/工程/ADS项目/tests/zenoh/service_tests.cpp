@@ -1,6 +1,7 @@
 #include <winsock2.h>
 #include <bcrypt.h>
 #include "zenoh_service.h"
+#include "手柄/remote_handle_bridge.h"
 #include <algorithm>
 #include <cassert>
 #include <iostream>
@@ -234,7 +235,11 @@ struct ZenohServiceTestAccess
         ZenohService service; initialize(service);
         vi_protocol::HandleFrame handle; handle.version = 1; handle.session_id = 41; handle.sequence = 10;
         handle.valid582 = handle.valid587 = true; handle.injector1_direction = 1;
+        handle.device_epoch582 = 7; handle.device_epoch587 = 9;
         handle.auth_tag = service.sign(handle); service.on_handle(handle);
+        remote_handle_bridge::Sample a, b;
+        assert(remote_handle_bridge::get_sample(0, a, 500) && a.device_epoch == 7);
+        assert(remote_handle_bridge::get_sample(1, b, 500) && b.device_epoch == 9);
         VisCommand control;
         assert(service.poll_command(control) && control.param2 == 1); service.command_processed();
         handle.injector1_direction = -1;

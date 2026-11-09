@@ -77,6 +77,11 @@ struct Fixture {
     }
 };
 int main() {
+    Fixture missing_handles;
+    missing_handles.handle_soft_hold_active = true;
+    for (int cycle = 0; cycle < 100; ++cycle) missing_handles.recover();
+    check(missing_handles.recovery_event_text.empty() && motion_sync::dual_calls == 0,
+          "missing handles cannot report a rebuilt baseline while connection hold is still active");
     Fixture repeated;
     repeated.planned_return.running = true;
     repeated.start();

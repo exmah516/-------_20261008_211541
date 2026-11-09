@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>主端界面预览（1/4 屏 1280×800）</title>
+<style>
+  body { margin: 0; padding: 24px; background: #C9D1D9; font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans SC', sans-serif; }
+  .screen { width: 1280px; height: 800px; box-sizing: border-box; padding: 12px 16px 14px; background: #EDF1F5; color: #0F1B2A; font-size: 13px;
+            display: flex; flex-direction: column; gap: 10px; box-shadow: 0 2px 12px rgba(15,27,42,.18); }
+  .card { background: #FFFFFF; border: 1px solid #D6DEE6; border-radius: 10px; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .grow { flex: 1; }
+  .label { font-size: 12px; font-weight: 600; letter-spacing: .08em; color: #4A5868; }
+  .hint { font-size: 12px; color: #5E6E7F; }
+  .mono { font-family: 'Cascadia Mono', Consolas, monospace; }
+  button { font: inherit; cursor: pointer; }
+  .btn { height: 32px; padding: 0 14px; background: #FFFFFF; border: 1px solid #B8C5D1; border-radius: 8px; color: #0F1B2A; }
+  .btn.primary { background: #0B6E99; border-color: #0B6E99; color: #FFFFFF; font-weight: 600; }
+  .btn.disabled { background: #F1F4F7; border-color: #D6DEE6; color: #8696A7; cursor: default; }
+  .toggle { height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 8px; background: #FFFFFF; border: 1px solid #B8C5D1; border-radius: 8px; color: #0F1B2A; white-space: nowrap; }
+  .toggle::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #B3BFCB; }
+  .toggle.on { background: #E4F1F8; border-color: #0B6E99; color: #0A4F70; font-weight: 600; }
+  .toggle.on::before { background: #0B6E99; }
+  .hold { height: 40px; background: #F5F7FA; border: 1px solid #A9B7C5; border-radius: 8px; color: #0F1B2A; font-size: 14px; font-weight: 600; }
+  .hold:active { background: #E4F1F8; border-color: #0B6E99; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 999px; font-size: 12px; background: #E7F4EC; }
+  .pill i { width: 8px; height: 8px; border-radius: 50%; background: #1E8A4C; }
+  .pill span { color: #5E6E7F; }
+  .pill b { color: #155E35; }
+  .dir { display: inline-flex; align-items: center; height: 32px; padding: 0 16px; border-radius: 8px; font-size: 15px; font-weight: 700; letter-spacing: .12em;
+         background: #E4F1F8; border: 1px solid #0B6E99; color: #0A4F70; }
+  .readout { background: #F6F8FA; border-radius: 8px; padding: 8px 10px; }
+  .readout .v { font-size: 28px; font-weight: 600; letter-spacing: -.01em; }
+  .divider { border-top: 1px solid #E6EBF0; }
+  input { width: 150px; height: 32px; box-sizing: border-box; padding: 0 10px; border: 1px solid #B8C5D1; border-radius: 7px; font-family: 'Cascadia Mono', Consolas, monospace; font-size: 14px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="screen">
+
+  <!-- 状态条 -->
+  <div class="card row" style="height: 52px; box-sizing: border-box; padding: 0 12px;">
+    <button class="btn" style="font-weight: 600;">断开</button>
+    <div style="width: 1px; height: 24px; background: #D6DEE6;"></div>
+    <span class="pill"><i></i><span>从端</span><b>已连接 · 已获控制权</b></span>
+    <span class="pill"><i></i><span>ADS</span><b>正常</b></span>
+    <span class="pill"><i></i><span>导丝手柄</span><b>在线</b></span>
+    <span class="pill"><i></i><span>导管手柄</span><b>在线</b></span>
+    <div class="grow"></div>
+    <span class="hint">阶段</span><b style="font-size: 14px; margin-right: 6px;">手柄控制中</b>
+    <span class="hint">方向</span><span class="dir">递送</span>
+  </div>
+
+  <!-- 提示行（仅有消息时出现） -->
+  <div class="row" style="height: 34px; box-sizing: border-box; padding: 0 12px; background: #FFF4DE; border: 1px solid #EFD39F; border-radius: 8px; color: #7A4A00;">
+    提示：导丝手柄采样中断后恢复，已在当前位置重建基准。
+  </div>
+
+  <div class="row" style="align-items: stretch; gap: 12px; flex: 1; min-height: 0;">
+
+    <!-- 左：操作区 -->
+    <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px;">
+
+      <!-- 器械准备（手动展开/收起） -->
+      <div class="card" style="padding: 8px 12px;">
+        <div class="row" style="height: 36px; gap: 12px;">
+          <span class="label">器械准备</span>
+          <span style="color: #4A5868;">导管旋捻机构 <b class="mono">28</b> mm · Y 阀及导丝机构 <b class="mono">610</b> mm</span>
+          <span style="color: #1E7A45; font-size: 12px;">已到达器械准备位置</span>
+          <div class="grow"></div>
+          <button class="btn disabled" style="height: 30px;">开始控制（手柄）</button>
+          <button class="btn" style="height: 30px; font-size: 12px;" onclick="document.getElementById('prep').classList.toggle('hidden'); this.textContent = this.textContent === '展开' ? '收起' : '展开';">展开</button>
+        </div>
+        <div id="prep" class="row hidden" style="align-items: flex-end; gap: 16px; padding: 8px 0 4px; margin-top: 6px; border-top: 1px solid #E6EBF0;">
+          <div style="display: flex; flex-direction: column; gap: 4px;"><span class="hint">导管旋捻机构位置（5–95 mm）</span><input value="28"></div>
+          <div style="display: flex; flex-direction: column; gap: 4px;"><span class="hint">Y 阀及导丝机构位置（10–639 mm）</span><input value="610"></div>
+          <button class="btn" style="border-color: #0B6E99; color: #0A4F70; font-weight: 600;">进入器械准备位置</button>
+        </div>
+      </div>
+
+      <!-- 力反馈与夹持 -->
+      <div class="row" style="height: 30px; padding: 0 2px;">
+        <span class="label">力反馈与夹持</span>
+        <div class="grow"></div>
+        <span class="hint">零点已采集</span>
+        <button class="btn" style="height: 30px;">取零点</button>
+        <button class="toggle" style="height: 30px;" onclick="this.classList.toggle('on')">开启保持</button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <!-- 导丝 -->
+        <div class="card" style="padding: 12px 14px; display: flex; flex-direction: column; gap: 10px;">
+          <div class="row"><b style="font-size: 16px;">导丝</b><div class="grow"></div><button class="toggle on" onclick="this.classList.toggle('on')">力反馈</button></div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="readout"><div class="hint">轴向力</div><span class="v mono">0.000</span> <span style="color:#4A5868;">N</span></div>
+            <div class="readout"><div class="hint">力矩</div><span class="v mono">0.000</span> <span style="color:#4A5868;">N·mm</span></div>
+          </div>
+          <div class="row divider" style="padding-top: 10px;">
+            <svg width="38" height="38" viewBox="0 0 38 38"><circle cx="19" cy="19" r="16" fill="none" stroke="#C9D3DD" stroke-width="2"/><line x1="19" y1="19" x2="19" y2="6" stroke="#0B6E99" stroke-width="2.4" stroke-linecap="round"/><circle cx="19" cy="19" r="2.4" fill="#0B6E99"/></svg>
+            <div><div class="hint">旋转角</div><div class="mono" style="font-size: 15px;">0.0°</div></div>
+            <div class="grow"></div>
+            <button class="toggle" onclick="this.classList.toggle('on')">导丝夹持</button>
+            <button class="toggle" onclick="this.classList.toggle('on')">导丝旋捻</button>
+          </div>
+        </div>
+        <!-- 导管 -->
+        <div class="card" style="padding: 12px 14px; display: flex; flex-direction: column; gap: 10px;">
+          <div class="row"><b style="font-size: 16px;">导管</b><div class="grow"></div><button class="toggle on" onclick="this.classList.toggle('on')">力反馈</button></div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="readout"><div class="hint">轴向力</div><span class="v mono">0.000</span> <span style="color:#4A5868;">N</span></div>
+            <div class="readout"><div class="hint">力矩</div><span class="v mono">0.000</span> <span style="color:#4A5868;">N·mm</span></div>
+          </div>
+          <div class="row divider" style="padding-top: 10px;">
+            <svg width="38" height="38" viewBox="0 0 38 38"><circle cx="19" cy="19" r="16" fill="none" stroke="#C9D3DD" stroke-width="2"/><line x1="19" y1="19" x2="19" y2="6" stroke="#0B6E99" stroke-width="2.4" stroke-linecap="round"/><circle cx="19" cy="19" r="2.4" fill="#0B6E99"/></svg>
+            <div><div class="hint">旋转角</div><div class="mono" style="font-size: 15px;">0.0°</div></div>
+            <div class="grow"></div>
+            <button class="toggle" onclick="this.classList.toggle('on')">导管夹持</button>
+            <button class="toggle" onclick="this.classList.toggle('on')">导管旋捻</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 器械辅助 -->
+      <div class="card" style="padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 8px;">
+        <div class="row" style="height: 32px;">
+          <span class="label">器械辅助</span><span class="hint">按住动作，松开即停</span>
+          <div class="grow"></div>
+          <span class="hint">Y 阀已打开</span>
+          <button class="toggle" style="height: 30px;" onclick="this.classList.toggle('on')">关闭 Y 阀</button>
+        </div>
+        <div style="display: grid; grid-template-columns: 128px 1fr 1fr 72px; gap: 10px; align-items: center;">
+          <b style="font-size: 14px;">球囊输送</b><button class="hold">后退</button><button class="hold">前进</button><span class="hint" style="text-align: right;">停止</span>
+          <span>注射器 1</span><button class="hold">推</button><button class="hold">拉</button><span class="hint" style="text-align: right;">停止</span>
+          <span>注射器 2</span><button class="hold">推</button><button class="hold">拉</button><span class="hint" style="text-align: right;">停止</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右：定位臂 -->
+    <div class="card" style="width: 384px; flex: none; padding: 12px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;">
+      <div class="row"><b style="font-size: 16px;">定位臂</b><span class="hint">定位臂命令待发送</span><div class="grow"></div><button class="toggle on" style="height: 30px;" onclick="this.classList.toggle('on')">总使能</button></div>
+      <div class="row">
+        <span class="hint" style="width: 32px;">速度</span>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; flex: 1; border: 1px solid #B8C5D1; border-radius: 8px; overflow: hidden;">
+          <button style="height: 32px; border: none; background: #FFFFFF;">快</button>
+          <button style="height: 32px; border: none; background: #0B6E99; color: #FFFFFF; font-weight: 600;">中</button>
+          <button style="height: 32px; border: none; background: #FFFFFF;">慢</button>
+        </div>
+      </div>
+      <div class="row" style="align-items: baseline; gap: 8px; margin-top: 2px;"><span class="label">末端点动</span><span class="hint">按住移动，松开即停</span></div>
+      <div style="display: grid; grid-template-columns: 56px 1fr 64px 64px; gap: 6px 8px; align-items: center;">
+        <b style="font-size: 14px;">X</b><span class="hint mono">15 mm/s</span><button class="hold" style="font-size: 18px;">−</button><button class="hold" style="font-size: 18px;">+</button>
+        <b style="font-size: 14px;">Y</b><span class="hint mono">15 mm/s</span><button class="hold" style="font-size: 18px;">−</button><button class="hold" style="font-size: 18px;">+</button>
+        <b style="font-size: 14px;">Z</b><span class="hint mono">2.5 mm/s</span><button class="hold" style="font-size: 18px;">−</button><button class="hold" style="font-size: 18px;">+</button>
+        <b style="font-size: 14px;">俯仰</b><span class="hint mono">0.8°/s</span><button class="hold" style="font-size: 18px;">−</button><button class="hold" style="font-size: 18px;">+</button>
+        <b style="font-size: 14px;">偏航</b><span class="hint mono">1.6°/s</span><button class="hold" style="font-size: 18px;">−</button><button class="hold" style="font-size: 18px;">+</button>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;"><button class="btn" style="height: 36px;">归零</button><button class="btn" style="height: 36px;">停止</button></div>
+      <div class="grow"></div>
+      <div class="divider" style="padding-top: 8px;">
+        <button class="label" style="background: none; border: none; padding: 0; height: 30px;" onclick="document.getElementById('dbg').classList.toggle('hidden'); this.textContent = this.textContent.startsWith('▸') ? '▾ 定位臂调试' : '▸ 定位臂调试';">▸ 定位臂调试</button>
+        <div id="dbg" class="hidden" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding-top: 6px;">
+          <div style="display:flex;flex-direction:column;gap:4px;"><span class="hint" style="text-align:center;">轴 1</span><button class="btn" style="height:28px;padding:0;">上电</button><button class="btn" style="height:28px;padding:0;">复位</button><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;"><button class="hold" style="height:28px;">−</button><button class="hold" style="height:28px;">+</button></div></div>
+          <div style="display:flex;flex-direction:column;gap:4px;"><span class="hint" style="text-align:center;">轴 2</span><button class="btn" style="height:28px;padding:0;">上电</button><button class="btn" style="height:28px;padding:0;">复位</button><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;"><button class="hold" style="height:28px;">−</button><button class="hold" style="height:28px;">+</button></div></div>
+          <div style="display:flex;flex-direction:column;gap:4px;"><span class="hint" style="text-align:center;">轴 3</span><button class="btn" style="height:28px;padding:0;">上电</button><button class="btn" style="height:28px;padding:0;">复位</button><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;"><button class="hold" style="height:28px;">−</button><button class="hold" style="height:28px;">+</button></div></div>
+          <div style="display:flex;flex-direction:column;gap:4px;"><span class="hint" style="text-align:center;">轴 4</span><button class="btn" style="height:28px;padding:0;">上电</button><button class="btn" style="height:28px;padding:0;">复位</button><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;"><button class="hold" style="height:28px;">−</button><button class="hold" style="height:28px;">+</button></div></div>
+          <div style="display:flex;flex-direction:column;gap:4px;"><span class="hint" style="text-align:center;">轴 5</span><button class="btn" style="height:28px;padding:0;">上电</button><button class="btn" style="height:28px;padding:0;">复位</button><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;"><button class="hold" style="height:28px;">−</button><button class="hold" style="height:28px;">+</button></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

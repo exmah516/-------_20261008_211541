@@ -1,0 +1,7 @@
+Current user message contains no readable HTML attachment.
+Search command: rg --files --hidden --no-ignore -g 主端界面预览.html -g *预览*.html
+Root: D:\Work_files\Vessel intervention Robot
+Exit: 1
+Results:
+
+Second permitted root file count: 0

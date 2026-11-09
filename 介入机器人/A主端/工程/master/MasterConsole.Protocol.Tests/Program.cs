@@ -21,6 +21,9 @@ namespace MasterConsole.Protocol.Tests
                 string fixtures = args.Length > 0 ? args[0] : FindFixtures();
                 byte[] key = ReadAuth(fixtures, "session_key");
                 Golden(fixtures, "handle", NewHandle(), key);
+                var epochFrame = NewHandle(); epochFrame.AuthTag = ZenohWire.Sign(epochFrame, key);
+                epochFrame.DeviceEpoch582++;
+                Check("设备会话号篡改使认证失效", !ZenohWire.Verify(epochFrame, key));
                 Golden(fixtures, "command", NewCommand(), key);
                 Golden(fixtures, "state", NewState(), key);
                 Golden(fixtures, "force", NewForce(), key);
@@ -113,7 +116,7 @@ namespace MasterConsole.Protocol.Tests
             Joint582_0 = .5f, Joint582_1 = -.25f, Velocity582_0 = 1.5f, Velocity582_1 = -2.5f,
             Buttons587 = 2, Valid587 = true, Encoder587_0 = -1, Encoder587_1 = 2,
             Joint587_0 = 1, Joint587_1 = 2, Velocity587_0 = 0, Velocity587_1 = .125f,
-            Injector1Direction = 1, Injector2Direction = -1, Axis4Direction = 0
+            Injector1Direction = 1, Injector2Direction = -1, Axis4Direction = 0, DeviceEpoch582 = 7, DeviceEpoch587 = 9
         };
         private static CommandFrame NewCommand() => new CommandFrame
         {

@@ -79,6 +79,7 @@ namespace
         f.buttons587 = 2; f.valid587 = true; f.encoder587_0 = -1; f.encoder587_1 = 2;
         f.joint587_0 = 1; f.joint587_1 = 2; f.velocity587_0 = 0; f.velocity587_1 = .125f;
         f.injector1_direction = 1; f.injector2_direction = -1; f.axis4_direction = 0;
+        f.device_epoch582 = 7; f.device_epoch587 = 9;
         return f;
     }
     vi_protocol::CommandFrame new_command()
@@ -131,6 +132,9 @@ int wmain(int argc, wchar_t** argv)
         material.insert(material.end(), nc.begin(), nc.end()); material.insert(material.end(), ns.begin(), ns.end());
         const auto key = hmac(token, material);
         golden(dir, "handle", new_handle(), key);
+        auto epoch_frame = new_handle(); epoch_frame.auth_tag = sign(epoch_frame, key);
+        ++epoch_frame.device_epoch582;
+        check("Device epoch participates in authentication", sign(epoch_frame, key) != epoch_frame.auth_tag);
         golden(dir, "command", new_command(), key);
         golden(dir, "state", new_state(), key);
         golden(dir, "force", new_force(), key);

@@ -28,6 +28,7 @@ namespace {
     std::atomic<std::uint32_t> cycle{10};
     std::atomic<bool> fail_read{false}, fail_transport{false}, stall{false}, nonfinite{false};
     std::atomic<bool> fail_read_once{false};
+    std::atomic<bool> network_down{false};
     std::atomic<unsigned int> single_read_failures{0};
     bool fail_local = false, fail_remote = false;
     std::string missing_symbol, nonfinite_velocity;
@@ -64,11 +65,11 @@ namespace {
 CADSComm::CADSComm() : m_PAmsAddr(nullptr), m_adsPort(0), m_bOpen(true), m_timeoutMs(300) {}
 CADSComm::~CADSComm() {}
 bool CADSComm::IsCommOpen() const { return m_bOpen; }
-bool CADSComm::OpenCommInsideReadOnly() { if (fail_local) { error = "LOCAL_READ_STATE 1861"; return false; } m_bOpen = true; return true; }
-bool CADSComm::OpenCommReadOnly() { if (fail_remote) { error = "REMOTE_READ_STATE 29"; return false; } m_bOpen = true; return true; }
+bool CADSComm::OpenCommInsideReadOnly() { if (fail_local || network_down) { error = "LOCAL_READ_STATE 1861"; return false; } m_bOpen = true; return true; }
+bool CADSComm::OpenCommReadOnly() { if (fail_remote || network_down) { error = "REMOTE_READ_STATE 29"; return false; } m_bOpen = true; return true; }
 bool CADSComm::CloseComm() { m_bOpen = false; ++closes; error.clear(); return true; }
 bool CADSComm::SetTimeout(unsigned long) { return true; }
-bool CADSComm::ReadDeviceState(unsigned short& a, unsigned short& d) { a = ADSSTATE_RUN; d = 0; return true; }
+bool CADSComm::ReadDeviceState(unsigned short& a, unsigned short& d) { if (network_down) { error = "READ_STATE 1861"; return false; } a = ADSSTATE_RUN; d = 0; return true; }
 std::string CADSComm::GetLastErrorCopy() const { return error; }
 std::string CADSComm::ConnectionDescription() const { return "target=offline:851 timeout_ms=300"; }
 unsigned long CADSComm::ADSGetAddr(const char* name) {
@@ -95,6 +96,7 @@ bool CADSComm::ADSWriteSum(const char* const*, const unsigned long*, const void*
 bool CADSComm::ADSAddNotification(const char* name, unsigned long size, PAdsNotificationFuncEx, std::uint32_t, unsigned long* h, ADSTRANSMODE, unsigned long, unsigned long) { validate_size(name, size); *h = next_handle++; return true; }
 bool CADSComm::ADSDeleteNotification(unsigned long) { return true; }
 bool CADSComm::ADSReadSumByHandle(const unsigned long* handles, const unsigned long* sizes, void* const* out, unsigned long count) {
+    if (network_down) { error = "network read timeout code=1861"; return false; }
     if (fail_read_once.exchange(false)) { ++single_read_failures; error = "injected single read failure"; return false; }
     if (fail_read) { error = "injected read timeout code=1861"; return false; }
     if (!stall) ++cycle;
@@ -111,8 +113,8 @@ bool CADSComm::ADSReadSumByHandle(const unsigned long* handles, const unsigned l
     error.clear(); return true;
 }
 bool CADSComm::ADSWriteSumByHandle(const unsigned long* handles, const unsigned long* sizes, const void* const* in, unsigned long count, unsigned long* results, bool* transport) {
-    *transport = !fail_transport;
-    if (fail_transport) { error = "injected write timeout code=1861"; return false; }
+    *transport = !fail_transport && !network_down;
+    if (!*transport) { error = "injected write timeout code=1861"; return false; }
     bool ok = true;
     for (unsigned long i = 0; i < count; ++i) {
         std::string s; { std::lock_guard<std::mutex> lock(symbols_mutex); s = symbols.at(handles[i]); }

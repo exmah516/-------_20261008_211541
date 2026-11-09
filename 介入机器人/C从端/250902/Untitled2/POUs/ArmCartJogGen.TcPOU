@@ -85,7 +85,7 @@ IF reanchor THEN
     END_IF
     wx := L1*SIN(anchor[2]*RAD)+L2*SIN((anchor[2]+anchor[3])*RAD+PI);
     wy := -L1*COS(anchor[2]*RAD)-L2*COS((anchor[2]+anchor[3])*RAD+PI);
-    psi0 := anchor[2]+anchor[3]+anchor[4]-90.0;
+    psi0 := anchor[2]+anchor[3]+anchor[4];
     d0x := TOOL_LATERAL_OFFSET_MM;
     d0y := -TOOL_LENGTH_MM*COS(anchor[5]*RAD);
     tcp0x := wx+d0x*COS(psi0*RAD)-d0y*SIN(psi0*RAD);

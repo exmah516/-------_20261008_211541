@@ -1064,7 +1064,6 @@ bool AdsCommunicationService::ensure_connection(bool reconnecting)
 		ads_.CloseComm();
 		return false;
 	}
-	std::cout << "[ADS-DIAG] connected " << ads_.ConnectionDescription() << std::endl;
 	return true;
 }
 
@@ -2038,8 +2037,8 @@ void AdsCommunicationService::mark_plc_restart(bool reconnect_required)
 	{
 		std::lock_guard<std::mutex> lock(stats_mutex_);
 		if (first_detection) ++stats_.plc_restart_count;
-		stats_.state = AdsConnectionState::PlcRestarted;
 	}
+	set_connection_state(AdsConnectionState::PlcRestarted);
 }
 
 
@@ -2262,6 +2261,12 @@ void AdsCommunicationService::record_failure(const char* operation, const std::s
 void AdsCommunicationService::set_connection_state(AdsConnectionState state)
 {
 	std::lock_guard<std::mutex> lock(stats_mutex_);
+	if (stats_.state == state) return;
+	std::cout << "[ADS-STATE] " << static_cast<int>(stats_.state) << " -> " << static_cast<int>(state)
+		<< " reason=" << (state == AdsConnectionState::Running ? "完整ADS读写成功" :
+			(state == AdsConnectionState::Disconnected ? "通信线程已停止" :
+				(stats_.diagnostic_sequence ? stats_.diagnostic : "建立ADS连接")))
+		<< " " << ads_.ConnectionDescription() << std::endl;
 	stats_.state = state;
 }
 

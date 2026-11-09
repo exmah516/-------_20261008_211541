@@ -1,0 +1,131 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="VI.Control.MainWindow" Title="血管介入机器人 · VI.Control" Width="1000" Height="900" MinWidth="600" MinHeight="560" WindowStartupLocation="Manual">
+    <Viewbox x:Name="DesignViewbox" Stretch="Uniform">
+        <Grid x:Name="DesignSurface" Width="1280" Height="800" Background="{StaticResource AppBackgroundBrush}" TextOptions.TextFormattingMode="Ideal">
+            <Grid Margin="16,12,16,14">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="52"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border x:Name="SimulationBanner" Background="#FFF4DE" BorderBrush="#EFD39F" BorderThickness="1" CornerRadius="8" Padding="12,7" Margin="0,0,0,10">
+                    <TextBlock x:Name="SimulationNotice" TextWrapping="Wrap" Foreground="#7A4A00" AutomationProperties.LiveSetting="Polite"/>
+                </Border>
+                <Border Grid.Row="1" Style="{StaticResource Card}" Padding="12,0">
+                    <DockPanel LastChildFill="True">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <TextBlock Text="阶段" Style="{StaticResource Hint}" Margin="0,0,10,0"/>
+                            <TextBlock Text="{Binding PhaseText}" FontSize="14" FontWeight="Bold" Margin="0,0,16,0"/>
+                            <TextBlock Text="方向" Style="{StaticResource Hint}" Margin="0,0,10,0"/>
+                            <Border Style="{StaticResource DirectionTag}" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding ModeText}" Style="{StaticResource DirectionText}"/>
+                            </Border>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="ConnectButton" Content="{Binding ConnectButtonText}" Command="{Binding ConnectCommand}" FontWeight="SemiBold" Margin="0,0,10,0"/>
+                            <Rectangle Width="1" Height="24" Fill="{StaticResource BorderBrush}" Margin="0,0,10,0"/>
+                            <Border x:Name="SlaveStatus" Style="{StaticResource StatusPill}" Tag="{Binding IsConnected}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Style="{StaticResource StatusDot}"/>
+                                    <TextBlock Text="从端" Style="{StaticResource Hint}"/>
+                                    <TextBlock x:Name="SlaveStatusText">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource StatusValue}">
+                                                <Setter Property="Text" Value="未连接"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                                        <Setter Property="Text" Value="已连接 · 无控制权"/>
+                                                    </DataTrigger>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding IsConnected}" Value="True"/>
+                                                            <Condition Binding="{Binding HasControl}" Value="True"/>
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter Property="Text" Value="已连接 · 已获控制权"/>
+                                                    </MultiDataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Border>
+                            <Border x:Name="AdsStatus" Style="{StaticResource StatusPill}" Tag="{Binding AdsHealthy}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Style="{StaticResource StatusDot}"/>
+                                    <TextBlock Text="ADS" Style="{StaticResource Hint}"/>
+                                    <TextBlock Text="{Binding AdsText}" Style="{StaticResource StatusValue}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border x:Name="WireHandleStatus" Style="{StaticResource StatusPill}" Tag="{Binding Handle582Online}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Style="{StaticResource StatusDot}"/>
+                                    <TextBlock Text="导丝手柄" Style="{StaticResource Hint}"/>
+                                    <TextBlock>
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource StatusValue}">
+                                                <Setter Property="Text" Value="离线"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Handle582Online}" Value="True">
+                                                        <Setter Property="Text" Value="在线"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Border>
+                            <Border x:Name="CatheterHandleStatus" Style="{StaticResource StatusPill}" Tag="{Binding Handle587Online}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Style="{StaticResource StatusDot}"/>
+                                    <TextBlock Text="导管手柄" Style="{StaticResource Hint}"/>
+                                    <TextBlock>
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource StatusValue}">
+                                                <Setter Property="Text" Value="离线"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Handle587Online}" Value="True">
+                                                        <Setter Property="Text" Value="在线"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+                <Border x:Name="HintRow" Grid.Row="2" MinHeight="34" Padding="12,6" Margin="0,10,0,0" Background="#FFF4DE" BorderBrush="#EFD39F" BorderThickness="1" CornerRadius="8">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Style.Triggers>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding OperateHintText}" Value=""/>
+                                        <Condition Binding="{Binding RecoveryText}" Value=""/>
+                                        <Condition Binding="{Binding LastWarning}" Value=""/>
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <WrapPanel>
+                        <TextBlock Text="{Binding OperateHintText}" Style="{StaticResource NonEmptyHint}"/>
+                        <TextBlock Text="{Binding RecoveryText}" Style="{StaticResource NonEmptyHint}" AutomationProperties.LiveSetting="Polite"/>
+                        <TextBlock Text="{Binding LastWarning}" Style="{StaticResource NonEmptyHint}" AutomationProperties.LiveSetting="Polite"/>
+                    </WrapPanel>
+                </Border>
+                <Grid Grid.Row="3" Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="384"/>
+                    </Grid.ColumnDefinitions>
+                    <ContentPresenter x:Name="InterventionContent"/>
+                    <ContentPresenter x:Name="PositioningArmContent" Grid.Column="2"/>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Viewbox>
+</Window>

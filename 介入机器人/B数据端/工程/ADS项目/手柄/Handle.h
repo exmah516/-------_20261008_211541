@@ -1,6 +1,9 @@
 #pragma once
 #include <windows.h>
+#include <cstdint>
 #define Rad  57.29577951308232
+
+inline constexpr ULONGLONG kHandleResumeSettleMs = 500;
 
 struct USERData
 {
@@ -27,6 +30,7 @@ public:
 	bool poll();
 	// 抖动恢复时通知主循环重建当前位置基准，避免追赶断流期间的手柄位移。
 	bool take_rebase_request() { const bool value = rebase_requested_; rebase_requested_ = false; return value; }
+	bool resume_settling() const { return resume_settling_; }
 
 	ULONGLONG sample_gap_ms() const { return sample_gap_ms_; }
 	ULONGLONG sample_age_ms() const { return last_sample_rx_ms_ == 0 ? 0 : GetTickCount64() - last_sample_rx_ms_; }
@@ -52,4 +56,9 @@ private:
 	ULONGLONG last_sample_rx_ms_ = 0;
 	bool rebase_requested_ = false;
 	ULONGLONG sample_gap_ms_ = 0;
+    bool opened_once_ = false;
+    bool device_epoch_known_ = false;
+    std::uint64_t device_epoch_ = 0;
+    bool resume_settling_ = false;
+    ULONGLONG resume_since_ms_ = 0;
 };

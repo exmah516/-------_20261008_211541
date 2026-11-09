@@ -21,6 +21,7 @@ namespace MasterConsole.Services
         private HostSamples _samples;
         private HostForces _forces;
         private long _sentSequenceA, _sentSequenceB;
+        private readonly ulong[] _deviceEpochs = new ulong[2];
         private string _status = "";
         internal int RestartCount { get; private set; }
 
@@ -129,6 +130,7 @@ namespace MasterConsole.Services
                         }
                         else if (!process.HasExited) process.Kill(true);
                         process.WaitForExit(); process.Dispose(); process = null;
+                        for (int slot = 0; slot < 2; ++slot) _deviceEpochs[slot] = memory.DeviceEpoch(slot);
                         memory.Dispose(); memory = null;
                     }
                     if (process == null && now - lastStart >= 1000)
@@ -136,6 +138,7 @@ namespace MasterConsole.Services
                         _restartRequested = false;
                         string name = "Local\\VI.HandleHost." + Guid.NewGuid().ToString("N");
                         memory = new HandleHostMemory(name, true);
+                        for (int slot = 0; slot < 2; ++slot) memory.SetDeviceEpoch(slot, _deviceEpochs[slot]);
                         lastStart = Environment.TickCount64;
                         try { process = _launch(name); ++RestartCount; }
                         catch (Win32Exception ex)
@@ -167,7 +170,11 @@ namespace MasterConsole.Services
                     if (!process.WaitForExit(1000)) { process.Kill(true); process.WaitForExit(); }
                     process.Dispose();
                 }
-                memory?.Dispose();
+                if (memory != null)
+                {
+                    for (int slot = 0; slot < 2; ++slot) _deviceEpochs[slot] = memory.DeviceEpoch(slot);
+                    memory.Dispose();
+                }
             }
         }
         public void Dispose() { lock (_lifecycleLock) { if (_disposed) return; Stop(); _disposed = true; } }

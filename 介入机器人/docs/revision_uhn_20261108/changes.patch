@@ -1,0 +1,1946 @@
+diff --git a/protocol/fixtures/zenoh-v1/README.md b/protocol/fixtures/zenoh-v1/README.md
+index 6f6249d3a577edbeea210607fff518abc9a26579..71b68af32a68ce34d9a98a5218f2a8b69211a03d 100644
+--- a/protocol/fixtures/zenoh-v1/README.md
++++ b/protocol/fixtures/zenoh-v1/README.md
+@@ -2,7 +2,7 @@
+ 
+ 本目录的 Hex 由独立 Python 编码器预制。C# 与 C++ 测试只读取样本，不在运行时生成预期值。
+ 
+-- handle.hex：顶层 24 字段，两个手柄各 8 字段完全扁平化。
++- handle.hex：顶层 26 字段，两个手柄各 8 字段完全扁平化，另带两只手柄各自的 ulong 设备会话号。
+ - command.hex：15 字段，UTF-8 文本和 float64 参数。
+ - state.hex：55 字段、float32 状态和轴6窗口边界、float64 净距离及末端点动速度、末端点动状态/错误/降速标志、两个任务与两项回执。
+ - force.hex：13 字段、float32 力/扭矩。
+diff --git a/protocol/fixtures/zenoh-v1/generate_vectors.py b/protocol/fixtures/zenoh-v1/generate_vectors.py
+index 25658f8f9a6f6e7923636b471a6da0ae0fbf4a81..ef50439b48d89d09a9e8c49e9a82d5e958aa0af8 100644
+--- a/protocol/fixtures/zenoh-v1/generate_vectors.py
++++ b/protocol/fixtures/zenoh-v1/generate_vectors.py
+@@ -52,7 +52,7 @@ sid = 0x1122334455667788
+ f = Float32
+ samples = {
+     "handle": [1, sid, 100, 123456, 5, True, 1234, -5678, f(.5), f(-.25), f(1.5), f(-2.5),
+-               2, True, -1, 2, f(1), f(2), f(0), f(.125), 1, -1, 0, b""],
++               2, True, -1, 2, f(1), f(2), f(0), f(.125), 1, -1, 0, 7, 9, b""],
+     "command": [1, sid, 101, 123457, 42, 4, -1, 2, 12.25, 125.5, "准备", b"", b"", b"", b""],
+     "state": [1, sid, 102, 2, ns, 123456, 913, 0, 1, 4, 2, 2000, 10, 2000, 10, 5, 1, -1, 0,
+               f(.25), f(.01), f(.5), f(-.02), f(.3), f(100),
+@@ -95,11 +95,16 @@ write("invalid_handle_nan", bad)
+ bad[8], bad[20] = f(.5), 2
+ write("invalid_handle_direction", bad)
+ bad = samples["handle"].copy()
+-bad[23] = "\x00" * 16
++bad[25] = "\x00" * 16
+ write("invalid_handle_string_tag", bad)
+ bad = samples["handle"].copy()
+ bad[4] = 256
+ write("invalid_handle_integer_range", bad)
++bad = samples["handle"].copy()
++bad[23] = -1
++write("invalid_handle_epoch_negative", bad)
++bad[23], bad[24] = 7, "9"
++write("invalid_handle_epoch_string", bad)
+ bad = samples["command"].copy()
+ bad[8] = f(12.25)
+ write("invalid_command_float32", bad)
+diff --git a/protocol/fixtures/zenoh-v1/handle.hex b/protocol/fixtures/zenoh-v1/handle.hex
+index 85dda7b5ca40b77da7a272ffa3ecacf9f8fb5e6e..737453cee936e8114a8506a3272a255b5f38cbd6 100644
+--- a/protocol/fixtures/zenoh-v1/handle.hex
++++ b/protocol/fixtures/zenoh-v1/handle.hex
+@@ -1 +1 @@
+-dc001801cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff00c410f2fe043f4c99ac140d7554631ee59eb1
++dc001a01cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff000709c4109eb1fdc645f6406c7cbb44f7ac10c30d
+diff --git a/protocol/fixtures/zenoh-v1/invalid_handle_auth.hex b/protocol/fixtures/zenoh-v1/invalid_handle_auth.hex
+index f048e470dbf8d22a1bd64ac4ad6ee4f78b1cd461..792358de8b09c98ab6014af2d461fcbdbfc7db7c 100644
+--- a/protocol/fixtures/zenoh-v1/invalid_handle_auth.hex
++++ b/protocol/fixtures/zenoh-v1/invalid_handle_auth.hex
+@@ -1 +1 @@
+-dc001801cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff00c40f000000000000000000000000000000
++dc001a01cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff000709c40f000000000000000000000000000000
+diff --git a/protocol/fixtures/zenoh-v1/invalid_handle_direction.hex b/protocol/fixtures/zenoh-v1/invalid_handle_direction.hex
+index d860b04f8445f09d707897a5f9a5bd8f3abd9d31..31aacd5bf5689a2873dc502c0432724f4e708fca 100644
+--- a/protocol/fixtures/zenoh-v1/invalid_handle_direction.hex
++++ b/protocol/fixtures/zenoh-v1/invalid_handle_direction.hex
+@@ -1 +1 @@
+-dc001801cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000002ff00c410f2fe043f4c99ac140d7554631ee59eb1
++dc001a01cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000002ff000709c4109eb1fdc645f6406c7cbb44f7ac10c30d
+diff --git a/protocol/fixtures/zenoh-v1/invalid_handle_float64.hex b/protocol/fixtures/zenoh-v1/invalid_handle_float64.hex
+index 29e265b471276def1197bff6943d91c6f5bacafd..c7c84e453bbe2cf5a91c36bec3e0bcdfcaca1b79 100644
+--- a/protocol/fixtures/zenoh-v1/invalid_handle_float64.hex
++++ b/protocol/fixtures/zenoh-v1/invalid_handle_float64.hex
+@@ -1 +1 @@
+-dc001801cf112233445566778864ce0001e24005c3cd04d2d1e9d2cb3fe0000000000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff00c410f2fe043f4c99ac140d7554631ee59eb1
++dc001a01cf112233445566778864ce0001e24005c3cd04d2d1e9d2cb3fe0000000000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff000709c4109eb1fdc645f6406c7cbb44f7ac10c30d
+diff --git a/protocol/fixtures/zenoh-v1/invalid_handle_integer_range.hex b/protocol/fixtures/zenoh-v1/invalid_handle_integer_range.hex
+index 57d3c87c0ca71fb02bfe130d10c638d62583f098..06386179efb454f32bf626dc69e627e8a7aa5027 100644
+--- a/protocol/fixtures/zenoh-v1/invalid_handle_integer_range.hex
++++ b/protocol/fixtures/zenoh-v1/invalid_handle_integer_range.hex
+@@ -1 +1 @@
+-dc001801cf112233445566778864ce0001e240cd0100c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff00c410f2fe043f4c99ac140d7554631ee59eb1
++dc001a01cf112233445566778864ce0001e240cd0100c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff000709c4109eb1fdc645f6406c7cbb44f7ac10c30d
+diff --git a/protocol/fixtures/zenoh-v1/invalid_handle_length.hex b/protocol/fixtures/zenoh-v1/invalid_handle_length.hex
+index 5b750a1f84dc121479cad4f33bd78649891c7266..9f077dbceefd79bb6e5e57d30d247f24ab48191c 100644
+--- a/protocol/fixtures/zenoh-v1/invalid_handle_length.hex
++++ b/protocol/fixtures/zenoh-v1/invalid_handle_length.hex
+@@ -1 +1 @@
+-dc001701cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff00
++dc001901cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff000709
+diff --git a/protocol/fixtures/zenoh-v1/invalid_handle_nan.hex b/protocol/fixtures/zenoh-v1/invalid_handle_nan.hex
+index baf5f0b2368752adfd72ed1e3d06e82b3bb38b7d..6a1fd16213f69e38417265194553b5c848b264b9 100644
+--- a/protocol/fixtures/zenoh-v1/invalid_handle_nan.hex
++++ b/protocol/fixtures/zenoh-v1/invalid_handle_nan.hex
+@@ -1 +1 @@
+-dc001801cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca7fc00000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff00c410f2fe043f4c99ac140d7554631ee59eb1
++dc001a01cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca7fc00000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff000709c4109eb1fdc645f6406c7cbb44f7ac10c30d
+diff --git a/protocol/fixtures/zenoh-v1/invalid_handle_string_tag.hex b/protocol/fixtures/zenoh-v1/invalid_handle_string_tag.hex
+index c107fe06d9fe085fe912bb874214fb89f8bbd065..b1524aad2ba737a8d3e10ecbfed48638fed1c904 100644
+--- a/protocol/fixtures/zenoh-v1/invalid_handle_string_tag.hex
++++ b/protocol/fixtures/zenoh-v1/invalid_handle_string_tag.hex
+@@ -1 +1 @@
+-dc001801cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff00b000000000000000000000000000000000
++dc001a01cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff000709b000000000000000000000000000000000
+diff --git a/protocol/fixtures/zenoh-v1/invalid_handle_trailing.hex b/protocol/fixtures/zenoh-v1/invalid_handle_trailing.hex
+index fc1154bbe54b70d959b43161814f6db66e644e74..ba5fc71d4bba910bd2b4696b9b2e9276ee89b11f 100644
+--- a/protocol/fixtures/zenoh-v1/invalid_handle_trailing.hex
++++ b/protocol/fixtures/zenoh-v1/invalid_handle_trailing.hex
+@@ -1 +1 @@
+-dc001801cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff00c410f2fe043f4c99ac140d7554631ee59eb100
++dc001a01cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff000709c4109eb1fdc645f6406c7cbb44f7ac10c30d00
+diff --git a/介入机器人/A主端/协议/PROTOCOL.md b/介入机器人/A主端/协议/PROTOCOL.md
+index 13486a858eaa60e7c4eff1ed2671225351ef5461..4518de065a03b90df6737d6047ca17bc5d10192b 100644
+--- a/介入机器人/A主端/协议/PROTOCOL.md
++++ b/介入机器人/A主端/协议/PROTOCOL.md
+@@ -19,7 +19,9 @@
+ 
+ 手柄按物理序列号 582、587 排列，每只 8 个字段直接放在顶层。关节/编码器/速度来自本机 SDK，轴向力单位 N，扭矩 N·m，位置及累计净距离 mm。
+ 
+-## HandleFrame（24 项）
++## HandleFrame（26 项）
++
++设备会话号按现有位置数组扩展惯例保留版本 1 和 Topic；严格解码仅接受 26 项，主端、VI.HandleHost 与数据端必须同步部署。会话号属于认证载荷，每只手柄成功重新打开时递增，主端监管器跨宿主重启保存计数。
+ 
+ | 索引 | 类型 | 字段 |
+ |---|---|---|
+@@ -46,7 +48,9 @@
+ | 20 | sbyte | Injector1Direction |
+ | 21 | sbyte | Injector2Direction |
+ | 22 | sbyte | Axis4Direction |
+-| 23 | byte[] | AuthTag |
++| 23 | ulong | DeviceEpoch582 |
++| 24 | ulong | DeviceEpoch587 |
++| 25 | byte[] | AuthTag |
+ 
+ ## CommandFrame（15 项）
+ 
+diff --git a/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/HandleHostTests.cs b/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/HandleHostTests.cs
+index d0c34f427169d7d2d7c811d4f8f8d32ae9a832e4..9afe216d2cd41525f375a1e9e5d4084075d464a9 100644
+--- a/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/HandleHostTests.cs
++++ b/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/HandleHostTests.cs
+@@ -15,18 +15,21 @@ namespace MasterConsole.Protocol.Tests
+             using var memory = new HandleHostMemory(args[1], false);
+             var started = Stopwatch.StartNew();
+             long sequence = 0;
++            ulong epochA = memory.NextDeviceEpoch(0), epochB = memory.NextDeviceEpoch(1);
+             while (!memory.Stop)
+             {
+                 if (args[2] == "crash" && started.ElapsedMilliseconds > 250) return 42;
+                 if (args[2] == "stall" && started.ElapsedMilliseconds > 250) Thread.Sleep(1500);
+                 var sample = new HostSample { Valid = 1, Tick = Environment.TickCount64,
+                     Sequence = ++sequence, Encoder0 = 582 };
+-                memory.Write(HandleHostMemory.SampleOffset, new HostSamples { A = sample, B = sample });
++                memory.Write(HandleHostMemory.SampleOffset, new HostSamples { A = WithEpoch(sample, epochA), B = WithEpoch(sample, epochB) });
+                 memory.Heartbeat = Environment.TickCount64;
+                 Thread.Sleep(5);
+             }
+             return 0;
+         }
++        private static HostSample WithEpoch(HostSample sample, ulong epoch)
++        { sample.DeviceEpoch = epoch; return sample; }
+         private static void HandleHostTests()
+         {
+             foreach (string fault in new[] { "crash", "stall", "usb", "remove" })
+@@ -45,6 +48,7 @@ namespace MasterConsole.Protocol.Tests
+                 }, false);
+                 service.Start();
+                 Check("宿主替身启动采样 " + fault, HostWait(() => service.GetSample(0).Valid, 3000));
++                ulong epochBefore = service.GetSample(0).DeviceEpoch;
+                 service.SetHaptic(0, new HapticOut { Enable = true, ForceN = 2, Axis = 1 });
+                 if (fault == "usb" || fault == "remove")
+                 {
+@@ -52,6 +56,7 @@ namespace MasterConsole.Protocol.Tests
+                     Check("拔插通知立即使两柄invalid " + fault, !service.GetSample(0).Valid && !service.GetSample(1).Valid);
+                 }
+                 Check("宿主自动重启并恢复采样 " + fault, HostWait(() => launches >= 2 && service.IsOnline(0) && service.IsOnline(1), 5000));
++                Check("宿主重启递增设备会话 " + fault, service.GetSample(0).DeviceEpoch == epochBefore + 1);
+                 Check("宿主重启间隔至少1s " + fault, secondStart - firstStart >= 1000);
+                 Console.WriteLine("V5替身 " + fault + " launch到双柄有效=" + (Environment.TickCount64 - secondStart) + "ms");
+                 var watch = Stopwatch.StartNew();
+@@ -101,6 +106,7 @@ namespace MasterConsole.Protocol.Tests
+                 HostWait(() => values.ReadDouble(24) == 2, 1000);
+                 service.SetHaptic(1, new HapticOut { Enable = true, Axis = 1, ForceN = 3, TorqueNm = .5f });
+                 Check("V5拔出前双路非零力", HostWait(() => values.ReadDouble(24) == 2 && values.ReadDouble(56) == 3, 1000));
++                ulong nativeEpochA = service.GetSample(0).DeviceEpoch, nativeEpochB = service.GetSample(1).DeviceEpoch;
+                 int beforeRestart = service.RestartCount;
+                 var removedClock = Stopwatch.StartNew();
+                 service.DeviceChanged(false);
+@@ -110,6 +116,7 @@ namespace MasterConsole.Protocol.Tests
+                 Console.WriteLine("V5拔出通知到双路清力=" + removedClock.Elapsed.TotalMilliseconds.ToString("F1") + "ms");
+                 Check("V5真实宿主拔出通知重启恢复双柄", HostWait(() => service.RestartCount > beforeRestart && service.IsOnline(0) && service.IsOnline(1), 3000));
+                 Console.WriteLine("V5真实宿主 remove launch到双柄有效=" + ((Stopwatch.GetTimestamp() - lastLaunch) * 1000.0 / Stopwatch.Frequency).ToString("F1") + "ms");
++                Check("H真实宿主重开两柄递增各自设备会话", service.GetSample(0).DeviceEpoch == nativeEpochA + 1 && service.GetSample(1).DeviceEpoch == nativeEpochB + 1);
+                 Check("V5重启不补发拔出前或重启期间力", values.ReadDouble(24) == 0 && values.ReadDouble(56) == 0);
+                 beforeRestart = service.RestartCount;
+                 service.DeviceChanged(true);
+diff --git a/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/Program.cs b/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/Program.cs
+index b23120cbf52b8f51cc7dafeba040719eaa9fe607..850c8d03db1170b3860585c9948548cff7e478bf 100644
+--- a/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/Program.cs
++++ b/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/Program.cs
+@@ -21,6 +21,9 @@ namespace MasterConsole.Protocol.Tests
+                 string fixtures = args.Length > 0 ? args[0] : FindFixtures();
+                 byte[] key = ReadAuth(fixtures, "session_key");
+                 Golden(fixtures, "handle", NewHandle(), key);
++                var epochFrame = NewHandle(); epochFrame.AuthTag = ZenohWire.Sign(epochFrame, key);
++                epochFrame.DeviceEpoch582++;
++                Check("设备会话号篡改使认证失效", !ZenohWire.Verify(epochFrame, key));
+                 Golden(fixtures, "command", NewCommand(), key);
+                 Golden(fixtures, "state", NewState(), key);
+                 Golden(fixtures, "force", NewForce(), key);
+@@ -113,7 +116,7 @@ namespace MasterConsole.Protocol.Tests
+             Joint582_0 = .5f, Joint582_1 = -.25f, Velocity582_0 = 1.5f, Velocity582_1 = -2.5f,
+             Buttons587 = 2, Valid587 = true, Encoder587_0 = -1, Encoder587_1 = 2,
+             Joint587_0 = 1, Joint587_1 = 2, Velocity587_0 = 0, Velocity587_1 = .125f,
+-            Injector1Direction = 1, Injector2Direction = -1, Axis4Direction = 0
++            Injector1Direction = 1, Injector2Direction = -1, Axis4Direction = 0, DeviceEpoch582 = 7, DeviceEpoch587 = 9
+         };
+         private static CommandFrame NewCommand() => new CommandFrame
+         {
+diff --git a/介入机器人/A主端/工程/master/MasterConsole.Protocol/Frames.cs b/介入机器人/A主端/工程/master/MasterConsole.Protocol/Frames.cs
+index ca9a25fcbddc764898b3a2d7cda54efe1f2dfc79..81b4067b13c5b547834fa63229904bf29f5cef35 100644
+--- a/介入机器人/A主端/工程/master/MasterConsole.Protocol/Frames.cs
++++ b/介入机器人/A主端/工程/master/MasterConsole.Protocol/Frames.cs
+@@ -5,6 +5,7 @@ namespace MasterConsole.Protocol
+     {
+         public byte Buttons;
+         public bool Valid;
++        public ulong DeviceEpoch;
+         public int Encoder0, Encoder1;
+         public float Joint0, Joint1;
+         public float Vel0, Vel1;
+diff --git a/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohFrames.cs b/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohFrames.cs
+index 6e0e14267d9e2fa86d40b78a395edac488326a78..9f8bba5ceba167f1c9f12ac2f703d1cc257261e4 100644
+--- a/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohFrames.cs
++++ b/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohFrames.cs
+@@ -48,7 +48,9 @@ namespace MasterConsole.Protocol
+         [Key(20)] public sbyte Injector1Direction { get; set; }
+         [Key(21)] public sbyte Injector2Direction { get; set; }
+         [Key(22)] public sbyte Axis4Direction { get; set; }
+-        [Key(23)] public byte[] AuthTag { get; set; } = new byte[0];
++        [Key(23)] public ulong DeviceEpoch582 { get; set; }
++        [Key(24)] public ulong DeviceEpoch587 { get; set; }
++        [Key(25)] public byte[] AuthTag { get; set; } = new byte[0];
+     }
+ 
+     [MessagePackObject]
+diff --git a/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohWire.cs b/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohWire.cs
+index 43a4c226ec37741636be88fa058bc917efc49345..c6b66c98ba78d6b1fba679509cb480d3297b11ab 100644
+--- a/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohWire.cs
++++ b/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohWire.cs
+@@ -67,7 +67,7 @@ namespace MasterConsole.Protocol
+         {
+             if (bytes == null || bytes.Length == 0 || bytes.Length > 65536) throw Invalid("载荷长度错误");
+             string schema;
+-            if (typeof(T) == typeof(HandleFrame)) schema = "bqqqbBiiffffbBiiffffsssx";
++            if (typeof(T) == typeof(HandleFrame)) schema = "bqqqbBiiffffbBiiffffsssqqx";
+             else if (typeof(T) == typeof(CommandFrame)) schema = "bqqqibiiddtxxxx";
+             else if (typeof(T) == typeof(StateFrame)) schema = "bqqbxquiiii" + "hhhhbsss" + "ffffffffffffffffffff" + "Bdd" + "bibi" + "rtffuuBdx";
+             else if (typeof(T) == typeof(ForceFrame)) schema = "bqqqBsffBsffx";
+diff --git a/介入机器人/A主端/工程/master/VI.HandleHost/Program.cs b/介入机器人/A主端/工程/master/VI.HandleHost/Program.cs
+index a3b709be6ca9b26c0378a2b402b0ad4a58dfc195..7805281747cce411fe4d88cc1eb35656597e115a 100644
+--- a/介入机器人/A主端/工程/master/VI.HandleHost/Program.cs
++++ b/介入机器人/A主端/工程/master/VI.HandleHost/Program.cs
+@@ -12,6 +12,7 @@ internal static class Program
+     private sealed class Device
+     {
+         internal uint Serial;
++        internal ulong DeviceEpoch;
+         internal int Id = -1;
+         internal long NextOpen, Sequence, LastZero;
+         internal bool Nonzero;
+@@ -42,6 +43,7 @@ internal static class Program
+                         d.Id = FlCatheterNative.openDevice(d.Serial);
+                         if (d.Id >= 0)
+                         {
++                            d.DeviceEpoch = memory.NextDeviceEpoch(i);
+                             if (!servoStarted) { FlCatheterNative.startServoLoop(Servo, IntPtr.Zero); servoStarted = true; }
+                             FlCatheterNative.enableForces(true, d.Id);
+                         }
+@@ -57,7 +59,7 @@ internal static class Program
+                             FlCatheterNative.getJoints(d.Joints, d.Id);
+                             FlCatheterNative.getEncoders(d.Encoders, d.Id);
+                             FlCatheterNative.getSwitch(out byte buttons, d.Id);
+-                            sample = new HostSample { Valid = 1, Tick = now, Sequence = ++d.Sequence, Buttons = buttons,
++                            sample = new HostSample { Valid = 1, DeviceEpoch = d.DeviceEpoch, Tick = now, Sequence = ++d.Sequence, Buttons = buttons,
+                                 Encoder0 = d.Encoders[0], Encoder1 = d.Encoders[1], Joint0 = (float)d.Joints[0], Joint1 = (float)d.Joints[1],
+                                 Vel0 = (float)d.Velocity[0], Vel1 = (float)d.Velocity[1] };
+                         }
+diff --git a/介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleHostMemory.cs b/介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleHostMemory.cs
+index a0bd43ac437f47be76f544895c789b076c367eda..102a3793e9f0e28a9c578ae0fe1911328729e5f0 100644
+--- a/介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleHostMemory.cs
++++ b/介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleHostMemory.cs
+@@ -17,6 +17,14 @@ namespace MasterConsole.Services
+             _file = create ? MemoryMappedFile.CreateNew(name, 1024) : MemoryMappedFile.OpenExisting(name);
+             _view = _file.CreateViewAccessor();
+         }
++        internal ulong DeviceEpoch(int slot) => _view.ReadUInt64(16 + slot * 8);
++        internal void SetDeviceEpoch(int slot, ulong epoch) => _view.Write(16 + slot * 8, epoch);
++        internal ulong NextDeviceEpoch(int slot)
++        {
++            ulong epoch = DeviceEpoch(slot) + 1;
++            SetDeviceEpoch(slot, epoch);
++            return epoch;
++        }
+         internal long Heartbeat { get => _view.ReadInt64(0); set => _view.Write(0, value); }
+         internal int Error { get => _view.ReadInt32(8); set => _view.Write(8, value); }
+         internal bool Stop { get => _view.ReadInt32(12) != 0; set => _view.Write(12, value ? 1 : 0); }
+@@ -43,9 +51,10 @@ namespace MasterConsole.Services
+     internal struct HostSample
+     {
+         internal long Sequence, Tick;
++        internal ulong DeviceEpoch;
+         internal int Valid, Buttons, Encoder0, Encoder1;
+         internal float Joint0, Joint1, Vel0, Vel1;
+-        internal HandleSample Sample => new HandleSample { Valid = Valid != 0, Buttons = (byte)Buttons,
++        internal HandleSample Sample => new HandleSample { Valid = Valid != 0, DeviceEpoch = DeviceEpoch, Buttons = (byte)Buttons,
+             Encoder0 = Encoder0, Encoder1 = Encoder1, Joint0 = Joint0, Joint1 = Joint1, Vel0 = Vel0, Vel1 = Vel1 };
+     }
+     [StructLayout(LayoutKind.Sequential)]
+diff --git a/介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleService.cs b/介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleService.cs
+index 3436fbe1da0669b3b444292b7e8504c2b748b512..4504d56c64917432f33db2b256d8223f2d1fa122 100644
+--- a/介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleService.cs
++++ b/介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleService.cs
+@@ -21,6 +21,7 @@ namespace MasterConsole.Services
+         private HostSamples _samples;
+         private HostForces _forces;
+         private long _sentSequenceA, _sentSequenceB;
++        private readonly ulong[] _deviceEpochs = new ulong[2];
+         private string _status = "";
+         internal int RestartCount { get; private set; }
+ 
+@@ -129,6 +130,7 @@ namespace MasterConsole.Services
+                         }
+                         else if (!process.HasExited) process.Kill(true);
+                         process.WaitForExit(); process.Dispose(); process = null;
++                        for (int slot = 0; slot < 2; ++slot) _deviceEpochs[slot] = memory.DeviceEpoch(slot);
+                         memory.Dispose(); memory = null;
+                     }
+                     if (process == null && now - lastStart >= 1000)
+@@ -136,6 +138,7 @@ namespace MasterConsole.Services
+                         _restartRequested = false;
+                         string name = "Local\\VI.HandleHost." + Guid.NewGuid().ToString("N");
+                         memory = new HandleHostMemory(name, true);
++                        for (int slot = 0; slot < 2; ++slot) memory.SetDeviceEpoch(slot, _deviceEpochs[slot]);
+                         lastStart = Environment.TickCount64;
+                         try { process = _launch(name); ++RestartCount; }
+                         catch (Win32Exception ex)
+@@ -167,7 +170,11 @@ namespace MasterConsole.Services
+                     if (!process.WaitForExit(1000)) { process.Kill(true); process.WaitForExit(); }
+                     process.Dispose();
+                 }
+-                memory?.Dispose();
++                if (memory != null)
++                {
++                    for (int slot = 0; slot < 2; ++slot) _deviceEpochs[slot] = memory.DeviceEpoch(slot);
++                    memory.Dispose();
++                }
+             }
+         }
+         public void Dispose() { lock (_lifecycleLock) { if (_disposed) return; Stop(); _disposed = true; } }
+diff --git a/介入机器人/A主端/工程/master/VI.Service.Robot/Services/RemoteRobotLink.cs b/介入机器人/A主端/工程/master/VI.Service.Robot/Services/RemoteRobotLink.cs
+index 30b0995dfa7a02a98825bbe0ec1cdae4575376f7..5f37a939ab95e93f80a6e48e8574264fd7de1f50 100644
+--- a/介入机器人/A主端/工程/master/VI.Service.Robot/Services/RemoteRobotLink.cs
++++ b/介入机器人/A主端/工程/master/VI.Service.Robot/Services/RemoteRobotLink.cs
+@@ -414,7 +414,7 @@ namespace MasterConsole.Services
+                                 Encoder587_1 = b.Encoder1, Joint587_0 = b.Joint0, Joint587_1 = b.Joint1,
+                                 Velocity587_0 = b.Vel0, Velocity587_1 = b.Vel1,
+                                 Injector1Direction = control.Injector1Dir, Injector2Direction = control.Injector2Dir,
+-                                Axis4Direction = control.Axis4Dir, AuthTag = new byte[0]
++                                Axis4Direction = control.Axis4Dir, DeviceEpoch582 = a.DeviceEpoch, DeviceEpoch587 = b.DeviceEpoch, AuthTag = new byte[0]
+                             };
+                             frame.AuthTag = ZenohWire.Sign(frame, key);
+                             publisher.Publish(frame);
+diff --git a/介入机器人/A主端/工程/protocol/PROTOCOL.md b/介入机器人/A主端/工程/protocol/PROTOCOL.md
+index 13486a858eaa60e7c4eff1ed2671225351ef5461..4518de065a03b90df6737d6047ca17bc5d10192b 100644
+--- a/介入机器人/A主端/工程/protocol/PROTOCOL.md
++++ b/介入机器人/A主端/工程/protocol/PROTOCOL.md
+@@ -19,7 +19,9 @@
+ 
+ 手柄按物理序列号 582、587 排列，每只 8 个字段直接放在顶层。关节/编码器/速度来自本机 SDK，轴向力单位 N，扭矩 N·m，位置及累计净距离 mm。
+ 
+-## HandleFrame（24 项）
++## HandleFrame（26 项）
++
++设备会话号按现有位置数组扩展惯例保留版本 1 和 Topic；严格解码仅接受 26 项，主端、VI.HandleHost 与数据端必须同步部署。会话号属于认证载荷，每只手柄成功重新打开时递增，主端监管器跨宿主重启保存计数。
+ 
+ | 索引 | 类型 | 字段 |
+ |---|---|---|
+@@ -46,7 +48,9 @@
+ | 20 | sbyte | Injector1Direction |
+ | 21 | sbyte | Injector2Direction |
+ | 22 | sbyte | Axis4Direction |
+-| 23 | byte[] | AuthTag |
++| 23 | ulong | DeviceEpoch582 |
++| 24 | ulong | DeviceEpoch587 |
++| 25 | byte[] | AuthTag |
+ 
+ ## CommandFrame（15 项）
+ 
+diff --git a/介入机器人/B数据端/工程/ADS项目/ads_communication.cpp b/介入机器人/B数据端/工程/ADS项目/ads_communication.cpp
+index 457433b37b937a6b65543140c31aa0dfaddb3c3f..6be999e58ad8293f06acebe2215f505c3b1c1f35 100644
+--- a/介入机器人/B数据端/工程/ADS项目/ads_communication.cpp
++++ b/介入机器人/B数据端/工程/ADS项目/ads_communication.cpp
+@@ -1064,7 +1064,6 @@ bool AdsCommunicationService::ensure_connection(bool reconnecting)
+ 		ads_.CloseComm();
+ 		return false;
+ 	}
+-	std::cout << "[ADS-DIAG] connected " << ads_.ConnectionDescription() << std::endl;
+ 	return true;
+ }
+ 
+@@ -2038,8 +2037,8 @@ void AdsCommunicationService::mark_plc_restart(bool reconnect_required)
+ 	{
+ 		std::lock_guard<std::mutex> lock(stats_mutex_);
+ 		if (first_detection) ++stats_.plc_restart_count;
+-		stats_.state = AdsConnectionState::PlcRestarted;
+ 	}
++	set_connection_state(AdsConnectionState::PlcRestarted);
+ }
+ 
+ 
+@@ -2262,6 +2261,12 @@ void AdsCommunicationService::record_failure(const char* operation, const std::s
+ void AdsCommunicationService::set_connection_state(AdsConnectionState state)
+ {
+ 	std::lock_guard<std::mutex> lock(stats_mutex_);
++	if (stats_.state == state) return;
++	std::cout << "[ADS-STATE] " << static_cast<int>(stats_.state) << " -> " << static_cast<int>(state)
++		<< " reason=" << (state == AdsConnectionState::Running ? "完整ADS读写成功" :
++			(state == AdsConnectionState::Disconnected ? "通信线程已停止" :
++				(stats_.diagnostic_sequence ? stats_.diagnostic : "建立ADS连接")))
++		<< " " << ads_.ConnectionDescription() << std::endl;
+ 	stats_.state = state;
+ }
+ 
+diff --git a/介入机器人/B数据端/工程/ADS项目/main.cpp b/介入机器人/B数据端/工程/ADS项目/main.cpp
+index 90a11211fcf005ae503f4a7c5f8420fb5a040388..202ead38f2b8bc6d098d8fdea7a1ae87b5f6d7a0 100644
+--- a/介入机器人/B数据端/工程/ADS项目/main.cpp
++++ b/介入机器人/B数据端/工程/ADS项目/main.cpp
+@@ -806,8 +806,6 @@ int main()
+ 	bool plc_app_name_read = false;
+ 	ULONGLONG handle1_next_retry_ms = 0;
+ 	ULONGLONG handle6_next_retry_ms = 0;
+-	bool handle1_reconnect_pending_poll = false;
+-	bool handle6_reconnect_pending_poll = false;
+ 	bool handle_soft_hold_active = true;
+ 	bool connection_hold_active_prev = true;
+ 
+@@ -951,8 +949,6 @@ int main()
+ 	LARGE_INTEGER vis_qpc_frequency{};
+ 	QueryPerformanceFrequency(&vis_qpc_frequency);
+ 	std::int64_t next_vis_publish_qpc = 0;
+-	std::uint64_t reported_ads_diagnostic_sequence = 0;
+-	ULONGLONG last_ads_diagnostic_log_ms = 0;
+ 	ExperimentStartInfo recording_info{};
+ 	recording_info.axis1_handle_serial = serial_axis1_handle;
+ 	recording_info.axis6_handle_serial = serial_axis6_handle;
+@@ -1122,8 +1118,7 @@ int main()
+ 				handle1_next_retry_ms = loop_now_ms + 1000;
+ 				if (handle_axis1.init())
+ 				{
+-					handle1_reconnect_pending_poll = true;
+-					std::cout << "导管手柄 (SN " << serial_axis1_handle << ") 重新打开成功，等待首帧有效采样..." << std::endl;
++					std::cout << "导管手柄 (SN " << serial_axis1_handle << ") 重新打开成功，等待连续 0.5 s 有效采样..." << std::endl;
+ 				}
+ 			}
+ 			if (!handle_axis6.is_open() && loop_now_ms >= handle6_next_retry_ms)
+@@ -1131,8 +1126,7 @@ int main()
+ 				handle6_next_retry_ms = loop_now_ms + 1000;
+ 				if (handle_axis6.init())
+ 				{
+-					handle6_reconnect_pending_poll = true;
+-					std::cout << "导丝手柄 (SN " << serial_axis6_handle << ") 重新打开成功，等待首帧有效采样..." << std::endl;
++					std::cout << "导丝手柄 (SN " << serial_axis6_handle << ") 重新打开成功，等待连续 0.5 s 有效采样..." << std::endl;
+ 				}
+ 			}
+ 		}
+@@ -1150,18 +1144,6 @@ int main()
+ 					{
+ 						handle1_poll_ok = true;
+ 						handle6_poll_ok = true;
+-						if (handle1_reconnect_pending_poll || handle6_reconnect_pending_poll)
+-						{
+-							handle1_reconnect_pending_poll = false;
+-							handle6_reconnect_pending_poll = false;
+-							axis1_handle_filter.reset(active_handle->fJoints2[0], active_handle->fJoints2[1]);
+-							axis6_handle_filter.reset(active_handle->fJoints2[0], active_handle->fJoints2[1]);
+-							axis1_prev_linear_filtered = axis1_handle_filter.axis0_filtered;
+-							axis6_prev_linear_filtered = axis6_handle_filter.axis0_filtered;
+-							axis1_prev_rot_filtered = axis1_handle_filter.axis1_filtered;
+-							axis6_prev_rot_filtered = axis6_handle_filter.axis1_filtered;
+-							std::cout << "单手柄重连后取得首帧有效采样，基准已重新建立。" << std::endl;
+-						}
+ 					}
+ 					else
+ 					{
+@@ -1179,14 +1161,6 @@ int main()
+ 					if (handle_axis1.poll())
+ 					{
+ 						handle1_poll_ok = true;
+-						if (handle1_reconnect_pending_poll)
+-						{
+-							handle1_reconnect_pending_poll = false;
+-							axis1_handle_filter.reset(handle_axis1.fJoints2[0], handle_axis1.fJoints2[1]);
+-							axis1_prev_linear_filtered = axis1_handle_filter.axis0_filtered;
+-							axis1_prev_rot_filtered = axis1_handle_filter.axis1_filtered;
+-							std::cout << "导管手柄 (SN " << serial_axis1_handle << ") 取得首帧有效采样，基准已重新建立。" << std::endl;
+-						}
+ 					}
+ 					else
+ 					{
+@@ -1200,14 +1174,6 @@ int main()
+ 					if (handle_axis6.poll())
+ 					{
+ 						handle6_poll_ok = true;
+-						if (handle6_reconnect_pending_poll)
+-						{
+-							handle6_reconnect_pending_poll = false;
+-							axis6_handle_filter.reset(handle_axis6.fJoints2[0], handle_axis6.fJoints2[1]);
+-							axis6_prev_linear_filtered = axis6_handle_filter.axis0_filtered;
+-							axis6_prev_rot_filtered = axis6_handle_filter.axis1_filtered;
+-							std::cout << "导丝手柄 (SN " << serial_axis6_handle << ") 取得首帧有效采样，基准已重新建立。" << std::endl;
+-						}
+ 					}
+ 					else
+ 					{
+@@ -1220,8 +1186,14 @@ int main()
+ 		}
+ 
+ 		handle_soft_hold_active = single_handle_mode
+-			? (!handle1_poll_ok && !handle6_poll_ok)
+-			: (!handle1_poll_ok || !handle6_poll_ok);
++			? ((!handle1_poll_ok && !handle6_poll_ok) || axis1_input_handle->resume_settling())
++			: (!handle1_poll_ok || !handle6_poll_ok || handle_axis1.resume_settling() || handle_axis6.resume_settling());
++        if (handle_axis1.resume_settling() || handle_axis6.resume_settling())
++        {
++            recovery_event_text = handle_axis1.resume_settling() ? "导管手柄恢复中" : "";
++            if (handle_axis6.resume_settling())
++                recovery_event_text += recovery_event_text.empty() ? "导丝手柄恢复中" : "；导丝手柄恢复中";
++        }
+ 
+ 		const bool handle1_rebase_requested = handle_axis1.take_rebase_request();
+ 		const bool handle6_rebase_requested = handle_axis6.take_rebase_request();
+@@ -1263,24 +1235,8 @@ int main()
+ 				std::ofstream diagnostic_log(diagnostic_path, std::ios::app | std::ios::binary);
+ 				if (diagnostic_log) diagnostic_log << diagnostic.str();
+ 				else std::cerr << "[ADS-DIAG] 无法写入故障文件，请保留控制台输出。" << std::endl;
+-				reported_ads_diagnostic_sequence = ads_stats.diagnostic_sequence;
+-				last_ads_diagnostic_log_ms = loop_now_ms;
+ 				std::cout << "ADS/PLC 运动条件未就绪：保持最后参考并丢弃故障期间手柄增量，原因见前面的诊断字段。" << std::endl;
+ 			}
+-			else if (ads_stats.diagnostic_sequence != reported_ads_diagnostic_sequence &&
+-				loop_now_ms - last_ads_diagnostic_log_ms >= 1000)
+-			{
+-				// 主循环可能先等满300ms，底层超时随后才返回；补记迟到原因，最多每秒一次。
+-				std::ostringstream diagnostic;
+-				diagnostic << "[ADS-DIAG] hold_update tick_ms=" << loop_now_ms
+-					<< " failure_tick_ms=" << ads_stats.diagnostic_tick_ms << " seq=" << ads_stats.diagnostic_sequence
+-					<< " state=" << static_cast<int>(ads_stats.state) << " " << ads_stats.diagnostic << "\n";
+-				std::cout << diagnostic.str();
+-				std::ofstream diagnostic_log(diagnostic_path, std::ios::app | std::ios::binary);
+-				if (diagnostic_log) diagnostic_log << diagnostic.str();
+-				reported_ads_diagnostic_sequence = ads_stats.diagnostic_sequence;
+-				last_ads_diagnostic_log_ms = loop_now_ms;
+-			}
+ 		}
+ 		else if (ads_soft_hold_active && planned_return.active())
+ 		{
+@@ -1288,7 +1244,7 @@ int main()
+ 			ads_soft_hold_active = false;
+ 		}
+ 		else if ((ads_soft_hold_active || handle_rebase_requested || (connection_hold_active_prev && initial_sync_done)) &&
+-			!planned_return.active())
++			!handle_soft_hold_active && !planned_return.active())
+ 		{
+ 			if (!handle_soft_hold_active)
+ 			{
+@@ -1348,7 +1304,11 @@ int main()
+ 			tracking_controller.disable_compensation();
+ 			if (spacing_recovery.phase != SpacingRecoveryPhase::ExitSync) spacing_recovery.reset();
+ 			clear_force_output();
+-			std::cout << "连接保持激活：保留回退任务，等待有效快照与手柄采样，清零力反馈。" << std::endl;
++			std::cout << "连接保持激活：source="
++				<< (!initial_sync_done ? "初始化;" : "")
++				<< (ads_soft_hold_active ? "ADS;" : "")
++				<< (handle_soft_hold_active ? "手柄;" : "")
++				<< " 保留回退任务，等待有效快照与手柄采样，清零力反馈。" << std::endl;
+ 		}
+ 		if (connection_hold_exit_edge && !planned_return.active())
+ 		{
+@@ -1358,7 +1318,8 @@ int main()
+ 			axis2_hold_rel = plc_act_pos[1];
+ 			axis7_hold_rel = plc_act_pos[6];
+ 			independent_axis2_hold_rel = plc_act_pos[1];
+-			std::cout << "连接就绪：保持 PLC 当前反馈位置，不恢复历史目标。axis2="
++			std::cout << "连接保持退出：source=" << recovery_event_text
++				<< " 保持 PLC 当前反馈位置，不恢复历史目标。axis2="
+ 				<< plc_act_pos[1] << "，axis7=" << plc_act_pos[6] << "（相对角度）" << std::endl;
+ 		}
+ 
+@@ -4687,7 +4648,7 @@ int main()
+ 			handle_axis6,
+ 			handle_axis1,
+ 			control_active && !spacing_recovery.active() &&
+-				!ads_soft_hold_active && !return_ads_fault_hold,
++				!ads_soft_hold_active && !handle_soft_hold_active && !return_ads_fault_hold,
+ 			estop_hold_active,
+ 			plc_act_pos[0] + plc_init_pos[0],
+ 			plc_act_pos[5] + plc_init_pos[5],
+@@ -4750,6 +4711,8 @@ int main()
+             if (estop_hold_active) recovery_status << "本体急停恢复中；";
+             if (!handle1_poll_ok) recovery_status << "手柄587无有效样本或采样断开；";
+             if (!handle6_poll_ok) recovery_status << "手柄582无有效样本或采样断开；";
++            if (handle_axis1.resume_settling()) recovery_status << "导管手柄恢复中；";
++            if (handle_axis6.resume_settling()) recovery_status << "导丝手柄恢复中；";
+             if (handle1_poll_ok && handle_axis1.sample_age_ms() > 250) recovery_status << "手柄587采样中断 " << handle_axis1.sample_age_ms() << " ms；";
+             if (handle6_poll_ok && handle_axis6.sample_age_ms() > 250) recovery_status << "手柄582采样中断 " << handle_axis6.sample_age_ms() << " ms；";
+             if (ads_stats.state != AdsConnectionState::Running) recovery_status << "ADS 重连/保持中，状态=" << static_cast<int>(ads_stats.state) << "；";
+diff --git a/介入机器人/B数据端/工程/ADS项目/protocol/PROTOCOL.md b/介入机器人/B数据端/工程/ADS项目/protocol/PROTOCOL.md
+index 13486a858eaa60e7c4eff1ed2671225351ef5461..4518de065a03b90df6737d6047ca17bc5d10192b 100644
+--- a/介入机器人/B数据端/工程/ADS项目/protocol/PROTOCOL.md
++++ b/介入机器人/B数据端/工程/ADS项目/protocol/PROTOCOL.md
+@@ -19,7 +19,9 @@
+ 
+ 手柄按物理序列号 582、587 排列，每只 8 个字段直接放在顶层。关节/编码器/速度来自本机 SDK，轴向力单位 N，扭矩 N·m，位置及累计净距离 mm。
+ 
+-## HandleFrame（24 项）
++## HandleFrame（26 项）
++
++设备会话号按现有位置数组扩展惯例保留版本 1 和 Topic；严格解码仅接受 26 项，主端、VI.HandleHost 与数据端必须同步部署。会话号属于认证载荷，每只手柄成功重新打开时递增，主端监管器跨宿主重启保存计数。
+ 
+ | 索引 | 类型 | 字段 |
+ |---|---|---|
+@@ -46,7 +48,9 @@
+ | 20 | sbyte | Injector1Direction |
+ | 21 | sbyte | Injector2Direction |
+ | 22 | sbyte | Axis4Direction |
+-| 23 | byte[] | AuthTag |
++| 23 | ulong | DeviceEpoch582 |
++| 24 | ulong | DeviceEpoch587 |
++| 25 | byte[] | AuthTag |
+ 
+ ## CommandFrame（15 项）
+ 
+diff --git a/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_protocol.h b/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_protocol.h
+index 1c935daf7219aada9ff33a0b6fbd11d1c4efbe42..898a3c983a788bfceef2c57da7f48aab7cca2f57 100644
+--- a/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_protocol.h
++++ b/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_protocol.h
+@@ -12,7 +12,7 @@ namespace vi_protocol
+     constexpr const char* kCommandTopic = "vi/ads/command/v1";
+     constexpr const char* kStateTopic = "vi/ads/state/v1";
+     constexpr const char* kForceTopic = "vi/ads/force/v1";
+-    constexpr std::size_t kHandleFields = 24;
++    constexpr std::size_t kHandleFields = 26;
+     constexpr std::size_t kCommandFields = 15;
+     constexpr std::size_t kCommandResultFields = 3;
+     constexpr std::size_t kStateFields = 55;
+@@ -53,12 +53,13 @@ namespace vi_protocol
+         std::int32_t encoder587_0{}, encoder587_1{};
+         float joint587_0{}, joint587_1{}, velocity587_0{}, velocity587_1{};
+         std::int8_t injector1_direction{}, injector2_direction{}, axis4_direction{};
++        std::uint64_t device_epoch582{}, device_epoch587{};
+         std::vector<std::uint8_t> auth_tag;
+         MSGPACK_DEFINE(version, session_id, sequence, monotonic_ms, buttons582, valid582,
+             encoder582_0, encoder582_1, joint582_0, joint582_1, velocity582_0, velocity582_1,
+             buttons587, valid587, encoder587_0, encoder587_1, joint587_0, joint587_1,
+             velocity587_0, velocity587_1, injector1_direction, injector2_direction,
+-            axis4_direction, auth_tag);
++            axis4_direction, device_epoch582, device_epoch587, auth_tag);
+     };
+ 
+     struct CommandFrame
+diff --git a/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_validation.h b/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_validation.h
+index 31085e20bb213ed2df0ba7506059dd94d8ed386d..54f59b05185861a85529794900ff190880d32ddf 100644
+--- a/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_validation.h
++++ b/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_validation.h
+@@ -45,7 +45,8 @@ namespace vi_protocol
+                 !detail::i32(p[offset + 2]) || !detail::i32(p[offset + 3])) return false;
+             for (int i = offset + 4; i < offset + 8; ++i) if (!detail::f32(p[i])) return false;
+         }
+-        return detail::direction(p[20]) && detail::direction(p[21]) && detail::direction(p[22]) && detail::optional_bin(p[23], 16);
++        return detail::direction(p[20]) && detail::direction(p[21]) && detail::direction(p[22]) && detail::uint(p[23], UINT64_MAX) &&
++            detail::uint(p[24], UINT64_MAX) && detail::optional_bin(p[25], 16);
+     }
+ 
+     inline bool validate_object(const msgpack::object& o, const CommandFrame*)
+diff --git a/介入机器人/B数据端/工程/ADS项目/tests/zenoh/protocol_tests.cpp b/介入机器人/B数据端/工程/ADS项目/tests/zenoh/protocol_tests.cpp
+index 2759f61c09315e887f38258361e17a64865cde70..423eb0188f78aaa0718c804b8c10263cfeed0647 100644
+--- a/介入机器人/B数据端/工程/ADS项目/tests/zenoh/protocol_tests.cpp
++++ b/介入机器人/B数据端/工程/ADS项目/tests/zenoh/protocol_tests.cpp
+@@ -79,6 +79,7 @@ namespace
+         f.buttons587 = 2; f.valid587 = true; f.encoder587_0 = -1; f.encoder587_1 = 2;
+         f.joint587_0 = 1; f.joint587_1 = 2; f.velocity587_0 = 0; f.velocity587_1 = .125f;
+         f.injector1_direction = 1; f.injector2_direction = -1; f.axis4_direction = 0;
++        f.device_epoch582 = 7; f.device_epoch587 = 9;
+         return f;
+     }
+     vi_protocol::CommandFrame new_command()
+@@ -131,6 +132,9 @@ int wmain(int argc, wchar_t** argv)
+         material.insert(material.end(), nc.begin(), nc.end()); material.insert(material.end(), ns.begin(), ns.end());
+         const auto key = hmac(token, material);
+         golden(dir, "handle", new_handle(), key);
++        auto epoch_frame = new_handle(); epoch_frame.auth_tag = sign(epoch_frame, key);
++        ++epoch_frame.device_epoch582;
++        check("Device epoch participates in authentication", sign(epoch_frame, key) != epoch_frame.auth_tag);
+         golden(dir, "command", new_command(), key);
+         golden(dir, "state", new_state(), key);
+         golden(dir, "force", new_force(), key);
+diff --git a/介入机器人/B数据端/工程/ADS项目/tests/zenoh/service_tests.cpp b/介入机器人/B数据端/工程/ADS项目/tests/zenoh/service_tests.cpp
+index 2ff45403ecb5786a1a347fe845f975980ebccf08..610c49b83b80e660518966d513fc3cde5fe1f7dd 100644
+--- a/介入机器人/B数据端/工程/ADS项目/tests/zenoh/service_tests.cpp
++++ b/介入机器人/B数据端/工程/ADS项目/tests/zenoh/service_tests.cpp
+@@ -1,6 +1,7 @@
+ #include <winsock2.h>
+ #include <bcrypt.h>
+ #include "zenoh_service.h"
++#include "手柄/remote_handle_bridge.h"
+ #include <algorithm>
+ #include <cassert>
+ #include <iostream>
+@@ -234,7 +235,11 @@ struct ZenohServiceTestAccess
+         ZenohService service; initialize(service);
+         vi_protocol::HandleFrame handle; handle.version = 1; handle.session_id = 41; handle.sequence = 10;
+         handle.valid582 = handle.valid587 = true; handle.injector1_direction = 1;
++        handle.device_epoch582 = 7; handle.device_epoch587 = 9;
+         handle.auth_tag = service.sign(handle); service.on_handle(handle);
++        remote_handle_bridge::Sample a, b;
++        assert(remote_handle_bridge::get_sample(0, a, 500) && a.device_epoch == 7);
++        assert(remote_handle_bridge::get_sample(1, b, 500) && b.device_epoch == 9);
+         VisCommand control;
+         assert(service.poll_command(control) && control.param2 == 1); service.command_processed();
+         handle.injector1_direction = -1;
+diff --git a/介入机器人/B数据端/工程/ADS项目/tools/ads_diagnostics_test.cpp b/介入机器人/B数据端/工程/ADS项目/tools/ads_diagnostics_test.cpp
+index a39f94908a3da95abf2ea293a0b7f15c2a6f819f..99f4c211518555e5c492cca9b3c665ffa16168b6 100644
+--- a/介入机器人/B数据端/工程/ADS项目/tools/ads_diagnostics_test.cpp
++++ b/介入机器人/B数据端/工程/ADS项目/tools/ads_diagnostics_test.cpp
+@@ -28,6 +28,7 @@ namespace {
+     std::atomic<std::uint32_t> cycle{10};
+     std::atomic<bool> fail_read{false}, fail_transport{false}, stall{false}, nonfinite{false};
+     std::atomic<bool> fail_read_once{false};
++    std::atomic<bool> network_down{false};
+     std::atomic<unsigned int> single_read_failures{0};
+     bool fail_local = false, fail_remote = false;
+     std::string missing_symbol, nonfinite_velocity;
+@@ -64,11 +65,11 @@ namespace {
+ CADSComm::CADSComm() : m_PAmsAddr(nullptr), m_adsPort(0), m_bOpen(true), m_timeoutMs(300) {}
+ CADSComm::~CADSComm() {}
+ bool CADSComm::IsCommOpen() const { return m_bOpen; }
+-bool CADSComm::OpenCommInsideReadOnly() { if (fail_local) { error = "LOCAL_READ_STATE 1861"; return false; } m_bOpen = true; return true; }
+-bool CADSComm::OpenCommReadOnly() { if (fail_remote) { error = "REMOTE_READ_STATE 29"; return false; } m_bOpen = true; return true; }
++bool CADSComm::OpenCommInsideReadOnly() { if (fail_local || network_down) { error = "LOCAL_READ_STATE 1861"; return false; } m_bOpen = true; return true; }
++bool CADSComm::OpenCommReadOnly() { if (fail_remote || network_down) { error = "REMOTE_READ_STATE 29"; return false; } m_bOpen = true; return true; }
+ bool CADSComm::CloseComm() { m_bOpen = false; ++closes; error.clear(); return true; }
+ bool CADSComm::SetTimeout(unsigned long) { return true; }
+-bool CADSComm::ReadDeviceState(unsigned short& a, unsigned short& d) { a = ADSSTATE_RUN; d = 0; return true; }
++bool CADSComm::ReadDeviceState(unsigned short& a, unsigned short& d) { if (network_down) { error = "READ_STATE 1861"; return false; } a = ADSSTATE_RUN; d = 0; return true; }
+ std::string CADSComm::GetLastErrorCopy() const { return error; }
+ std::string CADSComm::ConnectionDescription() const { return "target=offline:851 timeout_ms=300"; }
+ unsigned long CADSComm::ADSGetAddr(const char* name) {
+@@ -95,6 +96,7 @@ bool CADSComm::ADSWriteSum(const char* const*, const unsigned long*, const void*
+ bool CADSComm::ADSAddNotification(const char* name, unsigned long size, PAdsNotificationFuncEx, std::uint32_t, unsigned long* h, ADSTRANSMODE, unsigned long, unsigned long) { validate_size(name, size); *h = next_handle++; return true; }
+ bool CADSComm::ADSDeleteNotification(unsigned long) { return true; }
+ bool CADSComm::ADSReadSumByHandle(const unsigned long* handles, const unsigned long* sizes, void* const* out, unsigned long count) {
++    if (network_down) { error = "network read timeout code=1861"; return false; }
+     if (fail_read_once.exchange(false)) { ++single_read_failures; error = "injected single read failure"; return false; }
+     if (fail_read) { error = "injected read timeout code=1861"; return false; }
+     if (!stall) ++cycle;
+@@ -111,8 +113,8 @@ bool CADSComm::ADSReadSumByHandle(const unsigned long* handles, const unsigned l
+     error.clear(); return true;
+ }
+ bool CADSComm::ADSWriteSumByHandle(const unsigned long* handles, const unsigned long* sizes, const void* const* in, unsigned long count, unsigned long* results, bool* transport) {
+-    *transport = !fail_transport;
+-    if (fail_transport) { error = "injected write timeout code=1861"; return false; }
++    *transport = !fail_transport && !network_down;
++    if (!*transport) { error = "injected write timeout code=1861"; return false; }
+     bool ok = true;
+     for (unsigned long i = 0; i < count; ++i) {
+         std::string s; { std::lock_guard<std::mutex> lock(symbols_mutex); s = symbols.at(handles[i]); }
+diff --git a/介入机器人/B数据端/工程/ADS项目/tools/main_recovery_test.cpp b/介入机器人/B数据端/工程/ADS项目/tools/main_recovery_test.cpp
+index 9aacd8969e118dc3a00e66b24d435fe39c1ad2c3..68e4fa63f02891ba359cab52a62a1e0b9d13605b 100644
+--- a/介入机器人/B数据端/工程/ADS项目/tools/main_recovery_test.cpp
++++ b/介入机器人/B数据端/工程/ADS项目/tools/main_recovery_test.cpp
+@@ -77,6 +77,11 @@ struct Fixture {
+     }
+ };
+ int main() {
++    Fixture missing_handles;
++    missing_handles.handle_soft_hold_active = true;
++    for (int cycle = 0; cycle < 100; ++cycle) missing_handles.recover();
++    check(missing_handles.recovery_event_text.empty() && motion_sync::dual_calls == 0,
++          "missing handles cannot report a rebuilt baseline while connection hold is still active");
+     Fixture repeated;
+     repeated.planned_return.running = true;
+     repeated.start();
+diff --git a/介入机器人/B数据端/工程/ADS项目/tools/remote_handle_test.cpp b/介入机器人/B数据端/工程/ADS项目/tools/remote_handle_test.cpp
+index 199d5679bb2b3b623b3772689395bf13317ca98c..c3b3dc72350169bb724dbe3f012de1282e2b5658 100644
+--- a/介入机器人/B数据端/工程/ADS项目/tools/remote_handle_test.cpp
++++ b/介入机器人/B数据端/工程/ADS项目/tools/remote_handle_test.cpp
+@@ -116,7 +116,17 @@ int main()
+             check(a.poll(), "6s gap can reconnect without process restart");
+         }
+         put_sample(0, sa);
+-        if (gap <= 5000) check(a.poll() && a.take_rebase_request() == (gap > 1500), "rebase threshold is strictly greater than 1500ms");
++        if (gap <= 5000) {
++            check(a.poll() && a.resume_settling() == (gap > 1500) && !a.take_rebase_request(),
++                "rebase threshold is strictly greater than 1500ms");
++            if (gap > 1500) {
++                // 原间隔门槛不变；重建现在延后到连续有效采样满500ms。
++                const auto began = GetTickCount64();
++                do { Sleep(10); put_sample(0, sa); check(a.poll(), "settling receives valid samples"); }
++                while (GetTickCount64() - began < kHandleResumeSettleMs);
++                check(!a.resume_settling() && a.take_rebase_request(), "gap rebase waits for500ms continuous samples");
++            }
++        }
+     }
+     put_sample(0, sa);
+     Sample retained;
+diff --git a/介入机器人/B数据端/工程/ADS项目/zenoh_service.cpp b/介入机器人/B数据端/工程/ADS项目/zenoh_service.cpp
+index d03edba123c83588ab9d4eed0f89ef572fd19bee..c596ba0653ae385523b3da443d8be00aa38bab73 100644
+--- a/介入机器人/B数据端/工程/ADS项目/zenoh_service.cpp
++++ b/介入机器人/B数据端/工程/ADS项目/zenoh_service.cpp
+@@ -648,6 +648,7 @@ void ZenohService::on_handle(const vi_protocol::HandleFrame& frame)
+         remote_handle_bridge::Sample sample;
+         if (slot == 0)
+         {
++            sample.device_epoch = frame.device_epoch582;
+             sample.valid = frame.valid582; sample.buttons = frame.buttons582;
+             sample.encoders[0] = frame.encoder582_0; sample.encoders[1] = frame.encoder582_1;
+             sample.joints[0] = frame.joint582_0; sample.joints[1] = frame.joint582_1;
+@@ -655,6 +656,7 @@ void ZenohService::on_handle(const vi_protocol::HandleFrame& frame)
+         }
+         else
+         {
++            sample.device_epoch = frame.device_epoch587;
+             sample.valid = frame.valid587; sample.buttons = frame.buttons587;
+             sample.encoders[0] = frame.encoder587_0; sample.encoders[1] = frame.encoder587_1;
+             sample.joints[0] = frame.joint587_0; sample.joints[1] = frame.joint587_1;
+diff --git a/介入机器人/B数据端/工程/ADS项目/手柄/Handle.h b/介入机器人/B数据端/工程/ADS项目/手柄/Handle.h
+index 1ef658d7923d29dc345fec8f89ba1fde801f5dfb..6e17a96d88b2133bae3ed01dfd970e08e684cd6a 100644
+--- a/介入机器人/B数据端/工程/ADS项目/手柄/Handle.h
++++ b/介入机器人/B数据端/工程/ADS项目/手柄/Handle.h
+@@ -1,7 +1,10 @@
+ #pragma once
+ #include <windows.h>
++#include <cstdint>
+ #define Rad  57.29577951308232
+ 
++inline constexpr ULONGLONG kHandleResumeSettleMs = 500;
++
+ struct USERData
+ {
+ 	unsigned char buttons2;
+@@ -27,6 +30,7 @@ public:
+ 	bool poll();
+ 	// 抖动恢复时通知主循环重建当前位置基准，避免追赶断流期间的手柄位移。
+ 	bool take_rebase_request() { const bool value = rebase_requested_; rebase_requested_ = false; return value; }
++	bool resume_settling() const { return resume_settling_; }
+ 
+ 	ULONGLONG sample_gap_ms() const { return sample_gap_ms_; }
+ 	ULONGLONG sample_age_ms() const { return last_sample_rx_ms_ == 0 ? 0 : GetTickCount64() - last_sample_rx_ms_; }
+@@ -52,4 +56,9 @@ private:
+ 	ULONGLONG last_sample_rx_ms_ = 0;
+ 	bool rebase_requested_ = false;
+ 	ULONGLONG sample_gap_ms_ = 0;
++    bool opened_once_ = false;
++    bool device_epoch_known_ = false;
++    std::uint64_t device_epoch_ = 0;
++    bool resume_settling_ = false;
++    ULONGLONG resume_since_ms_ = 0;
+ };
+diff --git a/介入机器人/B数据端/工程/ADS项目/手柄/remote_handle_bridge.h b/介入机器人/B数据端/工程/ADS项目/手柄/remote_handle_bridge.h
+index 84f7d8e6ac28c3059c706d8da7a78f8752e701c5..543da40047aa0ae951c877dde730eabf3a4b4783 100644
+--- a/介入机器人/B数据端/工程/ADS项目/手柄/remote_handle_bridge.h
++++ b/介入机器人/B数据端/工程/ADS项目/手柄/remote_handle_bridge.h
+@@ -26,6 +26,8 @@ namespace remote_handle_bridge
+ 	{
+ 		bool valid = false;
+ 		ULONGLONG rx_ms = 0;
++        ULONGLONG continuous_since_ms = 0;
++        std::uint64_t device_epoch = 0;
+ 		std::uint8_t buttons = 0;
+ 		std::int32_t encoders[2] = {};
+ 		float joints[2] = {};
+@@ -58,10 +60,20 @@ namespace remote_handle_bridge
+ 	// ---- 采样：网关写入，Handle 读取 ----
+ 	inline void put_sample(int slot, Sample s)
+ 	{
+-		if (slot < 0 || slot > 1 || !s.valid) return;
++		if (slot < 0 || slot > 1) return;
+ 		s.rx_ms = GetTickCount64();
+ 		auto& st = detail::state();
+ 		std::lock_guard<std::mutex> lock(st.m);
++        auto& previous = st.samples[slot];
++        if (!s.valid)
++        {
++            // 无效帧不刷新缓存龄期，但必须中断恢复静置的连续有效采样。
++            previous.continuous_since_ms = 0;
++            return;
++        }
++        s.continuous_since_ms = previous.valid && previous.continuous_since_ms != 0 &&
++            previous.device_epoch == s.device_epoch && s.rx_ms - previous.rx_ms <= 250
++            ? previous.continuous_since_ms : s.rx_ms;
+ 		st.samples[slot] = s;
+ 	}
+ 
+diff --git a/介入机器人/B数据端/工程/ADS项目/手柄/手柄.cpp b/介入机器人/B数据端/工程/ADS项目/手柄/手柄.cpp
+index 24b8eceb970e1fc03fa48c92c08fd63ffe02ba64..37c73f8428bc473447f2c2ce957bd61c23ad84ec 100644
+--- a/介入机器人/B数据端/工程/ADS项目/手柄/手柄.cpp
++++ b/介入机器人/B数据端/工程/ADS项目/手柄/手柄.cpp
+@@ -31,6 +31,12 @@ bool Handle::init(DWORD serial)
+ 		return false;
+ 	}
+ 	iID1 = 0;
++    if (opened_once_)
++    {
++        resume_settling_ = true;
++        resume_since_ms_ = 0;
++    }
++    opened_once_ = true;
+ 	printf(u8"已接入远程手柄（物理 SN %lu）。\n", static_cast<unsigned long>(serial_number_));
+ 	return true;
+ }
+@@ -47,16 +53,46 @@ bool Handle::poll()
+ 	{
+ 		return false;
+ 	}
+-	if (last_sample_rx_ms_ != 0 && sample.rx_ms > last_sample_rx_ms_ &&
+-		sample.rx_ms - last_sample_rx_ms_ > 1500)
++	const bool new_sample = sample.rx_ms > last_sample_rx_ms_;
++    const bool epoch_changed = device_epoch_known_ && device_epoch_ != sample.device_epoch;
++    if (last_sample_rx_ms_ != 0 && new_sample && sample.rx_ms - last_sample_rx_ms_ > 1500)
+ 	{
+ 		sample_gap_ms_ = sample.rx_ms - last_sample_rx_ms_;
+-		rebase_requested_ = true;
++        resume_settling_ = true;
++        resume_since_ms_ = sample.rx_ms;
+ 	}
++    if (epoch_changed)
++    {
++        resume_settling_ = true;
++        resume_since_ms_ = sample.rx_ms;
++    }
++    device_epoch_ = sample.device_epoch;
++    device_epoch_known_ = true;
++    const bool settling_this_poll = resume_settling_;
++    if (resume_settling_)
++    {
++        const ULONGLONG now = GetTickCount64();
++        if (sample.continuous_since_ms == 0 || now - sample.rx_ms > 250)
++        {
++            resume_since_ms_ = 0;
++        }
++        else if (new_sample)
++        {
++            // 计时只推进到实际新采样；重复读取缓存不能完成静置。
++            if (resume_since_ms_ == 0) resume_since_ms_ = sample.rx_ms;
++            if (sample.continuous_since_ms > resume_since_ms_) resume_since_ms_ = sample.continuous_since_ms;
++            if (sample.rx_ms - resume_since_ms_ >= kHandleResumeSettleMs)
++            {
++                resume_settling_ = false;
++                rebase_requested_ = true;
++            }
++        }
++    }
+ 	last_sample_rx_ms_ = sample.rx_ms;
+ 	for (int i = 0; i < 2; ++i)
+ 	{
+-		fVels2[i] = GetTickCount64() - sample.rx_ms > 250 ? 0.0 : static_cast<double>(sample.vels[i]);
++		fVels2[i] = settling_this_poll || GetTickCount64() - sample.rx_ms > 250
++            ? 0.0 : static_cast<double>(sample.vels[i]);
+ 		fJoints2[i] = static_cast<double>(sample.joints[i]);
+ 		encoders2[i] = static_cast<long>(sample.encoders[i]);
+ 	}
+@@ -72,6 +108,8 @@ void Handle::clear_cache()
+ 	last_sample_rx_ms_ = 0;
+ 	rebase_requested_ = false;
+ 	sample_gap_ms_ = 0;
++    resume_settling_ = false;
++    resume_since_ms_ = 0;
+ 	objData.buttons2 = 0;
+ 	objData.encoders2[0] = 0;
+ 	objData.encoders2[1] = 0;
+diff --git a/protocol/fixtures/zenoh-v1/invalid_handle_epoch_negative.hex b/protocol/fixtures/zenoh-v1/invalid_handle_epoch_negative.hex
+new file mode 100644
+index 0000000..1d36549
+--- /dev/null
++++ b/protocol/fixtures/zenoh-v1/invalid_handle_epoch_negative.hex
+@@ -0,0 +1 @@
++dc001a01cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff00ff09c4109eb1fdc645f6406c7cbb44f7ac10c30d
+diff --git a/protocol/fixtures/zenoh-v1/invalid_handle_epoch_string.hex b/protocol/fixtures/zenoh-v1/invalid_handle_epoch_string.hex
+new file mode 100644
+index 0000000..5deffbf
+--- /dev/null
++++ b/protocol/fixtures/zenoh-v1/invalid_handle_epoch_string.hex
+@@ -0,0 +1 @@
++dc001a01cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff0007a139c4109eb1fdc645f6406c7cbb44f7ac10c30d
+diff --git a/介入机器人/docs/revision_uhn_20261108/README.md b/介入机器人/docs/revision_uhn_20261108/README.md
+new file mode 100644
+index 0000000..9a1df3b
+--- /dev/null
++++ b/介入机器人/docs/revision_uhn_20261108/README.md
+@@ -0,0 +1,100 @@
++# U / H / N 修订交付与验收记录
++
++日期：2026-11-08。源码基线见[git_head.txt](git_head.txt)，关键新旧源码及行号见[source_evidence.txt](source_evidence.txt)。本轮完成H软件修改和离线回放；N修复重复完成分支，但现场ADS持续非Running根因未解决；U因唯一预览缺失停止。**本轮不满足“U/H/N全部完成、所有原有测试全通过”的总验收条件。**
++
++## U：停止，界面源码未改
++
++提示词称随附`主端界面预览.html`，本次却没有可读附件。搜索整个允许仓库（含隐藏和忽略目录）未发现该文件或任何`*预览*.html`，另一个允许的可视化目录为空。证据：[preview_search.txt](preview_search.txt)。按“唯一参照”“无法按规定实现时停止该项”约束，没有凭文字补造预览。
++
++MainWindow、主题、InterventionPanel、PositioningArmPanel及code-behind、MainViewModel和WPF测试源码均与HEAD相同，见[ui_unchanged.json](ui_unchanged.json)。没有控件重命名/删除，也没有因U改动WPF测试。
++
++1.3节原控件清单在[ui_mapping.csv](ui_mapping.csv)，记录Command/事件、Tag、CommandParameter、IsEnabled、ToolTip。新控件列明确标记“U停止，保留原控件”。这是基线清单，**不是新界面映射落实或测试通过记录**。
++
++| 1.3区域 | 原控件→新控件 | 状态 |
++|---|---|---|
++| 状态条、提示行 | 尚无新布局对应 | 未实现 |
++| 器械准备、力反馈/夹持、电缸逐项绑定 | 尚无新布局对应 | 未实现 |
++| 轴6窗口注释、器械辅助 | 保留原布局 | 未实现 |
++| 定位臂分段速度、10个末端按钮、调试区 | ComboBox等原控件保留 | 未实现 |
++| 启用条件、ToolTip和事件链映射验收 | 原文件相同，未建新界面映射测试 | 未执行 |
++
++原182项WPF回归产生[baseline_ui](baseline_ui/README.md)中的19张原界面PNG。要求的1280×800、2560×1600、准备展开、定位臂调试展开、未连接五张**新布局**RenderTargetBitmap截图未生成，不以原图替代。
++
++## H：修改与根因
++
++详见[handle.md](handle.md)、[protocol.md](protocol.md)。重新打开、超过1.5 s采样间隔、设备epoch变化进入500 ms连续有效采样静置；中断重计时，以结束样本重建已有滤波与四轴基准。静置走原连接保持停跟随和清力，并补上循环末尾力反馈调用的手柄保持条件。
++
++确认的缺口是首帧立即跟随无法排除开机后续机械运动、快速重开零点改变但协议无设备会话信号、入口清力后末尾又施力。原源码已复位线性/旋转滤波；fVels用于力阻尼而非四轴位置前馈；正常跨圈的SDK约定缺少证据。五项逐项核查、旧路径重现与修复后连续性证据均在H报告。
++
++主端、HandleHost、数据端、HMAC/严格解码、双方测试与黄金向量同步修改。HandleFrame由24项扩展为26项，按仓库既有严格数组扩展惯例保留v1和Topic，不兼容旧长度；主端协议两份副本和数据端协议说明均同步。
++
++## N：重复完成已修，持续ADS故障未解决
++
++详见[network.md](network.md)。源码为本机AMS优先、远程`169.254.119.135.1.1:851`回退；现场实际路由和网线是否共用无法由仓库确定。
++
++HEAD分支在手柄保持期间错误报告完成547次；增加手柄就绪门控后，六场景各仅一次完成。新增ADS状态变化原因和保持来源日志，移除周期重复日志。只断Zenoh、只断ADS、两者同时断，各10/30 s，六项通过，ADS Running及保持退出耗时109–516 ms。
++
++mock未复现现场ADS持续非Running，未将这一根因标为修复，也未增加自动RUN或恢复绕过。
++
++## 构建与测试
++
++| 项目 | 结果 | 证据 |
++|---|---|---|
++| MasterConsole.sln（包括VI.HandleHost）Release x64 | 0警告、0错误 | master_build.log |
++| VI.Control.Tests.slnx Release x64 | 0警告、0错误 | wpf_build.log |
++| MasterConsole.Protocol.Tests | 0警告、0错误 | protocol_build.log |
++| ADS.sln Release x64 Rebuild | 成功，无警告/错误；启用warnaserror和TreatWarningAsError | ads_build.log；network/ads_build.log含首次完整汇总 |
++| 原WPF | 182/182 | wpf_tests.log |
++| Zenoh C++ | 84通过，原81条标签全部保留 | zenoh.log |
++| C#真实Zenoh loopback | 181通过，原174条标签全部保留 | zenoh.log |
++| 真实HandleHost + fake SDK | 159通过，原151条标签全部保留 | host_sdk_results.log |
++| 原生main/dual/recovery/cylinder/ADS/handle/recording | 全部通过 | native.log、native/*.log |
++| V5恢复/寻参 | 129检查通过 | v5_recovery/results.log |
++| V5 PLC ST | 29228检查；11049基线/当前周期差为0 | v5_st/results.log |
++| 原净距离测试 | 通过 | handle_net_distance_test.log |
++| 定位臂 | 归零、round3/4确定性、stage、ST等价、ADS、kinematics20项通过；两套诊断失败 | arm/round4/results.json |
++| H新增 | 11场景通过；HEAD9个缺口场景确认重现 | handle/{fixed,baseline}/results.log |
++| N新增 | 六场景通过，日志单次变化审计通过 | network/log_audit.json |
++
++定位臂失败未忽略：`arm_cart_jog_round4_diagnostics`有S1、S2、S4共3个失败；`arm_cart_jog_tests`有S4共1个失败。两份日志规范化后与上一轮记录逐字相同，17个相关源码文件与HEAD一致，见[arm_baseline_comparison.json](arm_baseline_comparison.json)。按“不改变其它控制行为”约束未改发生器、未降低断言。[regression_results.json](regression_results.json)保留arm=1，不能宣称全部原测试通过。
++
++原Release输出被正在运行的VI.Control占用。没有终止现有进程，使用临时导入原Directory.Build.props并覆盖OutputPath，隔离构建到`A主端/工程/build/UhnRelease`。ADS输出也隔离；只编译、不运行生产exe。源码项目配置未改。
++
++`regression_results_attempt1.json`保留两个旧runner可选名称但源码不存在的调用失败：net_distance_gateway_test、remote_recovery_test。确认非现存测试后，从本轮runner目标清单移除；未补造测试或把失败改写为通过，原失败log仍保留。
++
++### 测试改动逐项说明
++
++- `VI.Control.Tests/Program.cs`未改，原182项保留。无控件删除或重命名引起的测试变更。
++- `remote_handle_test.cpp`原“严格大于1500 ms”改为触发静置、不立即rebase；连续采样500 ms后才rebase。原1000/1600/4000/6000 ms场景、门槛和断开语义保留；不再断言本轮明确废止的“立即重建”。
++- `main_recovery_test.cpp`保留原开始控制、模式、恢复断言，增加手柄失效100拍不得报告基准完成。
++- `ads_diagnostics_test.cpp`的mock增加network_down注入，默认false；原93条诊断标签继续执行。
++- C# `Program.cs`和C++ `protocol_tests.cpp`更新26字段黄金样本，断言不同非零epoch 7/9、认证篡改拒绝；新增负数/字符串epoch非法向量。旧非法向量同步索引，保留原错误类别。
++- C++ `service_tests.cpp`增加真实认证接收边界两设备epoch分别到桥接的断言，原边界断言保留。
++- `HandleHostTests.cs`替身发共享计数epoch；crash/stall/USB插入/拔出以及真实SDK替身重开验证递增，保留原重启周期、采样速率和清力检查。
++
++[final_test_counts.json](final_test_counts.json)、[test_counts.json](test_counts.json)、[test_inventory.csv](test_inventory.csv)提供计数和原标签比对。标签比对不替代语义审查，具体调整如上。
++
++## 源码与提示差异
++
++1. HTML未实际提供，U停止，未按文字推测唯一预览。
++2. 实际映射：导管SN587→轴1/2，导丝SN582→轴6/7。滤波复位和直线base_rel重建原本存在。
++3. SDK负状态原来只发invalid，没有每设备重新open的既有流程；未另加重开策略，只在每次真实成功open递增epoch。
++4. 原监管器已有至少1 s启动间隔，不能把现场“50 ms”直接当作整个监管重启周期。50 ms回放验证快速坐标会话改变不再依赖1.5 s检测。
++5. SDK未定义手柄关节0的物理长度单位；离线输入使用现有缩放的2 mm等效量，实物精确2 mm未验收。
++6. ADS存在本机优先/远程回退，现场路径与网线共用未确认。
++7. 定位臂原测试已有失败，本轮未将其忽略。
++
++## 现场验收：交用户执行，均未执行
++
++1. U完成后，对照新截图检查1/4屏和全屏；逐个试按按钮，核对原命令、按住/松开、启用条件和ToolTip。当前U未重排，此项尚未就绪。
++2. 控制中分别拔插导丝582和导管587 USB，核对有效采样恢复后连续约0.5 s才跟随，接回时实物位移2 mm、旋转10°时四轴不窜动；静置中再次中断应重计时。既有宿主重启/设备重试等待保留，从物理插入算起可能超过0.5 s。
++3. 控制中断网10 s和30 s后接回，确认ADS Running、原控制在当前位置自动恢复、保持完成只打印一次。保留[ADS-STATE]及exe旁ads_fault_diagnostics.log；若仍非Running，用目标NetId、操作/错误码与PLC/Router状态补齐N现场证据。
++
++## 文件与复现
++
++- 完整源码、测试、协议及说明差异：[changes.patch](changes.patch)；纳入范围与哈希：[diff_inventory.json](diff_inventory.json)。原始日志、轨迹CSV、PNG旁置，不复制成补丁；构建产物不进入源码diff。
++- 未提交或推送。原其它项目脏子模块未动；测试生成的三份已跟踪exe恢复为基线。
++- 在介入机器人目录运行：`python tools/revision_uhn/run_managed.py`；`python tools/revision_uhn/run_handle.py --baseline`；`python tools/revision_uhn/run_handle.py`；`python tools/revision_uhn/run_network.py --baseline`；`python tools/revision_uhn/run_network.py`；`python tools/revision_uhn/run_regressions.py`。最后一个脚本因上述定位臂既有失败预期非零，不吞失败。
++
++未执行：新UI、五张新截图与映射测试、实物USB/网线/PLC验收、SDK物理跨圈及长度校准。
++风险：26字段HandleFrame与旧24字段不互通，主端、HandleHost、数据端须同步部署；ADS持续非Running现场根因未确认，当前交付不能视为整体验收通过。
+diff --git a/介入机器人/docs/revision_uhn_20261108/baseline_ui/README.md b/介入机器人/docs/revision_uhn_20261108/baseline_ui/README.md
+new file mode 100644
+index 0000000..df93502
+--- /dev/null
++++ b/介入机器人/docs/revision_uhn_20261108/baseline_ui/README.md
+@@ -0,0 +1,4 @@
++# 原界面回归截图，非新界面验收截图
++
++这里的19张PNG由原有WPF182项测试生成，均为未重排的原界面。U因缺少唯一参照HTML停止。
++这些图片不代表要求的1280×800、2560×1600、准备展开、定位臂调试展开、未连接状态五张新截图。
+diff --git a/介入机器人/docs/revision_uhn_20261108/handle.md b/介入机器人/docs/revision_uhn_20261108/handle.md
+new file mode 100644
+index 0000000..7f1b0e6
+--- /dev/null
++++ b/介入机器人/docs/revision_uhn_20261108/handle.md
+@@ -0,0 +1,36 @@
++# H：手柄恢复与根因核查
++
++## 修改
++
++- `手柄/Handle.h`定义`kHandleResumeSettleMs = 500`。重新打开、有效接收间隔严格大于1500 ms、设备会话号变化进入静置；首次连接不追加恢复延迟。
++- `Handle::poll`只允许新有效采样推进静置，连续500 ms结束后，以结束样本提出一次重建请求。沿用250 ms陈旧门槛判断连续区间中断。重复缓存、无效帧或再次超过250 ms的接收间隔不能完成计时。
++- 接收线程`remote_handle_bridge::put_sample`保存`continuous_since_ms`，主循环因ADS等待300 ms时也按实际接收采样的连续区间计时。无效帧中断连续区间，不刷新最后有效时间，保留第五轮缓存/断开语义。
++- `main.cpp`将`resume_settling()`接入原`handle_soft_hold_active`。删除首帧立即复位的重复代码，使用已有公共恢复分支在静置结束后复位两通道滤波和四个prev缓存，再执行原基准重建。
++- `motion_sync::rebase_dual_after_return`原本就刷新轴1/6的`base_rel`、`handle_ref`、`rot_ref`、`rot_base_rel`和累计目标；本轮保留这一实现，使用当前反馈和结束样本。
++- 原循环末尾力反馈调用没有排除手柄保持，会覆盖入口清力。现在只增加`!handle_soft_hold_active`，静置期间轴向力、力矩均为零。
++- 原`recovery_event_text`及`recovery_status`显示“导丝手柄恢复中”“导管手柄恢复中”，沿原EventText→RecoveryText到现有介入面板；未增加界面状态逻辑。U尚未实现主窗口新提示行。
++- 主端DeviceEpoch→共享内存→HandleSample→HandleFrame→HMAC→数据端桥接详见[protocol.md](protocol.md)。三份协议说明均已同步。
++
++## 五项怀疑的结论与证据
++
++| 怀疑 | 核查结论 | 处理与证据 |
++|---|---|---|
++| 重建时滤波器未复位 | **未确认**。修改前main公共恢复分支已经reset线性/旋转两通道并更新四个prev缓存；motion_sync原本就重建轴1/6基准。 | 保留复位，将首帧立即恢复改为500 ms结束后恢复。结束后相同原始样本再持续500 ms，四轴完全连续，无残余滤波收敛位移。 |
++| 使用旧缓存重建 | 未发现恢复路径固定拷贝断开前样本的赋值。原Handle最多保留5 s缓存，首帧即可恢复，不能保证设备后续开机运动已结束。 | 新请求必须由结束时的新有效样本触发；断言ref等于结束样本。重复缓存和invalid帧均不能完成静置；invalid不刷新时间戳。 |
++| fVels未清零导致运动前馈 | 四轴位置映射不读取fVels；实际用户是force_feedback阻尼。原代码已有超过250 ms清速度，不能将本项称为已证实的位置窜动根因。 | 按要求静置中和完成poll清恢复手柄的两个速度通道。另确认“入口清力后末尾重新施力”，独立生产函数测试证明旧路径非零、新路径全零。 |
++| 旋转跨圈跳变 | 映射直接使用SDK关节值，滤波为普通一阶；没有角度归一化。SDK头文件只给getJoints签名，未定义正常返回值是否在±π回卷。**无法确认正常会话跨圈是现场根因。** | 会话变化同时发生2π零点跳变已回放，旧映射产生约360°偏差，新路径无偏差。未擅自增加正常旋转unwrap；实机正常跨圈未验证。 |
++| 快速宿主/SDK重开改变零点，小于1.5 s | **确认协议缺口**。旧HandleFrame没有设备会话字段，旧Handle::poll只按超过1500 ms间隔申请重建；50 ms的新SDK坐标可直接进入旧基准。 | 每次成功openDevice递增该设备epoch，监管器跨宿主重启保留计数；发现变化即静置。分别对582、587回放50 ms变化及零点跳变，旧路径跳变，新路径保持500 ms并只重建一次。 |
++
++另外确认“首帧即跟随，后续开机机械运动仍被映射”的缺口：重新打开或1.6 s断采样后，首帧位置不变，再在400 ms内逐步移动并转动10°。旧路径跟随这段移动；新路径以静置结束位置重建，不追赶该位移。
++
++## 回放和验收边界
++
++`tools/revision_uhn/run_handle.py`对HEAD和当前源码分别编译。确定时钟替换Windows tick；实际生产Handle、桥接、HandleFilterState、motion_sync、plc_io::load_pos_from_actual、force_feedback参与运行；分别抽取两个版本main的恢复、保持、滤波、四轴映射表达式。硬件依赖使用原ADS mock，不连接设备。
++
++分别对SN582、587执行四种场景：重新打开+渐进位移/10°；1.6 s间隔；50 ms会话变化+零点改变；会话变化+2π旋转零点改变。另有251 ms断采样重计时、invalid帧重计时和独立清力门控，共11个当前场景通过。HEAD的8个对应跳变场景和1个旧清力覆盖场景均确认重现。
++
++逐10 ms断言前500 ms轴1/2/6/7探针与原值逐位相等；500 ms结束仅重建一次；同一原始值继续500 ms无漂移；之后新增小位移恢复连续跟随。见`handle/fixed/results.log`、`handle/baseline/results.log`和各自`four_axes.csv`。
++
++四轴探针使用生产线性增量、旋转表达式和真实重建，窗口/回退约束由原有dual_control、return_recovery、round5_main完整分支回放覆盖；本测试不等同于整台机器人或实物运动。位移输入为`2 / cfg.k_handle_to_mm`，即现有映射对应2 mm的SDK增量。SDK未定义关节0物理长度单位，不能把它称作已完成“实物手柄精确位移2 mm”校准；该物理验收保留现场执行。
++
++第五轮原有1500 ms重建门槛、250 ms陈旧速度门槛、5 s手柄断开门槛、1 s重试周期、PLC/回退恢复规则均保留。唯一新增控制时间常量是要求的500 ms。
+diff --git a/介入机器人/docs/revision_uhn_20261108/network.md b/介入机器人/docs/revision_uhn_20261108/network.md
+new file mode 100644
+index 0000000..ef95a72
+--- /dev/null
++++ b/介入机器人/docs/revision_uhn_20261108/network.md
+@@ -0,0 +1,44 @@
++# N：网络结构、复现和根因
++
++## 源码确认的拓扑
++
++- 数据端`zenoh_service.h::ZenohServiceConfig`默认`tcp/192.168.60.1:7447`；主端RemoteRobotLink按配置Host/Endpoint生成`tcp/<Host>:7447`。这是主端到数据端的Zenoh链路。
++- `AdsCommunicationService::ensure_connection`先尝试`OpenCommInsideReadOnly()`，失败才尝试`OpenCommReadOnly()`；低频通道顺序相同。
++- `ADSComm.cpp::OpenCommInsideReadOnly`调用`OpenCommLocalMode`：AdsPortOpenEx→AdsGetLocalAddressEx→端口851。本机AMS NetId来自运行机Router，不是源码固定值。
++- `OpenCommReadOnly`调用`OpenCommRemoteMode`：目标AMS NetId硬编码`169.254.119.135.1.1`，端口851，经本机Router访问远端。
++- 两种Open只确认状态可读，不切换RUN；服务另要求`ADSSTATE_RUN`，否则记录`CONNECT_PLC_STATE`或`PLC_STATE`并沿原规则恢复。
++
++结论为“本机优先，远程回退”，不能由仓库确定现场那一次选中了哪条路径。新增[ADS-STATE]日志带目标NetId、操作及原因，供现场确认。main的`hardcoded_ads_netid`用于寻参记录身份；真正远程地址在ADSComm.cpp。
++
++192.168.60.x和169.254.x.x是不同地址段，不能据此认定物理网卡/网线不同。仓库没有现场网卡绑定、AMS路由表或接线记录，故“同一根网线是否同时承载Zenoh和ADS”**未确认**。本轮未连接现场PLC，未读取或修改TwinCAT运行状态。
++
++## 重复“连接保持结束”的根因
++
++修改前公共恢复分支包含`connection_hold_active_prev && initial_sync_done`，外层却没有排除`handle_soft_hold_active`。手柄失效时内部跳过滤波和motion_sync，但`baseline_rebuilt`默认true，仍清ADS保持并打印“连接保持结束：实际位置与手柄基准已重建”。下一拍保持继续由手柄失效维持，再次进入该分支。
++
++这并非真实保持每拍退出再进入，而是**手柄保持持续期间错误执行完成分支**。HEAD分支在10 s只断Zenoh回放中重现547次过早完成报告，真实保持只进入一次。见`network/baseline/zenoh_10.log`末尾`REPRODUCED N old_premature_rebases=547`。
++
++修复仅在外层增加`!handle_soft_hold_active`。所需手柄有效且恢复静置完成后，才调用现有同步函数重建。保持入口/出口仍按原边沿运行，并输出来源；ADS状态统一通过set_connection_state只在变化时打印原因；删除原每秒hold_update。未增加重试、超时、RUN切换或恢复绕过。
++
++## 六种离线复现
++
++生产ADS通信线程+已有ADS mock；真实ZenohService::on_handle认证接收边界+生产Handle；main抽取保持/重建/自动恢复分支。真实等待10/30 s。Zenoh中断停止投递认证手柄帧；ADS中断使Open、状态读取和Sum Read/Write返回通信失败。
++
++这不是完整网络驱动层或现场AMS Router模拟。真实zenohd及C#↔C++互通另由原Zenoh181/84项回归覆盖。
++
++| 中断 | 时长 | 恢复到ADS Running且保持退出 | 进入/退出/基准重建日志 | 控制 |
++|---|---|---|---|---|
++| 只断Zenoh | 10 s | 515 ms | 1/1/1 | 自动恢复 |
++| 只断Zenoh | 30 s | 516 ms | 1/1/1 | 自动恢复 |
++| 只断ADS | 10 s | 109 ms | 1/1/1 | 自动恢复 |
++| 只断ADS | 30 s | 297 ms | 1/1/1 | 自动恢复 |
++| 两者同时断 | 10 s | 500 ms | 1/1/1 | 自动恢复 |
++| 两者同时断 | 30 s | 516 ms | 1/1/1 | 自动恢复 |
++
++ADS恢复本身不晚于表中时刻，六项均在现有1 s重连周期加初始化时间以内。之后继续稳定运行600 ms，断言一次进入/退出、一次基准重建和控制恢复。状态日志审计见`network/log_audit.json`；没有相同状态自转换，相邻转换首尾连续。
++
++## ADS持续非Running：现场根因未解决
++
++六项mock未复现持续非Running。原条件仍为PLC设备RUN、初始化成功、完整ADS读写成功；Zenoh已连接并有控制权不会保证这些条件成立。**没有证据证明重复完成分支导致ADS线程永久非Running，不能把两个现象合并宣布修复。**
++
++缺少现场ads_fault_diagnostics.log、[ADS-STATE]转换/错误码、实际目标NetId和TwinCAT路由状态，无法判断来自路由恢复、PLC状态或具体ADS调用失败。按用户约束，该根因修复停止在证据边界；未强制PLC RUN，未添加绕过，也没有证据将其归因于TwinCAT路由。
+diff --git a/介入机器人/docs/revision_uhn_20261108/protocol.md b/介入机器人/docs/revision_uhn_20261108/protocol.md
+new file mode 100644
+index 0000000..b2b8095
+--- /dev/null
++++ b/介入机器人/docs/revision_uhn_20261108/protocol.md
+@@ -0,0 +1,20 @@
++# H：设备会话号与主端
++
++## 改动边界
++
++调用链：VI.HandleHost 成功 openDevice → HostSample → HandleHostMemory → HandleService 缓存 → ControlFrame.HandleA/B → RemoteRobotLink → HandleFrame → ZenohWire HMAC/严格解码 → ZenohService.on_handle → remote_handle_bridge::Sample.device_epoch → Handle::poll。
++
++每设备计数保存在主端监管器与共享内存头部。宿主每次成功打开该设备时 NextDeviceEpoch(slot) 加 1；重启前监管器读取两个计数，启动新宿主时种回共享内存；Stop/Start 同一服务也保留计数。原有宿主重启周期和 USB 事件路径不变。SDK 负状态原来只置 invalid，并不重新 openDevice；本次没有添加 SDK 重开路径。
++
++HandleFrame 原先 24 项，现为 26 项：索引23 DeviceEpoch582（ulong），24 DeviceEpoch587（ulong），25 AuthTag。严格校验 ulong，签名包含这两项。PROTOCOL.md 已规定现有位置数组扩展保留版本1/Topic，此次遵循该惯例，不提供旧长度兼容。主端、VI.HandleHost、数据端必须一起部署。
++
++## 验证
++
++- 固定黄金向量使用非零且不同的7/9，C#、C++逐字节对拍。
++- 两侧桥接保存7/9分别断言；伪造 epoch 导致原HMAC失效。
++- 负数/字符串 epoch 拒绝。
++- crash/stall/USB插入/USB拔出四类宿主重启，断言 epoch 增加1。
++- 真实VI.HandleHost加载模拟FLCatheter.dll，双柄重开各自增加1；保留原V5清力、3s新鲜度、SDK缺失和200Hz断言。
++- 验证主端结构HandleSample没有其他序列化边界/内存封送调用者；线上边界仍只走显式HandleFrame。
++
++详见 test_counts.json、test_inventory.csv、zenoh.log、host_sdk/results.log。
+diff --git a/介入机器人/tools/revision_uhn/handle_tests.cpp b/介入机器人/tools/revision_uhn/handle_tests.cpp
+new file mode 100644
+index 0000000..91b7a84
+--- /dev/null
++++ b/介入机器人/tools/revision_uhn/handle_tests.cpp
+@@ -0,0 +1,256 @@
++// 只替换时钟和硬件输入；恢复、滤波、基准重建、力反馈及映射表达式来自生产代码。
++#include <windows.h>
++#include <array>
++#include <cmath>
++#include <cstdlib>
++#include <fstream>
++#include <iostream>
++#include <sstream>
++#include <string>
++#include "Handle.h"
++static ULONGLONG clock_ms = 10000;
++static ULONGLONG replay_tick() { return clock_ms; }
++#define GetTickCount64 replay_tick
++#include "remote_handle_bridge.h"
++#include "手柄.cpp"
++#include "control_types.h"
++#include "force_feedback.h"
++#include "motion_sync.h"
++#include "plc_io.h"
++
++static void check(bool ok, const char* text)
++{
++    if (!ok) { std::cerr << "FAIL H: " << text << '\n'; std::exit(1); }
++}
++static bool settling(const Handle& handle)
++{
++#ifdef BASELINE
++    (void)handle; return false;
++#else
++    return handle.resume_settling();
++#endif
++}
++
++struct Replay
++{
++    Handle handle_axis1{587}, handle_axis6{582};
++    Handle* axis1_input_handle = &handle_axis1;
++    Handle* axis6_input_handle = &handle_axis6;
++    HandleFilterState axis1_handle_filter, axis6_handle_filter;
++    ControlConfig cfg;
++    CrawlState axis1_crawl, axis6_crawl;
++    GuidewireMode guidewire_mode = GuidewireMode::None;
++    bool single_handle_mode = false, ads_soft_hold_active = false, handle_soft_hold_active = false;
++    bool initial_sync_done = true, connection_hold_active_prev = false;
++    bool axis1_fast_return = false, axis6_fast_retract = false;
++    PlannedReturnCoordinator planned_return;
++    bool control_active = true, return_ads_fault_hold = false, estop_hold_active = false;
++    struct { bool active() const { return false; } } spacing_recovery;
++    bool ads_motion_cycle_valid = true;
++    ForceFeedbackState ff;
++    ForceSampleFrame force_sample;
++    ForceCalibrationConfig cal_cfg;
++    ForceCalibrationState cal_state;
++    double plc_act_pos[7] = {20, 30, 600, 0, 610, 625, 40}, plc_init_pos[7] = {}, plc_leftlimit[7] = {};
++    double pos[7] = {}, axis2_hold_rel = 30, axis7_hold_rel = 40;
++    double axis1_prev_linear_filtered = 0, axis6_prev_linear_filtered = 0;
++    double axis1_prev_rot_filtered = 0, axis6_prev_rot_filtered = 0;
++    double axis1_follow_cmd_abs = 20, axis6_follow_cmd_abs = 625;
++    double axis3_base_rel = 600, axis5_base_rel = 610, axis6_mirror_base_rel = 625;
++    double axis1_prev_abs_for_trigger = 20, axis6_prev_abs_for_trigger = 625;
++    bool axis1_prev_abs_valid = true, axis6_prev_abs_valid = true, axis1_reverse_switch_guard_active = false;
++    std::string recovery_event_text;
++    AppContext ctx;
++    std::array<double, 4> command{20, 30, 625, 40};
++    int rebases = 0;
++
++    Replay()
++    {
++        remote_handle_bridge::clear_samples(); remote_handle_bridge::clear_outputs();
++        ctx.cfg = &cfg; ctx.pos = pos; ctx.plc_act_pos = plc_act_pos;
++        ctx.plc_init_pos = plc_init_pos; ctx.plc_leftlimit = plc_leftlimit;
++        ctx.axis1_input_handle = axis1_input_handle; ctx.axis6_input_handle = axis6_input_handle;
++        ctx.axis1_handle_filter = &axis1_handle_filter; ctx.axis6_handle_filter = &axis6_handle_filter;
++        ctx.axis1_crawl = &axis1_crawl; ctx.axis6_crawl = &axis6_crawl;
++        ctx.axis2_hold_rel = &axis2_hold_rel; ctx.axis7_hold_rel = &axis7_hold_rel;
++        ctx.axis1_prev_linear_filtered = &axis1_prev_linear_filtered;
++        ctx.axis6_prev_linear_filtered = &axis6_prev_linear_filtered;
++        ctx.axis1_prev_rot_filtered = &axis1_prev_rot_filtered; ctx.axis6_prev_rot_filtered = &axis6_prev_rot_filtered;
++        ctx.axis1_follow_cmd_abs = &axis1_follow_cmd_abs; ctx.axis6_follow_cmd_abs = &axis6_follow_cmd_abs;
++        ctx.axis1_reverse_switch_guard_active = &axis1_reverse_switch_guard_active;
++        ctx.axis1_prev_abs_for_trigger = &axis1_prev_abs_for_trigger; ctx.axis6_prev_abs_for_trigger = &axis6_prev_abs_for_trigger;
++        ctx.axis1_prev_abs_valid = &axis1_prev_abs_valid; ctx.axis6_prev_abs_valid = &axis6_prev_abs_valid;
++        ctx.axis3_base_rel = &axis3_base_rel; ctx.axis5_base_rel = &axis5_base_rel;
++        ctx.axis6_mirror_base_rel = &axis6_mirror_base_rel;
++        ff.set_enabled(1, true); ff.set_enabled(2, true);
++        cal_state.zeroed = true; force_sample.valid = true;
++        force_sample.fn_1_value_v = force_sample.fn_2_value_v = 1;
++        sample(0, 0, 1); handle_axis1.init(); handle_axis6.init();
++        handle_axis1.poll(); handle_axis6.poll();
++        axis1_handle_filter.reset(0, 0); axis6_handle_filter.reset(0, 0);
++        check(motion_sync::rebase_dual_after_return(ctx), "initial production baseline");
++    }
++    void sample(float linear, float rotation, std::uint64_t epoch, int only_slot = -1)
++    {
++        remote_handle_bridge::Sample s;
++        s.valid = true; s.joints[0] = linear; s.joints[1] = rotation;
++        s.vels[0] = 17; s.vels[1] = -23;
++#ifndef BASELINE
++        s.device_epoch = epoch;
++#else
++        (void)epoch;
++#endif
++        for (int slot = 0; slot < 2; ++slot) {
++            auto value = s;
++            if (only_slot >= 0 && slot != only_slot) {
++                value.joints[0] = value.joints[1] = 0;
++#ifndef BASELINE
++                value.device_epoch = 1;
++#endif
++            }
++            remote_handle_bridge::put_sample(slot, value);
++        }
++    }
++    void load_pos_from_actual() { plc_io::load_pos_from_actual(ctx); }
++    void cycle()
++    {
++        const bool handle1_poll_ok = handle_axis1.poll(), handle6_poll_ok = handle_axis6.poll();
++#include "main_soft_hold.inc"
++        const bool handle1_rebase_requested = handle_axis1.take_rebase_request();
++        const bool handle6_rebase_requested = handle_axis6.take_rebase_request();
++        const bool handle_rebase_requested = handle1_rebase_requested || handle6_rebase_requested;
++        const bool rebuild = !handle_soft_hold_active && (ads_soft_hold_active ||
++            handle_rebase_requested || connection_hold_active_prev);
++#include "main_rebase.inc"
++        if (rebuild) ++rebases;
++        connection_hold_active_prev = handle_soft_hold_active || ads_soft_hold_active;
++#include "main_filter.inc"
++        if (!handle_soft_hold_active && !ads_soft_hold_active) {
++            double probe[4] = {};
++#include "main_mapping.inc"
++            // 探针只累计生产表达式算出的线性增量；窗口/回退约束另由原有完整回放覆盖。
++            command[0] += probe[0]; command[2] += probe[2];
++            command[1] = probe[1]; command[3] = probe[3];
++        }
++        force_cycle();
++        axis1_prev_linear_filtered = axis1_handle_filter.axis0_filtered;
++        axis6_prev_linear_filtered = axis6_handle_filter.axis0_filtered;
++        axis1_prev_rot_filtered = axis1_handle_filter.axis1_filtered;
++        axis6_prev_rot_filtered = axis6_handle_filter.axis1_filtered;
++    }
++    void force_cycle()
++    {
++#include "main_force.inc"
++    }
++};
++
++int main()
++{
++    std::ofstream csv("four_axes.csv"); csv << "scenario,elapsed_ms,axis1,axis2,axis6,axis7,settling,rebases\n";
++    for (int slot : {0, 1})
++    for (const std::string scenario : {"reopen_2mm_10deg", "gap1600", "epoch50_zero_shift", "epoch_wrap"}) {
++        clock_ms += 10000; Replay replay;
++        const auto reference = replay.command;
++        if (scenario == "reopen_2mm_10deg") {
++            (slot == 0 ? replay.handle_axis6 : replay.handle_axis1).close();
++            replay.connection_hold_active_prev = true;
++            clock_ms += 50; replay.sample(0, 0, 1, slot);
++            replay.handle_axis1.init(); replay.handle_axis6.init();
++        } else clock_ms += scenario == "gap1600" ? 1600 : 50;
++        const auto began = clock_ms;
++        double max_during = 0;
++        for (int elapsed = 0; elapsed <= 1000; elapsed += 10) {
++            clock_ms = began + elapsed;
++            const bool epoch = scenario.find("epoch") == 0;
++            const float fraction = static_cast<float>((std::min)(elapsed, 400)) / 400.0f;
++            const float linear = epoch ? 0.2f : fraction * static_cast<float>(2.0 / replay.cfg.k_handle_to_mm);
++            const float rotation = scenario == "epoch_wrap" ? static_cast<float>(-2 * 3.141592653589793) :
++                (epoch ? 1.4f : fraction * static_cast<float>(10.0 / Rad));
++            replay.sample(linear, rotation, epoch ? 2 : 1, slot); replay.cycle();
++            csv << scenario << "_SN" << (slot == 0 ? 582 : 587) << ',' << elapsed;
++            for (double value : replay.command) csv << ',' << value;
++            csv << ',' << settling(replay.handle_axis1) << ',' << replay.rebases << '\n';
++            if (elapsed < 500) {
++                for (int i = 0; i < 4; ++i) max_during = (std::max)(max_during, std::abs(replay.command[i] - reference[i]));
++#ifndef BASELINE
++                check(replay.command == reference, "axes1/2/6/7 commands exactly unchanged during500ms");
++                const auto& recovering = slot == 0 ? replay.handle_axis6 : replay.handle_axis1;
++                check(recovering.fVels2[0] == 0 && recovering.fVels2[1] == 0, "recovering handle velocities zero");
++                check(replay.ff.force_582_f == 0 && replay.ff.force_587_f == 0 &&
++                    replay.ff.force_582_n == 0 && replay.ff.force_587_n == 0 &&
++                    remote_handle_bridge::get_output(0).force == 0 && remote_handle_bridge::get_output(1).force == 0,
++                    "production force call cannot reapply force while settling");
++#endif
++            }
++#ifndef BASELINE
++            if (elapsed >= 500) check(replay.command == reference, "newest baseline has no residual convergence jump");
++            if (elapsed == 500) {
++                check(replay.rebases == 1 && !settling(replay.handle_axis1), "exactly one rebase at500ms");
++                check(replay.axis1_crawl.handle_ref == (slot == 1 ? static_cast<double>(linear) : 0) &&
++                    replay.axis6_crawl.rot_ref == (slot == 0 ? static_cast<double>(rotation) : 0),
++                    "completion sample supplies linear and rotational baselines");
++                check(replay.axis1_crawl.base_rel == reference[0] && replay.axis6_crawl.base_rel == reference[2],
++                    "axes1/6 base_rel rebuilt from current actual position");
++                const auto& recovering = slot == 0 ? replay.handle_axis6 : replay.handle_axis1;
++                check(recovering.fVels2[0] == 0 && recovering.fVels2[1] == 0, "completion poll zeros velocity");
++            }
++#endif
++        }
++#ifdef BASELINE
++        check(max_during > 0.1, "old production path reproduces premature follow jump");
++        std::cout << "PASS H old_jump scenario=" << scenario << " SN=" << (slot == 0 ? 582 : 587)
++            << " max_command_delta=" << max_during << '\n';
++#else
++        check(replay.rebases == 1, "no repeated rebase after stable recovery");
++        const auto before_follow = replay.command;
++        clock_ms += 10;
++        const bool epoch = scenario.find("epoch") == 0;
++        const float linear = epoch ? .2f : static_cast<float>(2.0 / replay.cfg.k_handle_to_mm);
++        const float rotation = scenario == "epoch_wrap" ? static_cast<float>(-2 * 3.141592653589793) :
++            (epoch ? 1.4f : static_cast<float>(10.0 / Rad));
++        replay.sample(linear + .0002f, rotation + .001f, epoch ? 2 : 1, slot); replay.cycle();
++        const int linear_axis = slot == 0 ? 2 : 0, rotation_axis = slot == 0 ? 3 : 1;
++        check(replay.command[linear_axis] < before_follow[linear_axis] &&
++            before_follow[linear_axis] - replay.command[linear_axis] < .1 &&
++            replay.command[rotation_axis] < before_follow[rotation_axis] &&
++            before_follow[rotation_axis] - replay.command[rotation_axis] < .1, "new motion follows continuously after recovery");
++        std::cout << "PASS H scenario=" << scenario << " SN=" << (slot == 0 ? 582 : 587)
++            << " held_ms=500 max_delta=" << max_during << " rebases=1 follow_resumed=1\n";
++#endif
++    }
++#ifndef BASELINE
++    for (bool invalid_frame : {false, true}) {
++        clock_ms += 10000; Replay replay;
++        clock_ms += 50; const auto began = clock_ms;
++        for (int elapsed = 0; elapsed <= 300; elapsed += 10) {
++            clock_ms = began + elapsed; replay.sample(.1f, .3f, 2); replay.cycle();
++        }
++        if (invalid_frame) {
++            const auto cached_rx = remote_handle_bridge::detail::state().samples[0].rx_ms;
++            clock_ms += 10; remote_handle_bridge::put_sample(0, {}); remote_handle_bridge::put_sample(1, {});
++            check(remote_handle_bridge::detail::state().samples[0].rx_ms == cached_rx, "invalid frame preserves cached valid timestamp");
++            replay.cycle(); clock_ms += 10;
++        } else {
++            clock_ms += 251; replay.cycle();
++            check(settling(replay.handle_axis1) && replay.rebases == 0, "cached sample cannot finish500ms");
++            clock_ms += 10;
++        }
++        const auto restarted = clock_ms;
++        for (int elapsed = 0; elapsed <= 500; elapsed += 10) {
++            clock_ms = restarted + elapsed; replay.sample(.1f, .3f, 2); replay.cycle();
++            check(replay.rebases == (elapsed == 500 ? 1 : 0), "new interruption restarts full500ms timer");
++        }
++        std::cout << "PASS H continuity_reset=" << (invalid_frame ? "invalid_frame" : "251ms_gap") << " timer_ms=500\n";
++    }
++#endif
++    clock_ms += 10000; Replay force;
++    force.handle_soft_hold_active = true; force.force_cycle();
++#ifdef BASELINE
++    check(force.ff.force_582_f != 0 && force.ff.force_587_f != 0, "old loop reapplies force after handle hold");
++    std::cout << "PASS H old_force_reapplied wire=" << force.ff.force_582_f << " catheter=" << force.ff.force_587_f << '\n';
++#else
++    check(force.ff.force_582_f == 0 && force.ff.force_587_f == 0 && force.ff.force_582_n == 0 && force.ff.force_587_n == 0,
++        "force and torque remain zero for existing connection hold");
++    std::cout << "PASS H force_hold_gate all_outputs_zero=1\n";
++#endif
++}
+diff --git a/介入机器人/tools/revision_uhn/network_tests.cpp b/介入机器人/tools/revision_uhn/network_tests.cpp
+new file mode 100644
+index 0000000..0be3dd7
+--- /dev/null
++++ b/介入机器人/tools/revision_uhn/network_tests.cpp
+@@ -0,0 +1,134 @@
++// 生产 ADS 线程、Zenoh 服务认证入口和抽取的主循环保持分支；不链接 ADS DLL。
++#include <winsock2.h>
++#include <bcrypt.h>
++#include <fstream>
++#include <sstream>
++#include "ads_mock.inc"
++#include "zenoh_service.h"
++#include "手柄/Handle.h"
++
++namespace main_fixture {
++#include "main_fixture.inc"
++}
++
++struct ZenohServiceTestAccess
++{
++    static void initialize(ZenohService& service)
++    {
++        BCRYPT_ALG_HANDLE algorithm = nullptr;
++        assert(BCRYPT_SUCCESS(BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr,
++            BCRYPT_ALG_HANDLE_HMAC_FLAG)));
++        service.bcrypt_algorithm_ = algorithm;
++        service.token_.assign(32, 't');
++        service.session_key_.assign(16, 0x42);
++        service.session_id_ = 41;
++        service.authenticated_ = service.lease_held_ = true;
++    }
++    static void sample(ZenohService& service, std::uint64_t sequence)
++    {
++        vi_protocol::HandleFrame frame;
++        frame.version = 1; frame.session_id = 41; frame.sequence = sequence;
++        frame.valid582 = frame.valid587 = true;
++        frame.device_epoch582 = frame.device_epoch587 = 1;
++        frame.auth_tag = service.sign(frame);
++        service.on_handle(frame);
++    }
++};
++
++static void network_assert(bool ok, const char* label)
++{
++    if (!ok) { std::cerr << "FAIL N: " << label << std::endl; std::exit(1); }
++}
++
++int main(int argc, char** argv)
++{
++    network_assert(argc == 3, "scenario and duration arguments");
++    const std::string scenario = argv[1];
++    const int duration = std::stoi(argv[2]);
++    const bool break_ads = scenario != "zenoh", break_zenoh = scenario != "ads";
++    network_assert(scenario == "zenoh" || scenario == "ads" || scenario == "both", "known scenario");
++    network_assert(duration == 10 || duration == 30, "10s or30s duration");
++    CADSComm ads;
++    AdsCommunicationService communication(ads);
++    network_assert(communication.start(nullptr, nullptr), "production ADS thread started");
++    ZenohService zenoh; ZenohServiceTestAccess::initialize(zenoh);
++    Handle wire(582), catheter(587);
++    main_fixture::Fixture control;
++    control.connection_hold_active_prev = false;
++    std::uint64_t sequence = 0, snapshot_sequence = 0;
++    int entries = 0, exits = 0, premature_rebases = 0;
++    bool verify_interruption = false;
++    auto cycle_once = [&](bool send_handle) {
++        if (send_handle) ZenohServiceTestAccess::sample(zenoh, ++sequence);
++        if (!wire.is_open()) wire.init();
++        if (!catheter.is_open()) catheter.init();
++        const bool wire_ok = wire.poll(), catheter_ok = catheter.poll();
++        if (!wire_ok && wire.is_open()) wire.close();
++        if (!catheter_ok && catheter.is_open()) catheter.close();
++        control.handle_soft_hold_active = !wire_ok || !catheter_ok ||
++            wire.resume_settling() || catheter.resume_settling();
++        control.handle6_rebase_requested = wire.take_rebase_request();
++        control.handle1_rebase_requested = catheter.take_rebase_request();
++        control.handle_rebase_requested = control.handle6_rebase_requested || control.handle1_rebase_requested;
++        AdsFastSnapshot snapshot;
++        const bool fresh = communication.wait_for_snapshot(snapshot_sequence, 50, snapshot);
++        if (fresh) snapshot_sequence = snapshot.attempt_sequence;
++        const auto state = communication.stats().state;
++        control.ads_motion_cycle_valid = fresh && snapshot.position_valid && state == AdsConnectionState::Running;
++        if (!control.ads_motion_cycle_valid) control.ads_soft_hold_active = true;
++        else {
++            if (verify_interruption && control.handle_soft_hold_active)
++                control.recovery_event_text = "等待新鲜手柄采样";
++            const auto reason_before = control.recovery_event_text;
++            control.recover();
++            if (verify_interruption && control.handle_soft_hold_active && control.recovery_event_text != reason_before)
++                ++premature_rebases;
++#ifndef BASELINE
++            network_assert(!verify_interruption || !control.handle_soft_hold_active || control.recovery_event_text == reason_before,
++                "missing handles cannot repeatedly report connection-hold end");
++#endif
++        }
++        const bool was_holding = control.connection_hold_active_prev;
++        control.edge();
++        if (!was_holding && control.connection_hold_active_prev) ++entries;
++        if (was_holding && !control.connection_hold_active_prev) ++exits;
++        control.auto_resume();
++    };
++    auto until = [&](auto predicate, int timeout_ms, bool handles) {
++        const auto began = GetTickCount64();
++        do { cycle_once(handles); if (predicate()) return true; } while (GetTickCount64() - began < static_cast<ULONGLONG>(timeout_ms));
++        return predicate();
++    };
++    network_assert(until([&] { return communication.stats().state == AdsConnectionState::Running &&
++        !control.connection_hold_active_prev; }, 3000, true), "initial control ready");
++    entries = exits = 0;
++    verify_interruption = true;
++    const auto began = GetTickCount64();
++    network_down = break_ads;
++    while (GetTickCount64() - began < static_cast<ULONGLONG>(duration) * 1000) {
++        cycle_once(!break_zenoh);
++        if (!break_ads) network_assert(communication.stats().state == AdsConnectionState::Running,
++            "Zenoh interruption cannot change healthy ADS state");
++    }
++    network_assert(control.connection_hold_active_prev && entries == 1 && exits == 0,
++        "interruption enters hold once and never reports exit while still interrupted");
++    const auto restored = GetTickCount64();
++    network_down = false;
++    network_assert(until([&] { return communication.stats().state == AdsConnectionState::Running &&
++        !control.connection_hold_active_prev; }, 1500, true), "recovers within1s reconnect plus initialization");
++    const auto recovery_ms = GetTickCount64() - restored;
++    const auto stable_since = GetTickCount64();
++    while (GetTickCount64() - stable_since < 600) cycle_once(true);
++    network_assert(entries == 1 && exits == 1 && control.control_active,
++        "control resumes automatically with exactly one hold exit");
++    communication.stop();
++#ifdef BASELINE
++    network_assert(premature_rebases > 1, "old branch repeatedly reports successful rebase with missing handles");
++    std::cout << "REPRODUCED N old_premature_rebases=" << premature_rebases << std::endl;
++#else
++    network_assert(premature_rebases == 0, "no premature rebase during handle hold");
++#endif
++    std::cout << "PASS N scenario=" << scenario << " duration_s=" << duration
++        << " outage_ms=" << restored - began << " recovery_ms=" << recovery_ms
++        << " entries=" << entries << " exits=" << exits << " control_active=" << control.control_active << std::endl;
++}
+diff --git a/介入机器人/tools/revision_uhn/run_handle.py b/介入机器人/tools/revision_uhn/run_handle.py
+new file mode 100644
+index 0000000..8f00a52
+--- /dev/null
++++ b/介入机器人/tools/revision_uhn/run_handle.py
+@@ -0,0 +1,86 @@
++"""确定时钟回放生产 Handle、桥接、滤波、主循环恢复和四轴映射；不连接设备。"""
++from pathlib import Path
++import os
++import subprocess
++import sys
++
++repo = Path(__file__).resolve().parents[2]
++ads = repo / "B数据端/工程/ADS项目"
++baseline = "--baseline" in sys.argv
++out = repo / "docs/revision_uhn_20261108/handle" / ("baseline" if baseline else "fixed")
++out.mkdir(parents=True, exist_ok=True)
++
++
++def read(name):
++    if baseline:
++        return subprocess.check_output(["git", "show", "HEAD:介入机器人/B数据端/工程/ADS项目/" + name],
++            cwd=repo).decode("utf-8-sig").replace("\r\n", "\n")
++    return (ads / name).read_text(encoding="utf-8-sig")
++
++
++def between(text, start, end):
++    begin = text.index(start)
++    return text[begin:text.index(end, begin)]
++
++
++main = read("main.cpp")
++for name in ("Handle.h", "remote_handle_bridge.h", "手柄.cpp"):
++    (out / name).write_text(read("手柄/" + name), encoding="utf-8")
++(out / "main_rebase.inc").write_text(between(main,
++    "\t\telse if (ads_soft_hold_active && planned_return.active())",
++    "\t\tconst bool connection_hold_active").replace("else if", "if", 1), encoding="utf-8")
++(out / "main_filter.inc").write_text(between(main, "\t\tif (!handle_soft_hold_active)\n\t\t{\n\t\t\taxis1_handle_filter.update",
++    "\t\tLARGE_INTEGER handle_record_qpc"), encoding="utf-8")
++(out / "main_soft_hold.inc").write_text(between(main, "\t\thandle_soft_hold_active = single_handle_mode",
++    "\t\tconst bool handle1_rebase_requested"), encoding="utf-8")
++(out / "main_force.inc").write_text(between(main, "\t\tprocess_force_feedback(",
++    "\n\t\t// 无论本拍是否进入控制分支"), encoding="utf-8")
++increments = between(main, "\t\t\tconst double axis1_linear_filtered =", "\t\t\tconst double axis1_abs =")
++for axis in (1, 6):
++    increments += between(main, f"\t\t\tconst double axis{axis}_linear_increment_raw_mm =",
++        f"\t\t\tconst double axis{axis}_directional_increment_mm =")
++increments += "probe[0] = axis1_linear_increment_mm; probe[2] = axis6_linear_increment_mm;\n"
++increments += between(main, "\t\t\t\tpos[1] = axis1_crawl.rot_base_rel +",
++    "\t\t\t\taxis2_hold_rel = pos[1];")
++increments += between(main, "\t\t\t\t\taxis6_crawl.rot_base_rel +", ";") + ";\n"
++# 旋转表达式保持原样，仅把返回值接到测试探针。
++increments = increments.replace("\t\t\t\t\taxis6_crawl.rot_base_rel +", "probe[3] = axis6_crawl.rot_base_rel +")
++increments += "probe[1] = pos[1];\n"
++(out / "main_mapping.inc").write_text(increments, encoding="utf-8")
++mock = (ads / "tools/ads_diagnostics_test.cpp").read_text(encoding="utf-8-sig")
++mock = mock[:mock.index("\nint main()")]
++mock = mock.replace('#include "../ads_communication.h"', '#include "ads_communication.h"')
++mock = mock.replace('#include "../ads_communication.cpp"', '#include "ads_communication.cpp"')
++mock = mock.replace('void copy_positions(const double* source, double* destination, int count) {\n'
++    '    std::copy(source, source + count, destination);\n}', '')
++(out / "ads_mock.cpp").write_text(mock, encoding="utf-8")
++entries = []
++for row in (ads / "tools/ads_symbol_sizes.tsv").read_text(encoding="utf-8").splitlines():
++    if row and not row.startswith("#"):
++        name, size = row.split("\t")
++        entries.append('{"' + name + '", ' + str(int(size)) + '},')
++(out / "ads_symbol_sizes.inc").write_text("\n".join(entries), encoding="utf-8")
++vswhere = Path(os.environ["ProgramFiles(x86)"]) / "Microsoft Visual Studio/Installer/vswhere.exe"
++vs = subprocess.check_output([str(vswhere), "-latest", "-products", "*", "-requires",
++    "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property", "installationPath"], text=True).strip()
++includes = [out, ads, ads / "ADS/Include", ads / "手柄"]
++sources = [Path(__file__).with_name("handle_tests.cpp"), ads / "motion_sync.cpp",
++    ads / "control_types.cpp", ads / "plc_io.cpp", ads / "force_feedback.cpp", out / "ads_mock.cpp"]
++command = ('@echo off\nchcp 65001 >nul\ncall "' + vs + '\\VC\\Auxiliary\\Build\\vcvars64.bat" >nul\n'
++    'if errorlevel 1 exit /b 1\ncl /nologo /std:c++17 /EHsc /utf-8 /DNOMINMAX /Gy /MD '
++    + ('/DBASELINE ' if baseline else '')
++    + " ".join('/I"' + str(p) + '"' for p in includes) + " "
++    + " ".join('"' + str(p) + '"' for p in sources)
++    + ' /Fe:handle_tests.exe /link /OPT:REF\nexit /b %errorlevel%\n')
++(out / "build.cmd").write_text(command, encoding="utf-8")
++result = subprocess.run(["cmd.exe", "/d", "/c", str(out / "build.cmd")], cwd=out,
++    stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
++(out / "build.log").write_bytes(result.stdout)
++print(result.stdout.decode("utf-8", errors="replace"), flush=True)
++if result.returncode:
++    raise SystemExit(result.returncode)
++result = subprocess.run([str(out / "handle_tests.exe")], cwd=out,
++    stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
++(out / "results.log").write_bytes(result.stdout)
++print(result.stdout.decode("utf-8", errors="replace"), flush=True)
++raise SystemExit(result.returncode)
+diff --git a/介入机器人/tools/revision_uhn/run_managed.py b/介入机器人/tools/revision_uhn/run_managed.py
+new file mode 100644
+index 0000000..b90cc15
+--- /dev/null
++++ b/介入机器人/tools/revision_uhn/run_managed.py
+@@ -0,0 +1,47 @@
++"""独立目录构建并执行既有主端测试，不终止运行中的界面。"""
++from pathlib import Path
++import html
++import json
++import os
++import shutil
++import subprocess
++import tempfile
++
++repo = Path(__file__).resolve().parents[2]
++out = repo / "docs/revision_uhn_20261108"
++out.mkdir(parents=True, exist_ok=True)
++master = repo / "A主端/工程"
++build = master / "build/UhnRelease/bin"
++props = Path(tempfile.mkdtemp(prefix="vi-uhn-build-")) / "isolated.props"
++props.write_text('<Project><Import Project="' + html.escape(str(master / "Directory.Build.props"), quote=True)
++    + '"/><PropertyGroup><OutputPath>' + html.escape(str(build), quote=True)
++    + '/$(MSBuildProjectName)/</OutputPath></PropertyGroup></Project>', encoding="utf-8")
++dotnet = subprocess.check_output(["powershell.exe", "-NoProfile", "-File",
++    str(master / "tools/Get-ViDotnet.ps1")], text=True).strip()
++results = {}
++
++def run(name, args, env=None):
++    with (out / (name + ".log")).open("wb") as log:
++        result = subprocess.run([str(x) for x in args], cwd=repo, env=env, stdout=log, stderr=subprocess.STDOUT)
++    results[name] = result.returncode
++    (out / "managed_results.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
++    print(name, result.returncode, flush=True)
++    assert result.returncode == 0, str(out / (name + ".log"))
++
++env = dict(os.environ, DOTNET_CLI_UI_LANGUAGE="en", PYTHONUTF8="1")
++for name, project in [("master_build", "MasterConsole.sln"), ("wpf_build", "VI.Control.Tests.slnx"),
++        ("protocol_build", "MasterConsole.Protocol.Tests/MasterConsole.Protocol.Tests.csproj")]:
++    run(name, [dotnet, "build", master / "master" / project, "-c", "Release", "-p:Platform=x64",
++        "-p:DirectoryBuildPropsPath=" + str(props), "-warnaserror", "-m:2", "-v:minimal"], env)
++for name in ["VI.Control", "VI.Control.Tests", "MasterConsole.Protocol.Tests", "VI.Service.Robot"]:
++    shutil.copytree(build / "VI.HandleHost", build / name / "HandleHost", dirs_exist_ok=True)
++fixtures = repo.parent / "protocol/fixtures/zenoh-v1"
++run("wpf_tests", [build / "VI.Control.Tests/VI.Control.Tests.exe", out / "baseline_ui"], env)
++run("managed_tests", [build / "MasterConsole.Protocol.Tests/MasterConsole.Protocol.Tests.exe", fixtures], env)
++# 复用第五轮原生SDK替身构建入口，输出落入本轮目录，保留第五轮记录。
++script = repo / "tools/reliability_round5/run_host_sdk.py"
++source = script.read_text(encoding="utf-8").replace("docs/reliability_round5/host_sdk",
++    "docs/revision_uhn_20261108/host_sdk").split("dotnet=")[0]
++exec(compile(source, str(script), "exec"), {"__file__": str(script)})
++sdk_env = dict(env, VI_TEST_FAKE_SDK=str(out / "host_sdk/FakeFLCatheter.dll"))
++run("host_sdk_results", [build / "MasterConsole.Protocol.Tests/MasterConsole.Protocol.Tests.exe", fixtures], sdk_env)
+diff --git a/介入机器人/tools/revision_uhn/run_network.py b/介入机器人/tools/revision_uhn/run_network.py
+new file mode 100644
+index 0000000..bf343cf
+--- /dev/null
++++ b/介入机器人/tools/revision_uhn/run_network.py
+@@ -0,0 +1,93 @@
++"""复用现有ADS替身和Zenoh服务边界harness，真实等待六种10/30秒中断。"""
++from pathlib import Path
++import os
++import re
++import subprocess
++import sys
++
++repo = Path(__file__).resolve().parents[2]
++ads = repo / "B数据端/工程/ADS项目"
++package = repo.parent
++out = repo / "docs/revision_uhn_20261108/network"
++out.mkdir(parents=True, exist_ok=True)
++build = out / ("baseline" if "--baseline" in sys.argv else "fixed")
++build.mkdir(exist_ok=True)
++vswhere = Path(os.environ["ProgramFiles(x86)"]) / "Microsoft Visual Studio/Installer/vswhere.exe"
++vs = subprocess.check_output([str(vswhere), "-latest", "-products", "*", "-requires",
++    "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property", "installationPath"], text=True).strip()
++source = (ads / "main.cpp").read_text(encoding="utf-8-sig")
++if "--baseline" in sys.argv:
++    source = subprocess.check_output(["git", "show", "HEAD:介入机器人/B数据端/工程/ADS项目/main.cpp"],
++        cwd=repo, encoding="utf-8-sig").replace("\r\n", "\n")
++
++def between(text, start, end):
++    begin = text.index(start)
++    return text[begin:text.index(end, begin)]
++
++rebase = between(source, "\t\telse if (ads_soft_hold_active && planned_return.active())",
++    "\t\tconst bool connection_hold_active").replace("else if", "if", 1)
++(build / "main_rebase.inc").write_text(rebase, encoding="utf-8")
++connection = between(source, "\t\tconst bool connection_hold_active =", "\t\tif (!initial_sync_done)")
++(build / "main_connection.inc").write_text(connection, encoding="utf-8")
++(build / "main_observe.inc").write_text(between(source, "\t\tconst bool ads_self_check_valid",
++    "\t\tif (ads_events.selfcheck_status"), encoding="utf-8")
++(build / "main_auto_resume.inc").write_text(between(source, "\t\tif (!control_active && !return_ads_fault_hold",
++    "\t\tunsigned short cylinder1_cmd"), encoding="utf-8")
++(build / "main_start.inc").write_text(between(source, "\t\t\t\tcase VisCommandType::SelectDirectControl:",
++    "\t\t\t\t\tcase VisCommandType::SetGravityCompensation:").split("\n", 1)[1], encoding="utf-8")
++fixture = (ads / "tools/main_recovery_test.cpp").read_text(encoding="utf-8-sig")
++fixture = fixture[:fixture.index("\nint main()")]
++fixture = re.sub(r"^#include <.*>\n", "", fixture, flags=re.M)
++fixture = re.sub(r"^enum class (AdsConnectionState|StartupPhase|GuidewireMode).*\n", "", fixture, flags=re.M)
++fixture = fixture.replace("void reset() {} } spacing_recovery;",
++    "SpacingRecoveryPhase phase = SpacingRecoveryPhase::Idle; void reset() {} } spacing_recovery;")
++fixture = fixture.replace("    void recover() {", """
++    double plc_act_pos[7] = {}, axis2_hold_rel = 0, axis7_hold_rel = 0, independent_axis2_hold_rel = 0;
++    struct { void disable_compensation() {} } tracking_controller;
++    void clear_force_output() {}
++    void edge() {
++#include "main_connection.inc"
++    }
++    void recover() {""")
++(build / "main_fixture.inc").write_text(fixture, encoding="utf-8")
++mock = (ads / "tools/ads_diagnostics_test.cpp").read_text(encoding="utf-8-sig")
++mock = mock[:mock.index("\nint main()")]
++mock = mock.replace('#include "../ads_communication.h"', '#include "ads_communication.h"')
++mock = mock.replace('#include "../ads_communication.cpp"', '#include "ads_communication.cpp"')
++(build / "ads_mock.inc").write_text(mock, encoding="utf-8")
++entries = []
++for row in (ads / "tools/ads_symbol_sizes.tsv").read_text(encoding="utf-8").splitlines():
++    if row and not row.startswith("#"):
++        name, size = row.split("\t")
++        entries.append('{"' + name + '", ' + str(int(size)) + '},')
++(build / "ads_symbol_sizes.inc").write_text("\n".join(entries), encoding="utf-8")
++sdk = package / "zenoh/sdk/zenoh-c-1.10.1-msvc"
++msgpack = package / "zenoh/sdk/msgpack-cxx-9.0.0/include"
++includes = [build, ads, ads / "ADS/Include", ads / "手柄", sdk / "include", msgpack]
++files = [Path(__file__).with_name("network_tests.cpp"), ads / "plc_io.cpp",
++    ads / "zenoh_service.cpp", ads / "手柄/手柄.cpp"]
++command = ('@echo off\nchcp 65001 >nul\ncall "' + vs + '\\VC\\Auxiliary\\Build\\vcvars64.bat" >nul\n'
++    'if errorlevel 1 exit /b 1\ncl /nologo /std:c++17 /EHsc /utf-8 /DNOMINMAX /DMSGPACK_NO_BOOST /Gy /MD '
++    + ('/DBASELINE ' if "--baseline" in sys.argv else '')
++    + " ".join('/I"' + str(p) + '"' for p in includes) + " "
++    + " ".join('"' + str(p) + '"' for p in files)
++    + ' /Fe:network_tests.exe /link /OPT:REF /LIBPATH:"' + str(sdk / "lib")
++    + '" zenohc.dll.lib bcrypt.lib ws2_32.lib\nexit /b %errorlevel%\n')
++(build / "build.cmd").write_text(command, encoding="utf-8")
++result = subprocess.run(["cmd.exe", "/d", "/c", str(build / "build.cmd")], cwd=build,
++    stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
++(build / "build.log").write_bytes(result.stdout)
++print(result.stdout.decode("utf-8", errors="replace"), flush=True)
++if result.returncode:
++    raise SystemExit(result.returncode)
++import shutil
++shutil.copyfile(sdk / "bin/zenohc.dll", build / "zenohc.dll")
++scenarios = [("zenoh", 10)] if "--baseline" in sys.argv else [
++    (scenario, duration) for scenario in ("zenoh", "ads", "both") for duration in (10, 30)]
++for scenario, duration in scenarios:
++    result = subprocess.run([str(build / "network_tests.exe"), scenario, str(duration)], cwd=build,
++        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
++    (build / f"{scenario}_{duration}.log").write_bytes(result.stdout)
++    print(result.stdout.decode("utf-8", errors="replace"), flush=True)
++    if result.returncode:
++        raise SystemExit(result.returncode)
+diff --git a/介入机器人/tools/revision_uhn/run_regressions.py b/介入机器人/tools/revision_uhn/run_regressions.py
+new file mode 100644
+index 0000000..1eb847f
+--- /dev/null
++++ b/介入机器人/tools/revision_uhn/run_regressions.py
+@@ -0,0 +1,69 @@
++"""复用既有原生、V5、定位臂与跨语言测试，结果独立保存且不忽略失败。"""
++from pathlib import Path
++from concurrent.futures import ThreadPoolExecutor
++import json
++import os
++import subprocess
++import sys
++
++repo = Path(__file__).resolve().parents[2]
++ads = repo / "B数据端/工程/ADS项目"
++out = repo / "docs/revision_uhn_20261108"
++env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8", VSLANG="1033", DOTNET_CLI_UI_LANGUAGE="en")
++results = {}
++
++
++def run(name, args):
++    with (out / (name + ".log")).open("wb") as log:
++        result = subprocess.run([str(x) for x in args], cwd=repo, env=env, stdout=log, stderr=subprocess.STDOUT)
++    results[name] = result.returncode
++    print(name, "exit=" + str(result.returncode), flush=True)
++
++
++def run_source(name, script, source, args=()):
++    code = "import sys; sys.path.insert(0, " + repr(str(script.parent)) + "); sys.argv = " + repr([str(script), *args])
++    code += "; exec(compile(" + repr(source) + ", " + repr(str(script)) + ", 'exec'), {'__file__': " + repr(str(script)) + "})"
++    run(name, [sys.executable, "-c", code])
++
++
++def native():
++    run("native", ["node", ads / "tools/run_offline_tests.cjs", "all", out / "native"])
++    for test in ("handle_net_distance_test",):
++        run(test, [sys.executable, ads / "tools/run_ads_diagnostics_test.py", test])
++    for name in ("recovery", "st"):
++        script = repo / ("tools/reliability_round5/run_" + name + ".py")
++        source = script.read_text(encoding="utf-8").replace("docs/reliability_round5/" + name,
++            "docs/revision_uhn_20261108/v5_" + name)
++        run_source("v5_" + name, script, source)
++
++
++def arm():
++    script = repo / "B数据端/工程/PositioningArmKinematics/tests/run_cart_jog_acceptance.py"
++    source = script.read_text(encoding="utf-8").replace('logs = repo / "docs/acceptance_cart_jog"',
++        "logs = Path(" + repr(str(out / "arm")) + ")")
++    source = source.replace('build = kin / "build-cart-jog"', 'build = Path(' + repr(str(out / "arm_build")) + ')')
++    run_source("arm", script, source, ["--round4"])
++
++
++def zenoh():
++    dotnet = subprocess.check_output(["powershell.exe", "-NoProfile", "-File",
++        str(repo / "A主端/工程/tools/Get-ViDotnet.ps1")], text=True).strip()
++    run("zenoh", ["powershell.exe", "-NoProfile", "-File", ads / "tests/run-zenoh-tests.ps1", "-DotnetPath", dotnet])
++
++
++def ads_build():
++    vswhere = Path(os.environ["ProgramFiles(x86)"]) / "Microsoft Visual Studio/Installer/vswhere.exe"
++    vs = subprocess.check_output([str(vswhere), "-latest", "-products", "*", "-requires",
++        "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property", "installationPath"], text=True).strip()
++    run("ads_build", [Path(vs) / "MSBuild/Current/Bin/MSBuild.exe", ads / "ADS.sln", "/t:Rebuild",
++        "/p:Configuration=Release", "/p:Platform=x64", "/warnaserror", "/p:TreatWarningAsError=true",
++        "/p:OutDir=" + str(out / "network/build_ads/bin") + "/",
++        "/p:IntDir=" + str(out / "network/build_ads/obj") + "/", "/nologo", "/verbosity:minimal"])
++
++
++with ThreadPoolExecutor(max_workers=4) as pool:
++    futures = [pool.submit(fn) for fn in (native, arm, zenoh, ads_build)]
++    for future in futures:
++        future.result()
++(out / "regression_results.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
++raise SystemExit(1 if any(results.values()) else 0)

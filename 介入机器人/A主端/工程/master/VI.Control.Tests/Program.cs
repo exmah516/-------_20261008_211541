@@ -14,7 +14,7 @@ using Robotics.HostFramework;
 using Robotics.HostFramework.Contracts;
 using VI.Control;
 
-internal static class Program
+internal static partial class Program
 {
     [STAThread]
     private static int Main(string[] args)
@@ -78,16 +78,18 @@ internal static class Program
             var layoutArm = (UserControl)layoutRegion.Panels[1].Content;
             Check(layoutIntervention.ActualWidth > 0 && layoutArm.ActualWidth > 0, $"both module panels arrange at scale {scale:0.##}");
             Check(((FrameworkElement)layoutIntervention.FindName("Injector1Push")!).ActualWidth > 0, $"intervention hold control remains laid out at scale {scale:0.##}");
-            Check(((FrameworkElement)layoutArm.FindName("Axis1Forward")!).ActualWidth > 0, $"arm hold control remains laid out at scale {scale:0.##}");
-            var scroll = Visuals(content).OfType<ScrollViewer>().First();
-            Check(scroll.ScrollableWidth == 0, $"no horizontal overflow at {size.Width} × {size.Height}, scale {scale:0.##}");
-            if (size.Width == 600) Check(scroll.ScrollableHeight > 0, "small window keeps controls reachable by vertical scrolling");
-            string fileName = $"vi-control-{size.Width:0}x{size.Height:0}-{scale:0.##}.png";
-            SaveScreenshot(mainWindow, size, scale, Path.Combine(outputDirectory, fileName));
-            scroll.ScrollToBottom();
+            Check(((FrameworkElement)layoutArm.FindName("CartesianForward")!).ActualWidth > 0, $"arm hold control remains laid out at scale {scale:0.##}");
+            Pump();
             content.UpdateLayout();
-            Check(scroll.VerticalOffset >= scroll.ScrollableHeight, "bottom controls remain reachable through the shell scroll viewer");
-            SaveScreenshot(mainWindow, size, scale, Path.Combine(outputDirectory, fileName.Replace(".png", "-bottom.png", StringComparison.Ordinal)));
+            Check(content.ActualWidth == size.Width && content.ActualHeight == size.Height, "responsive content fills the requested DIP dimensions");
+            Check(mainWindow.FindName("DesignViewbox") is null && mainWindow.FindName("DesignSurface") is null,
+                "whole-window scaling and fixed design surface are removed");
+            Check(TextOptions.GetTextFormattingMode(content) == TextFormattingMode.Ideal,
+                "responsive content uses Ideal text formatting");
+            var dpiImage = new RenderTargetBitmap((int)Math.Round(size.Width * scale), (int)Math.Round(size.Height * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
+            dpiImage.Render(content);
+            Check(dpiImage.PixelWidth == (int)Math.Round(size.Width * scale) && dpiImage.PixelHeight == (int)Math.Round(size.Height * scale) && Math.Abs(dpiImage.DpiX - 96 * scale) < 0.01,
+                $"original window/DPI render case remains covered at {size.Width} × {size.Height}, scale {scale:0.##}");
             mainWindow.Close();
         }
 
@@ -125,12 +127,12 @@ internal static class Program
         Check(recordingLink.LastForceHold, "hold button sends explicit on");
         Check(recordingLink.StopArmCount == 0 && recordingLink.DisconnectCount == 0,
             "feedback controls do not stop motion or disconnect");
-        var windowProgress = (ProgressBar)holdIntervention.FindName("Axis6WindowProgress")!;
+        Check(holdIntervention.FindName("Axis6WindowProgress") is null, "axis6 window is commented out rather than displayed");
         foreach (var (position, expectedPercent, near) in new[] { (117f, 50.0, false), (102f, 3.125, true), (132f, 96.875, true), (101f, 0.0, true), (133f, 100.0, true) })
         {
             recordingLink.PublishWindow(position, 101, 133);
             Pump();
-            Check(holdVm.Axis6WindowAvailable && Math.Abs(windowProgress.Value - expectedPercent) < 0.001 &&
+            Check(holdVm.Axis6WindowAvailable && Math.Abs(holdVm.Axis6WindowPercent - expectedPercent) < 0.001 &&
                 holdVm.Axis6WindowNearBoundary == near, "window position and both boundary warnings use live read-only feedback");
             Check(holdVm.Axis6WindowWarning == (near ? "接近导丝机构窗口位置，将要触发机构快退" : ""), "window warning has exactly the requested wording");
             Check(holdVm.CanOperate && recordingLink.StopArmCount == 0 && recordingLink.DisconnectCount == 0,
@@ -145,7 +147,7 @@ internal static class Program
         Check(!holdVm.Axis6WindowAvailable && holdVm.Axis6WindowWarning == "", "unavailable window does not show a false boundary warning");
         recordingLink.PublishWindow(float.NaN, 611, 643);
         Pump();
-        Check(!holdVm.Axis6WindowAvailable && windowProgress.Value == 0, "nonfinite position cannot reach the progress control");
+        Check(!holdVm.Axis6WindowAvailable && holdVm.Axis6WindowPercent == 0, "nonfinite position keeps the retained progress property at zero");
         recordingLink.PublishWindow(627, 611, 643);
         recordingLink.StatusAgeMs = ProtocolConstants.StatusTimeoutMs;
         Pump();
@@ -153,7 +155,7 @@ internal static class Program
         recordingLink.StatusAgeMs = 0;
         recordingLink.SetConnected(false, false);
         Pump();
-        Check(!holdVm.Axis6WindowAvailable && windowProgress.Value == 0, "disconnect clears the position display");
+        Check(!holdVm.Axis6WindowAvailable && holdVm.Axis6WindowPercent == 0, "disconnect clears the retained position property");
         recordingLink.SetConnected(true, true);
         Pump();
         var injector = (Button)holdIntervention.FindName("Injector1Push")!;
@@ -263,35 +265,26 @@ internal static class Program
         closeRegion.RegisterPanel(new("intervention", "介入控制", 10), () => holdIntervention);
         closeRegion.RegisterPanel(new("positioning-arm", "定位臂控制", 20), () => holdArm);
         var closeWindow = new MainWindow(closeRegion, holdVm, selection);
-        recordingLink.PublishWindow(102, 101, 133);
-        Pump();
-        var compactSize = new Size(600, 560);
-        ((FrameworkElement)closeWindow.Content).Measure(compactSize);
-        ((FrameworkElement)closeWindow.Content).Arrange(new Rect(new Point(), compactSize));
+        var designSize = new Size(1280, 800);
+        ((FrameworkElement)closeWindow.Content).Measure(designSize);
+        ((FrameworkElement)closeWindow.Content).Arrange(new Rect(new Point(), designSize));
         closeWindow.UpdateLayout();
-        SaveScreenshot(closeWindow, compactSize, 1, Path.Combine(outputDirectory, "vi-control-window-warning-600x560.png"));
-        ((FrameworkElement)closeWindow.Content).Measure(new Size(1000, 900));
-        ((FrameworkElement)closeWindow.Content).Arrange(new Rect(0, 0, 1000, 900));
-        closeWindow.UpdateLayout();
-        var expanders = Visuals((DependencyObject)closeWindow.Content).OfType<Expander>().ToArray();
-        var interventionExpander = expanders
-            .Single(expander => expander.DataContext is ShellPanel panel && panel.Metadata.Id == "intervention");
-        var armExpander = expanders
-            .Single(expander => expander.DataContext is ShellPanel panel && panel.Metadata.Id == "positioning-arm");
+        Check(!Visuals((DependencyObject)closeWindow.Content).OfType<Expander>().Any(), "shell no longer wraps module panels in collapsing expanders");
+        Check(typeof(MainWindow).GetMethod("Panel_Collapsed", BindingFlags.NonPublic | BindingFlags.Instance) is null,
+            "removed outer panel collapse path has no stop handler");
         var injector2Pull = Visuals(holdIntervention).OfType<Button>().Single(button =>
             Convert.ToString(button.Tag) == "2" && Convert.ToString(button.CommandParameter) == "-1");
         var axis4 = (Button)holdIntervention.FindName("Axis4Forward")!;
         Invoke(holdIntervention, "HoldButton_Down", injector, MouseArgs(injector));
         Invoke(holdIntervention, "HoldButton_Down", injector2Pull, MouseArgs(injector2Pull));
         Invoke(holdIntervention, "HoldButton_Down", axis4, MouseArgs(axis4));
-        interventionExpander.IsExpanded = false;
-        Check(recordingLink.InjectorDirections.Count == 2 && recordingLink.InjectorDirections.Values.All(direction => direction == 0) && recordingLink.LastAxis4 == 0, "collapsing the intervention panel stops both injectors and axis 4");
-        interventionExpander.IsExpanded = true;
-        int stopsBeforeCollapse = recordingLink.StopArmCount;
-        Invoke(holdArm, "ArmJogButton_Down", axis, MouseArgs(axis));
-        armExpander.IsExpanded = false;
-        Check(recordingLink.ArmJogDirections.Count == 5 && recordingLink.ArmJogDirections.Values.All(direction => direction == 0) && recordingLink.StopArmCount > stopsBeforeCollapse, "collapsing the arm panel clears held motion");
-        armExpander.IsExpanded = true;
+        int stopsBeforeReveal = recordingLink.StopArmCount;
+        ((System.Windows.Controls.Primitives.ToggleButton)holdIntervention.FindName("PrepareToggle")!).IsChecked = true;
+        ((System.Windows.Controls.Primitives.ToggleButton)holdIntervention.FindName("PrepareToggle")!).IsChecked = false;
+        ((System.Windows.Controls.Primitives.ToggleButton)holdArm.FindName("ArmDebugToggle")!).IsChecked = true;
+        ((System.Windows.Controls.Primitives.ToggleButton)holdArm.FindName("ArmDebugToggle")!).IsChecked = false;
+        Check(recordingLink.StopArmCount == stopsBeforeReveal && recordingLink.LastAxis4 == 1,
+            "manual preparation and debugging reveal only changes layout");
         Invoke(holdArm, "ArmJogButton_Down", axis, MouseArgs(axis));
         Invoke(holdIntervention, "HoldButton_Down", injector2Pull, MouseArgs(injector2Pull));
         Invoke(holdIntervention, "HoldButton_Down", axis4, MouseArgs(axis4));
@@ -304,7 +297,7 @@ internal static class Program
 
         string shellXaml = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "MainWindow.xaml"));
         Check(!shellXaml.Contains("Deactivated", StringComparison.Ordinal), "switching focus does not invoke a global stop handler");
-        Check(!shellXaml.Contains("StatusBar", StringComparison.Ordinal) && !shellXaml.Contains("LogPane", StringComparison.Ordinal), "shell has no connection status bar or log pane");
+        Check(shellXaml.Contains("SlaveStatus", StringComparison.Ordinal) && !shellXaml.Contains("LogPane", StringComparison.Ordinal), "shell now hosts the requested connection capsules and no log pane");
         var acquireFailure = DispatchProxy.Create<IRobotLink, RecordingRobotLink>();
         var acquireFailureLink = (RecordingRobotLink)(object)acquireFailure;
         acquireFailureLink.AcquireResult = CommandResult.Rejected("ADS state is stale.");
@@ -317,7 +310,8 @@ internal static class Program
                 "control acquisition rejection remains visible with the data-end reason");
         }
         CheckStartupSelection();
-        Console.WriteLine("All VI.Control checks passed.");
+        CheckRevisionU(intervention.GetType(), arm.GetType(), outputDirectory);
+        Console.WriteLine($"All VI.Control checks passed ({_checks} assertions). ");
     }
 
     private static void CheckStartupSelection()
@@ -369,8 +363,11 @@ internal static class Program
             foreach (var child in Visuals(VisualTreeHelper.GetChild(parent, index))) yield return child;
     }
 
+    private static int _checks;
+
     private static void Check(bool condition, string message)
     {
+        _checks++;
         if (!condition) throw new InvalidOperationException("FAIL: " + message);
         Console.WriteLine("PASS: " + message);
     }
@@ -415,6 +412,21 @@ public class RecordingRobotLink : DispatchProxy
     public int DisconnectCount { get; private set; }
     public CommandResult AcquireResult { get; set; } = CommandResult.Done();
     public double StatusAgeMs { get; set; }
+    public bool Handle582Online { get; set; }
+    public bool Handle587Online { get; set; }
+
+    public void PublishUiState(StatusFlags extra = StatusFlags.None, string recovery = "", float catheterAngle = 0, float wireAngle = 0)
+    {
+        _events.TryGetValue("StatusReceived", out Delegate? handler);
+        ((EventHandler<StatusFrame>?)handler)?.Invoke(this, new StatusFrame
+        {
+            Flags = StatusFlags.LeaseHeld | StatusFlags.AdsHealthy | StatusFlags.ControlActive |
+                StatusFlags.SelfCheckDone | StatusFlags.CalZeroed | StatusFlags.FfEnabled |
+                StatusFlags.Force582Enabled | StatusFlags.Force587Enabled | extra,
+            RecoveryText = recovery,
+            AxisPos = [0, catheterAngle, 0, 0, 0, 0, wireAngle], AxisFromLeft = new float[7]
+        });
+    }
 
     public void PublishWindow(float position, float start, float end)
     {
@@ -461,7 +473,7 @@ public class RecordingRobotLink : DispatchProxy
         if (name == "get_Name") return "Test link";
         if (name == "get_IsConnected") return _connected;
         if (name == "get_HasControl") return _control;
-        if (name == "GetStats") return new LinkStats { StatusAgeMs = StatusAgeMs };
+        if (name == "GetStats") return new LinkStats { StatusAgeMs = StatusAgeMs, Handle582Online = Handle582Online, Handle587Online = Handle587Online };
         if (name == "ConnectAsync") { SetConnected(true, false); return Task.CompletedTask; }
         if (name == "Disconnect") { DisconnectCount++; SetConnected(false, false); return null; }
         if (name == "AcquireControlAsync") return Task.FromResult(AcquireResult);

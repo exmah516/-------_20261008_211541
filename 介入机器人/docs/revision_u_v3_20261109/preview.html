@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>主端界面预览（自适应 v3）</title>
+<style>
+  /* 尺寸档：小（默认）/ 中 / 大。字号、按钮高度按档位跳变，不随窗口连续缩放；布局在档位内随窗口流动铺满。 */
+  :root { --fs: 13px; --fs-s: 12px; --fs-t: 14px; --fs-num: 20px; --h-btn: 26px; --h-hold: 30px; --h-hold-max: 64px;
+          --gap: 6px; --pad: 8px; --arm-w: clamp(236px, 27vw, 300px); --dial: 26px; --size-name: "小"; }
+  @media (min-width: 1150px) and (min-height: 640px) {
+    :root { --fs: 15px; --fs-s: 13px; --fs-t: 16px; --fs-num: 26px; --h-btn: 32px; --h-hold: 38px; --h-hold-max: 72px;
+            --gap: 8px; --pad: 10px; --arm-w: clamp(300px, 26vw, 380px); --dial: 32px; --size-name: "中"; } }
+  @media (min-width: 1500px) and (min-height: 860px) {
+    :root { --fs: 17px; --fs-s: 15px; --fs-t: 19px; --fs-num: 32px; --h-btn: 38px; --h-hold: 46px; --h-hold-max: 84px;
+            --gap: 10px; --pad: 12px; --arm-w: clamp(360px, 25vw, 460px); --dial: 38px; --size-name: "大"; } }
+
+  html, body { height: 100%; margin: 0; }
+  body { min-width: 520px; display: flex; flex-direction: column; background: #EDF1F5; color: #0F1B2A;
+         font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans SC', sans-serif; font-size: var(--fs); }
+  .top { flex: none; padding: var(--pad) var(--pad) 0; display: flex; flex-direction: column; gap: var(--gap); }
+  .main { flex: 1; min-height: 0; overflow: auto; padding: var(--gap) var(--pad) var(--pad); box-sizing: border-box; }
+  .main-inner { min-height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) var(--arm-w); gap: var(--gap); }
+  @media (max-width: 819px) {
+    .main-inner { grid-template-columns: minmax(0, 1fr); min-height: auto; }
+    .arm .dofs { grid-template-rows: repeat(5, var(--h-hold)); }
+  }
+  .col { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+
+  .card { background: #FFFFFF; border: 1px solid #D6DEE6; border-radius: 8px; box-sizing: border-box; }
+  .row { display: flex; align-items: center; gap: var(--gap); min-width: 0; }
+  .grow { flex: 1; min-width: 0; }
+  .label { font-size: var(--fs-s); font-weight: 600; letter-spacing: .06em; color: #4A5868; white-space: nowrap; }
+  .hint { font-size: var(--fs-s); color: #5E6E7F; white-space: nowrap; }
+  .mono { font-family: 'Cascadia Mono', Consolas, monospace; }
+  .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  button { font: inherit; cursor: pointer; white-space: nowrap; }
+  .btn { height: var(--h-btn); padding: 0 .9em; background: #FFFFFF; border: 1px solid #B8C5D1; border-radius: 7px; color: #0F1B2A; flex: none; }
+  .btn.disabled { background: #F1F4F7; border-color: #D6DEE6; color: #8696A7; cursor: default; }
+  .toggle { height: var(--h-btn); padding: 0 .75em; display: inline-flex; align-items: center; gap: .45em; background: #FFFFFF; border: 1px solid #B8C5D1; border-radius: 7px; color: #0F1B2A; flex: none; }
+  .toggle::before { content: ""; width: .5em; height: .5em; border-radius: 50%; background: #B3BFCB; flex: none; }
+  .toggle.on { background: #E4F1F8; border-color: #0B6E99; color: #0A4F70; font-weight: 600; }
+  .toggle.on::before { background: #0B6E99; }
+  .hold { height: 100%; min-height: var(--h-hold); max-height: var(--h-hold-max); background: #F5F7FA; border: 1px solid #A9B7C5; border-radius: 7px; color: #0F1B2A; font-size: calc(var(--fs) + 1px); font-weight: 600; }
+  .hold:active { background: #E4F1F8; border-color: #0B6E99; }
+
+  .status { min-height: calc(var(--h-btn) + 10px); padding: 5px var(--pad); box-sizing: border-box; flex-wrap: wrap; row-gap: 5px; }
+  .pill { display: inline-flex; align-items: center; gap: .35em; height: calc(var(--h-btn) - 2px); padding: 0 .7em; border-radius: 999px; background: #E7F4EC; flex: none; }
+  .pill i { width: .5em; height: .5em; border-radius: 50%; background: #1E8A4C; flex: none; }
+  .pill span { color: #5E6E7F; white-space: nowrap; }
+  .pill b { color: #155E35; white-space: nowrap; }
+  .pill.shrink { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+  .dir { display: inline-flex; align-items: center; height: var(--h-btn); padding: 0 .8em; border-radius: 7px; font-size: var(--fs-t); font-weight: 700; letter-spacing: .1em;
+         background: #E4F1F8; border: 1px solid #0B6E99; color: #0A4F70; flex: none; }
+  .notice { min-height: var(--h-btn); padding: 0 var(--pad); background: #FFF4DE; border: 1px solid #EFD39F; border-radius: 7px; color: #7A4A00; }
+
+  .title { font-size: var(--fs-t); font-weight: 700; }
+  .cards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--gap); flex: 3 1 auto; }
+  .instr { padding: var(--pad) calc(var(--pad) + 2px); display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+  .readouts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--gap); flex: 1 1 auto; }
+  .readout { background: #F6F8FA; border-radius: 7px; padding: .4em .6em; display: flex; flex-direction: column; justify-content: center; min-width: 0;
+             container-type: size; min-height: calc(var(--fs-num) * 2.5); box-sizing: border-box; }
+  .readout .v { font-size: clamp(var(--fs-num), min(40cqh, 19cqw), 96px); font-weight: 600; line-height: 1.1; }
+  .readout .u { font-size: clamp(var(--fs), min(13cqh, 7cqw), 30px); color: #4A5868; }
+  .readout .hint { font-size: clamp(var(--fs-s), min(11cqh, 6cqw), 22px); }
+  .instr-foot { border-top: 1px solid #E6EBF0; padding-top: var(--gap); }
+  .dial { width: var(--dial); height: var(--dial); flex: none; }
+
+  .aux { padding: var(--pad) calc(var(--pad) + 2px); display: flex; flex-direction: column; gap: var(--gap); flex: 2 1 auto; }
+  .aux-grid { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto; column-gap: var(--gap);
+              grid-template-rows: repeat(3, minmax(var(--h-hold), 1fr)); row-gap: var(--gap);
+              align-items: center; flex: 1 1 auto; }
+  .aux-grid > span, .aux-grid > b { align-self: center; padding-right: .6em; white-space: nowrap; }
+
+  .arm { padding: var(--pad) calc(var(--pad) + 2px); display: flex; flex-direction: column; gap: var(--gap); }
+  .seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); flex: 1; border: 1px solid #B8C5D1; border-radius: 7px; overflow: hidden; }
+  .seg button { height: var(--h-btn); border: none; background: #FFFFFF; }
+  .seg button.on { background: #0B6E99; color: #FFFFFF; font-weight: 600; }
+  .dofs { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); column-gap: var(--gap);
+          grid-template-rows: repeat(5, minmax(var(--h-hold), 1fr)); row-gap: var(--gap);
+          align-items: center; flex: 1 1 auto; }
+  .dofs > b, .dofs > span { align-self: center; white-space: nowrap; }
+  .dofs > b { padding-right: .4em; }
+  .dofs .hold { font-size: calc(var(--fs) + 4px); }
+  .dbg { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding-top: 4px; }
+  .dbg .btn, .dbg .hold { height: var(--h-btn); min-height: 0; padding: 0; font-size: var(--fs-s); width: 100%; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <!-- 状态条 -->
+  <div class="card row status">
+    <button class="btn" style="font-weight: 600;">断开</button>
+    <div style="width: 1px; height: 60%; background: #D6DEE6; flex: none;"></div>
+    <span class="pill"><i></i><span>从端</span><b>已连接 · 已获控制权</b></span>
+    <span class="pill"><i></i><span>ADS</span><b>正常</b></span>
+    <span class="pill"><i></i><span>导丝手柄</span><b>在线</b></span>
+    <span class="pill"><i></i><span>导管手柄</span><b>在线</b></span>
+    <span class="row" style="flex: none; margin-left: auto;">
+      <span class="hint">阶段</span><b style="white-space: nowrap;">手柄控制中</b>
+      <span class="hint">方向</span><span class="dir">递送</span>
+    </span>
+  </div>
+  <!-- 提示行（仅有消息时出现） -->
+  <div class="row notice"><span class="ellipsis">提示：导丝手柄采样中断后恢复，已在当前位置重建基准。</span></div>
+</div>
+
+<div class="main">
+  <div class="main-inner">
+
+    <!-- 左：操作区 -->
+    <div class="col">
+      <!-- 器械准备（手动展开/收起） -->
+      <div class="card" style="padding: calc(var(--pad) - 2px) var(--pad); flex: none;">
+        <div class="row" style="min-height: var(--h-btn); flex-wrap: wrap; row-gap: 4px;">
+          <span class="label">器械准备</span>
+          <span class="ellipsis" style="color: #4A5868;">导管 <b class="mono">28</b> mm · 导丝 <b class="mono">610</b> mm</span>
+          <span class="hint ellipsis" style="color: #1E7A45;">已到达器械准备位置</span>
+          <div class="grow"></div>
+          <button class="btn disabled">开始控制（手柄）</button>
+          <button class="btn" onclick="var p=document.getElementById('prep');p.classList.toggle('hidden');this.textContent=p.classList.contains('hidden')?'展开':'收起';">展开</button>
+        </div>
+        <div id="prep" class="row hidden" style="align-items: flex-end; gap: calc(var(--gap) * 2); padding-top: var(--gap); margin-top: var(--gap); border-top: 1px solid #E6EBF0; flex-wrap: wrap;">
+          <div style="display: flex; flex-direction: column; gap: 3px;"><span class="hint">导管旋捻机构位置（5–95 mm）</span><input value="28" style="width: 8em; height: var(--h-btn); box-sizing: border-box; padding: 0 .5em; border: 1px solid #B8C5D1; border-radius: 6px; font-family: Consolas, monospace; font-size: var(--fs);"></div>
+          <div style="display: flex; flex-direction: column; gap: 3px;"><span class="hint">Y 阀及导丝机构位置（10–639 mm）</span><input value="610" style="width: 8em; height: var(--h-btn); box-sizing: border-box; padding: 0 .5em; border: 1px solid #B8C5D1; border-radius: 6px; font-family: Consolas, monospace; font-size: var(--fs);"></div>
+          <button class="btn" style="border-color: #0B6E99; color: #0A4F70; font-weight: 600;">进入器械准备位置</button>
+        </div>
+      </div>
+
+      <!-- 力反馈与夹持 -->
+      <div class="row" style="flex: none; padding: 0 2px; flex-wrap: wrap; row-gap: 4px;">
+        <span class="label">力反馈与夹持</span>
+        <div class="grow"></div>
+        <span class="hint ellipsis">零点已采集</span>
+        <button class="btn">取零点</button>
+        <button class="toggle" onclick="this.classList.toggle('on')">开启保持</button>
+      </div>
+
+      <div class="cards">
+        <div class="card instr">
+          <div class="row"><span class="title">导丝</span><div class="grow"></div><button class="toggle on" onclick="this.classList.toggle('on')">力反馈</button></div>
+          <div class="readouts">
+            <div class="readout"><span class="hint">轴向力</span><span style="white-space: nowrap;"><span class="v mono">0.000</span> <span class="u">N</span></span></div>
+            <div class="readout"><span class="hint">力矩</span><span style="white-space: nowrap;"><span class="v mono">0.000</span> <span class="u">N·mm</span></span></div>
+          </div>
+          <div class="row instr-foot">
+            <svg class="dial" viewBox="0 0 38 38"><circle cx="19" cy="19" r="16" fill="none" stroke="#C9D3DD" stroke-width="2.4"/><line x1="19" y1="19" x2="19" y2="6" stroke="#0B6E99" stroke-width="3" stroke-linecap="round"/><circle cx="19" cy="19" r="2.8" fill="#0B6E99"/></svg>
+            <div style="min-width: 0;"><div class="hint">旋转角</div><div class="mono">0.0°</div></div>
+            <div class="grow"></div>
+            <button class="toggle" title="导丝夹持" onclick="this.classList.toggle('on')">夹持</button>
+            <button class="toggle" title="导丝旋捻" onclick="this.classList.toggle('on')">旋捻</button>
+          </div>
+        </div>
+        <div class="card instr">
+          <div class="row"><span class="title">导管</span><div class="grow"></div><button class="toggle on" onclick="this.classList.toggle('on')">力反馈</button></div>
+          <div class="readouts">
+            <div class="readout"><span class="hint">轴向力</span><span style="white-space: nowrap;"><span class="v mono">0.000</span> <span class="u">N</span></span></div>
+            <div class="readout"><span class="hint">力矩</span><span style="white-space: nowrap;"><span class="v mono">0.000</span> <span class="u">N·mm</span></span></div>
+          </div>
+          <div class="row instr-foot">
+            <svg class="dial" viewBox="0 0 38 38"><circle cx="19" cy="19" r="16" fill="none" stroke="#C9D3DD" stroke-width="2.4"/><line x1="19" y1="19" x2="19" y2="6" stroke="#0B6E99" stroke-width="3" stroke-linecap="round"/><circle cx="19" cy="19" r="2.8" fill="#0B6E99"/></svg>
+            <div style="min-width: 0;"><div class="hint">旋转角</div><div class="mono">0.0°</div></div>
+            <div class="grow"></div>
+            <button class="toggle" title="导管夹持" onclick="this.classList.toggle('on')">夹持</button>
+            <button class="toggle" title="导管旋捻" onclick="this.classList.toggle('on')">旋捻</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 器械辅助 -->
+      <div class="card aux">
+        <div class="row">
+          <span class="label">器械辅助</span><span class="hint ellipsis">按住动作，松开即停</span>
+          <div class="grow"></div>
+          <span class="hint">Y 阀已打开</span>
+          <button class="toggle" onclick="this.classList.toggle('on')">关闭 Y 阀</button>
+        </div>
+        <div class="aux-grid">
+          <b>球囊输送</b><button class="hold">后退</button><button class="hold">前进</button><span class="hint" style="padding-left: .6em;">停止</span>
+          <span>注射器 1</span><button class="hold">推</button><button class="hold">拉</button><span class="hint" style="padding-left: .6em;">停止</span>
+          <span>注射器 2</span><button class="hold">推</button><button class="hold">拉</button><span class="hint" style="padding-left: .6em;">停止</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右：定位臂 -->
+    <div class="card arm">
+      <div class="row"><span class="title">定位臂</span><span class="hint ellipsis grow">定位臂命令待发送</span><button class="toggle on" onclick="this.classList.toggle('on')">总使能</button></div>
+      <div class="row">
+        <span class="hint">速度</span>
+        <div class="seg"><button>快</button><button class="on">中</button><button>慢</button></div>
+      </div>
+      <div class="row"><span class="label">末端点动</span><span class="hint ellipsis">按住移动，松开即停</span></div>
+      <div class="dofs">
+        <b>X</b><span class="hint mono">15 mm/s</span><button class="hold">−</button><button class="hold">+</button>
+        <b>Y</b><span class="hint mono">15 mm/s</span><button class="hold">−</button><button class="hold">+</button>
+        <b>Z</b><span class="hint mono">2.5 mm/s</span><button class="hold">−</button><button class="hold">+</button>
+        <b>俯仰</b><span class="hint mono">0.8°/s</span><button class="hold">−</button><button class="hold">+</button>
+        <b>偏航</b><span class="hint mono">1.6°/s</span><button class="hold">−</button><button class="hold">+</button>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); flex: none;"><button class="btn" style="width: 100%;">归零</button><button class="btn" style="width: 100%;">停止</button></div>
+      <div style="border-top: 1px solid #E6EBF0; padding-top: 4px; flex: none;">
+        <button class="label" style="background: none; border: none; padding: 0; height: var(--h-btn);" onclick="var d=document.getElementById('dbg');d.classList.toggle('hidden');this.textContent=d.classList.contains('hidden')?'▸ 定位臂调试':'▾ 定位臂调试';">▸ 定位臂调试</button>
+        <div id="dbg" class="dbg hidden">
+          <script>
+            for (var n = 1; n <= 5; n++) document.write('<div style="display:flex;flex-direction:column;gap:3px;min-width:0;"><span class="hint" style="text-align:center;">轴 ' + n + '</span><button class="btn">上电</button><button class="btn">复位</button><div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;"><button class="hold">−</button><button class="hold">+</button></div></div>');
+          </script>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // 仅用于标题栏显示当前窗口尺寸和档位，方便对照；界面本身只靠 CSS。
+  function show() {
+    var size = getComputedStyle(document.documentElement).getPropertyValue('--size-name').replace(/"/g, '').trim();
+    document.title = '主端预览 v3 · ' + window.innerWidth + '×' + window.innerHeight + ' · ' + size + '档';
+  }
+  window.addEventListener('resize', show); show();
+</script>
+</body>
+</html>

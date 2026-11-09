@@ -52,7 +52,7 @@ sid = 0x1122334455667788
 f = Float32
 samples = {
     "handle": [1, sid, 100, 123456, 5, True, 1234, -5678, f(.5), f(-.25), f(1.5), f(-2.5),
-               2, True, -1, 2, f(1), f(2), f(0), f(.125), 1, -1, 0, b""],
+               2, True, -1, 2, f(1), f(2), f(0), f(.125), 1, -1, 0, 7, 9, b""],
     "command": [1, sid, 101, 123457, 42, 4, -1, 2, 12.25, 125.5, "准备", b"", b"", b"", b""],
     "state": [1, sid, 102, 2, ns, 123456, 913, 0, 1, 4, 2, 2000, 10, 2000, 10, 5, 1, -1, 0,
               f(.25), f(.01), f(.5), f(-.02), f(.3), f(100),
@@ -95,11 +95,16 @@ write("invalid_handle_nan", bad)
 bad[8], bad[20] = f(.5), 2
 write("invalid_handle_direction", bad)
 bad = samples["handle"].copy()
-bad[23] = "\x00" * 16
+bad[25] = "\x00" * 16
 write("invalid_handle_string_tag", bad)
 bad = samples["handle"].copy()
 bad[4] = 256
 write("invalid_handle_integer_range", bad)
+bad = samples["handle"].copy()
+bad[23] = -1
+write("invalid_handle_epoch_negative", bad)
+bad[23], bad[24] = 7, "9"
+write("invalid_handle_epoch_string", bad)
 bad = samples["command"].copy()
 bad[8] = f(12.25)
 write("invalid_command_float32", bad)

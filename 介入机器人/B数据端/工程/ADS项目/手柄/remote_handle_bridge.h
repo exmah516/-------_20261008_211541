@@ -26,6 +26,8 @@ namespace remote_handle_bridge
 	{
 		bool valid = false;
 		ULONGLONG rx_ms = 0;
+        ULONGLONG continuous_since_ms = 0;
+        std::uint64_t device_epoch = 0;
 		std::uint8_t buttons = 0;
 		std::int32_t encoders[2] = {};
 		float joints[2] = {};
@@ -58,10 +60,20 @@ namespace remote_handle_bridge
 	// ---- 采样：网关写入，Handle 读取 ----
 	inline void put_sample(int slot, Sample s)
 	{
-		if (slot < 0 || slot > 1 || !s.valid) return;
+		if (slot < 0 || slot > 1) return;
 		s.rx_ms = GetTickCount64();
 		auto& st = detail::state();
 		std::lock_guard<std::mutex> lock(st.m);
+        auto& previous = st.samples[slot];
+        if (!s.valid)
+        {
+            // 无效帧不刷新缓存龄期，但必须中断恢复静置的连续有效采样。
+            previous.continuous_since_ms = 0;
+            return;
+        }
+        s.continuous_since_ms = previous.valid && previous.continuous_since_ms != 0 &&
+            previous.device_epoch == s.device_epoch && s.rx_ms - previous.rx_ms <= 250
+            ? previous.continuous_since_ms : s.rx_ms;
 		st.samples[slot] = s;
 	}
 

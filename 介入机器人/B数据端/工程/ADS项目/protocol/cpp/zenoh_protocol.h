@@ -12,7 +12,7 @@ namespace vi_protocol
     constexpr const char* kCommandTopic = "vi/ads/command/v1";
     constexpr const char* kStateTopic = "vi/ads/state/v1";
     constexpr const char* kForceTopic = "vi/ads/force/v1";
-    constexpr std::size_t kHandleFields = 24;
+    constexpr std::size_t kHandleFields = 26;
     constexpr std::size_t kCommandFields = 15;
     constexpr std::size_t kCommandResultFields = 3;
     constexpr std::size_t kStateFields = 55;
@@ -53,12 +53,13 @@ namespace vi_protocol
         std::int32_t encoder587_0{}, encoder587_1{};
         float joint587_0{}, joint587_1{}, velocity587_0{}, velocity587_1{};
         std::int8_t injector1_direction{}, injector2_direction{}, axis4_direction{};
+        std::uint64_t device_epoch582{}, device_epoch587{};
         std::vector<std::uint8_t> auth_tag;
         MSGPACK_DEFINE(version, session_id, sequence, monotonic_ms, buttons582, valid582,
             encoder582_0, encoder582_1, joint582_0, joint582_1, velocity582_0, velocity582_1,
             buttons587, valid587, encoder587_0, encoder587_1, joint587_0, joint587_1,
             velocity587_0, velocity587_1, injector1_direction, injector2_direction,
-            axis4_direction, auth_tag);
+            axis4_direction, device_epoch582, device_epoch587, auth_tag);
     };
 
     struct CommandFrame

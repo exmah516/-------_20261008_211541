@@ -1,0 +1,126 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - button "断开" [ref=e4] [cursor=pointer]
+    - generic [ref=e6]:
+      - generic [ref=e8]: 从端
+      - generic [ref=e9]: 已连接 · 已获控制权
+    - generic [ref=e10]:
+      - generic [ref=e12]: ADS
+      - generic [ref=e13]: 正常
+    - generic [ref=e14]:
+      - generic [ref=e16]: 导丝手柄
+      - generic [ref=e17]: 在线
+    - generic [ref=e18]:
+      - generic [ref=e20]: 导管手柄
+      - generic [ref=e21]: 在线
+    - generic [ref=e22]: 阶段
+    - generic [ref=e23]: 手柄控制中
+    - generic [ref=e24]: 方向
+    - generic [ref=e25]: 递送
+  - generic [ref=e26]: 提示：导丝手柄采样中断后恢复，已在当前位置重建基准。
+  - generic [ref=e27]:
+    - generic [ref=e28]:
+      - generic [ref=e30]:
+        - generic [ref=e31]: 器械准备
+        - generic [ref=e32]: 导管旋捻机构 28 mm · Y 阀及导丝机构 610 mm
+        - generic [ref=e33]: 已到达器械准备位置
+        - button "开始控制（手柄）" [ref=e34]
+        - button "展开" [ref=e35] [cursor=pointer]
+      - generic [ref=e36]:
+        - generic [ref=e37]: 力反馈与夹持
+        - generic [ref=e38]: 零点已采集
+        - button "取零点" [ref=e39] [cursor=pointer]
+        - button "开启保持" [ref=e40] [cursor=pointer]
+      - generic [ref=e41]:
+        - generic [ref=e42]:
+          - generic [ref=e43]:
+            - generic [ref=e44]: 导丝
+            - button "力反馈" [ref=e45] [cursor=pointer]
+          - generic [ref=e46]:
+            - generic [ref=e47]:
+              - generic [ref=e48]: 轴向力
+              - text: 0.000 N
+            - generic [ref=e49]:
+              - generic [ref=e50]: 力矩
+              - text: 0.000 N·mm
+          - generic [ref=e51]:
+            - generic [ref=e55]:
+              - generic [ref=e56]: 旋转角
+              - generic [ref=e57]: 0.0°
+            - button "导丝夹持" [ref=e58] [cursor=pointer]
+            - button "导丝旋捻" [ref=e59] [cursor=pointer]
+        - generic [ref=e60]:
+          - generic [ref=e61]:
+            - generic [ref=e62]: 导管
+            - button "力反馈" [ref=e63] [cursor=pointer]
+          - generic [ref=e64]:
+            - generic [ref=e65]:
+              - generic [ref=e66]: 轴向力
+              - text: 0.000 N
+            - generic [ref=e67]:
+              - generic [ref=e68]: 力矩
+              - text: 0.000 N·mm
+          - generic [ref=e69]:
+            - generic [ref=e73]:
+              - generic [ref=e74]: 旋转角
+              - generic [ref=e75]: 0.0°
+            - button "导管夹持" [ref=e76] [cursor=pointer]
+            - button "导管旋捻" [ref=e77] [cursor=pointer]
+      - generic [ref=e78]:
+        - generic [ref=e79]:
+          - generic [ref=e80]: 器械辅助
+          - generic [ref=e81]: 按住动作，松开即停
+          - generic [ref=e82]: Y 阀已打开
+          - button "关闭 Y 阀" [ref=e83] [cursor=pointer]
+        - generic [ref=e84]:
+          - generic [ref=e85]: 球囊输送
+          - button "后退" [ref=e86] [cursor=pointer]
+          - button "前进" [ref=e87] [cursor=pointer]
+          - generic [ref=e88]: 停止
+          - generic [ref=e89]: 注射器 1
+          - button "推" [ref=e90] [cursor=pointer]
+          - button "拉" [ref=e91] [cursor=pointer]
+          - generic [ref=e92]: 停止
+          - generic [ref=e93]: 注射器 2
+          - button "推" [ref=e94] [cursor=pointer]
+          - button "拉" [ref=e95] [cursor=pointer]
+          - generic [ref=e96]: 停止
+    - generic [ref=e97]:
+      - generic [ref=e98]:
+        - generic [ref=e99]: 定位臂
+        - generic [ref=e100]: 定位臂命令待发送
+        - button "总使能" [ref=e101] [cursor=pointer]
+      - generic [ref=e102]:
+        - generic [ref=e103]: 速度
+        - generic [ref=e104]:
+          - button "快" [ref=e105] [cursor=pointer]
+          - button "中" [ref=e106] [cursor=pointer]
+          - button "慢" [ref=e107] [cursor=pointer]
+      - generic [ref=e108]:
+        - generic [ref=e109]: 末端点动
+        - generic [ref=e110]: 按住移动，松开即停
+      - generic [ref=e111]:
+        - generic [ref=e112]: X
+        - generic [ref=e113]: 15 mm/s
+        - button "−" [ref=e114] [cursor=pointer]
+        - button "+" [ref=e115] [cursor=pointer]
+        - generic [ref=e116]: "Y"
+        - generic [ref=e117]: 15 mm/s
+        - button "−" [ref=e118] [cursor=pointer]
+        - button "+" [ref=e119] [cursor=pointer]
+        - generic [ref=e120]: Z
+        - generic [ref=e121]: 2.5 mm/s
+        - button "−" [ref=e122] [cursor=pointer]
+        - button "+" [ref=e123] [cursor=pointer]
+        - generic [ref=e124]: 俯仰
+        - generic [ref=e125]: 0.8°/s
+        - button "−" [ref=e126] [cursor=pointer]
+        - button "+" [ref=e127] [cursor=pointer]
+        - generic [ref=e128]: 偏航
+        - generic [ref=e129]: 1.6°/s
+        - button "−" [ref=e130] [cursor=pointer]
+        - button "+" [ref=e131] [cursor=pointer]
+      - generic [ref=e132]:
+        - button "归零" [ref=e133] [cursor=pointer]
+        - button "停止" [ref=e134] [cursor=pointer]
+      - button "▸ 定位臂调试" [ref=e137] [cursor=pointer]

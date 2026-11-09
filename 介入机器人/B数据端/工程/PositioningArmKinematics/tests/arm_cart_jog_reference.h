@@ -58,7 +58,7 @@ struct ArmCartJogReference {
             }
             wx = L1*std::sin(anchor[1]*RAD)+L2*std::sin((anchor[1]+anchor[2])*RAD+PI);
             wy = -L1*std::cos(anchor[1]*RAD)-L2*std::cos((anchor[1]+anchor[2])*RAD+PI);
-            psi0 = anchor[1]+anchor[2]+anchor[3]-90.0;
+            psi0 = anchor[1]+anchor[2]+anchor[3];
             d0x = TOOL_LATERAL_OFFSET_MM;
             d0y = -TOOL_LENGTH_MM*std::cos(anchor[4]*RAD);
             tcp0x = wx+d0x*std::cos(psi0*RAD)-d0y*std::sin(psi0*RAD);

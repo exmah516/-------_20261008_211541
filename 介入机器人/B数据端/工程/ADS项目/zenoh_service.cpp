@@ -648,6 +648,7 @@ void ZenohService::on_handle(const vi_protocol::HandleFrame& frame)
         remote_handle_bridge::Sample sample;
         if (slot == 0)
         {
+            sample.device_epoch = frame.device_epoch582;
             sample.valid = frame.valid582; sample.buttons = frame.buttons582;
             sample.encoders[0] = frame.encoder582_0; sample.encoders[1] = frame.encoder582_1;
             sample.joints[0] = frame.joint582_0; sample.joints[1] = frame.joint582_1;
@@ -655,6 +656,7 @@ void ZenohService::on_handle(const vi_protocol::HandleFrame& frame)
         }
         else
         {
+            sample.device_epoch = frame.device_epoch587;
             sample.valid = frame.valid587; sample.buttons = frame.buttons587;
             sample.encoders[0] = frame.encoder587_0; sample.encoders[1] = frame.encoder587_1;
             sample.joints[0] = frame.joint587_0; sample.joints[1] = frame.joint587_1;

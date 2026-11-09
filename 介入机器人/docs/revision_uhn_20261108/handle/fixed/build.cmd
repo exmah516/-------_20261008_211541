@@ -1,0 +1,6 @@
+@echo off
+chcp 65001 >nul
+call "D:\Work_software\VS2022\VC\Auxiliary\Build\vcvars64.bat" >nul
+if errorlevel 1 exit /b 1
+cl /nologo /std:c++17 /EHsc /utf-8 /DNOMINMAX /Gy /MD /I"D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\docs\revision_uhn_20261108\handle\fixed" /I"D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\B数据端\工程\ADS项目" /I"D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\B数据端\工程\ADS项目\ADS\Include" /I"D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\B数据端\工程\ADS项目\手柄" "D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\tools\revision_uhn\handle_tests.cpp" "D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\B数据端\工程\ADS项目\motion_sync.cpp" "D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\B数据端\工程\ADS项目\control_types.cpp" "D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\B数据端\工程\ADS项目\plc_io.cpp" "D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\B数据端\工程\ADS项目\force_feedback.cpp" "D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\docs\revision_uhn_20261108\handle\fixed\ads_mock.cpp" /Fe:handle_tests.exe /link /OPT:REF
+exit /b %errorlevel%

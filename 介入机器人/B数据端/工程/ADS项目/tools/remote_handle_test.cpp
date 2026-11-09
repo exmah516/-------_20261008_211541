@@ -116,7 +116,17 @@ int main()
             check(a.poll(), "6s gap can reconnect without process restart");
         }
         put_sample(0, sa);
-        if (gap <= 5000) check(a.poll() && a.take_rebase_request() == (gap > 1500), "rebase threshold is strictly greater than 1500ms");
+        if (gap <= 5000) {
+            check(a.poll() && a.resume_settling() == (gap > 1500) && !a.take_rebase_request(),
+                "rebase threshold is strictly greater than 1500ms");
+            if (gap > 1500) {
+                // 原间隔门槛不变；重建现在延后到连续有效采样满500ms。
+                const auto began = GetTickCount64();
+                do { Sleep(10); put_sample(0, sa); check(a.poll(), "settling receives valid samples"); }
+                while (GetTickCount64() - began < kHandleResumeSettleMs);
+                check(!a.resume_settling() && a.take_rebase_request(), "gap rebase waits for500ms continuous samples");
+            }
+        }
     }
     put_sample(0, sa);
     Sample retained;

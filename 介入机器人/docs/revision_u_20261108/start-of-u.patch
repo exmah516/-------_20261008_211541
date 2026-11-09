@@ -1,0 +1,983 @@
+diff --git a/protocol/fixtures/zenoh-v1/README.md b/protocol/fixtures/zenoh-v1/README.md
+index 6f6249d..71b68af 100644
+--- a/protocol/fixtures/zenoh-v1/README.md
++++ b/protocol/fixtures/zenoh-v1/README.md
+@@ -2,7 +2,7 @@
+ 
+ 本目录的 Hex 由独立 Python 编码器预制。C# 与 C++ 测试只读取样本，不在运行时生成预期值。
+ 
+-- handle.hex：顶层 24 字段，两个手柄各 8 字段完全扁平化。
++- handle.hex：顶层 26 字段，两个手柄各 8 字段完全扁平化，另带两只手柄各自的 ulong 设备会话号。
+ - command.hex：15 字段，UTF-8 文本和 float64 参数。
+ - state.hex：55 字段、float32 状态和轴6窗口边界、float64 净距离及末端点动速度、末端点动状态/错误/降速标志、两个任务与两项回执。
+ - force.hex：13 字段、float32 力/扭矩。
+diff --git a/protocol/fixtures/zenoh-v1/generate_vectors.py b/protocol/fixtures/zenoh-v1/generate_vectors.py
+index 25658f8..ef50439 100644
+--- a/protocol/fixtures/zenoh-v1/generate_vectors.py
++++ b/protocol/fixtures/zenoh-v1/generate_vectors.py
+@@ -52,7 +52,7 @@ sid = 0x1122334455667788
+ f = Float32
+ samples = {
+     "handle": [1, sid, 100, 123456, 5, True, 1234, -5678, f(.5), f(-.25), f(1.5), f(-2.5),
+-               2, True, -1, 2, f(1), f(2), f(0), f(.125), 1, -1, 0, b""],
++               2, True, -1, 2, f(1), f(2), f(0), f(.125), 1, -1, 0, 7, 9, b""],
+     "command": [1, sid, 101, 123457, 42, 4, -1, 2, 12.25, 125.5, "准备", b"", b"", b"", b""],
+     "state": [1, sid, 102, 2, ns, 123456, 913, 0, 1, 4, 2, 2000, 10, 2000, 10, 5, 1, -1, 0,
+               f(.25), f(.01), f(.5), f(-.02), f(.3), f(100),
+@@ -95,11 +95,16 @@ write("invalid_handle_nan", bad)
+ bad[8], bad[20] = f(.5), 2
+ write("invalid_handle_direction", bad)
+ bad = samples["handle"].copy()
+-bad[23] = "\x00" * 16
++bad[25] = "\x00" * 16
+ write("invalid_handle_string_tag", bad)
+ bad = samples["handle"].copy()
+ bad[4] = 256
+ write("invalid_handle_integer_range", bad)
++bad = samples["handle"].copy()
++bad[23] = -1
++write("invalid_handle_epoch_negative", bad)
++bad[23], bad[24] = 7, "9"
++write("invalid_handle_epoch_string", bad)
+ bad = samples["command"].copy()
+ bad[8] = f(12.25)
+ write("invalid_command_float32", bad)
+diff --git a/protocol/fixtures/zenoh-v1/handle.hex b/protocol/fixtures/zenoh-v1/handle.hex
+index 85dda7b..737453c 100644
+--- a/protocol/fixtures/zenoh-v1/handle.hex
++++ b/protocol/fixtures/zenoh-v1/handle.hex
+@@ -1 +1 @@
+-dc001801cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff00c410f2fe043f4c99ac140d7554631ee59eb1
++dc001a01cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff000709c4109eb1fdc645f6406c7cbb44f7ac10c30d
+diff --git a/protocol/fixtures/zenoh-v1/invalid_handle_auth.hex b/protocol/fixtures/zenoh-v1/invalid_handle_auth.hex
+index f048e47..792358d 100644
+--- a/protocol/fixtures/zenoh-v1/invalid_handle_auth.hex
++++ b/protocol/fixtures/zenoh-v1/invalid_handle_auth.hex
+@@ -1 +1 @@
+-dc001801cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff00c40f000000000000000000000000000000
++dc001a01cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff000709c40f000000000000000000000000000000
+diff --git a/protocol/fixtures/zenoh-v1/invalid_handle_direction.hex b/protocol/fixtures/zenoh-v1/invalid_handle_direction.hex
+index d860b04..31aacd5 100644
+--- a/protocol/fixtures/zenoh-v1/invalid_handle_direction.hex
++++ b/protocol/fixtures/zenoh-v1/invalid_handle_direction.hex
+@@ -1 +1 @@
+-dc001801cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000002ff00c410f2fe043f4c99ac140d7554631ee59eb1
++dc001a01cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000002ff000709c4109eb1fdc645f6406c7cbb44f7ac10c30d
+diff --git a/protocol/fixtures/zenoh-v1/invalid_handle_float64.hex b/protocol/fixtures/zenoh-v1/invalid_handle_float64.hex
+index 29e265b..c7c84e4 100644
+--- a/protocol/fixtures/zenoh-v1/invalid_handle_float64.hex
++++ b/protocol/fixtures/zenoh-v1/invalid_handle_float64.hex
+@@ -1 +1 @@
+-dc001801cf112233445566778864ce0001e24005c3cd04d2d1e9d2cb3fe0000000000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff00c410f2fe043f4c99ac140d7554631ee59eb1
++dc001a01cf112233445566778864ce0001e24005c3cd04d2d1e9d2cb3fe0000000000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff000709c4109eb1fdc645f6406c7cbb44f7ac10c30d
+diff --git a/protocol/fixtures/zenoh-v1/invalid_handle_integer_range.hex b/protocol/fixtures/zenoh-v1/invalid_handle_integer_range.hex
+index 57d3c87..0638617 100644
+--- a/protocol/fixtures/zenoh-v1/invalid_handle_integer_range.hex
++++ b/protocol/fixtures/zenoh-v1/invalid_handle_integer_range.hex
+@@ -1 +1 @@
+-dc001801cf112233445566778864ce0001e240cd0100c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff00c410f2fe043f4c99ac140d7554631ee59eb1
++dc001a01cf112233445566778864ce0001e240cd0100c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff000709c4109eb1fdc645f6406c7cbb44f7ac10c30d
+diff --git a/protocol/fixtures/zenoh-v1/invalid_handle_length.hex b/protocol/fixtures/zenoh-v1/invalid_handle_length.hex
+index 5b750a1..9f077db 100644
+--- a/protocol/fixtures/zenoh-v1/invalid_handle_length.hex
++++ b/protocol/fixtures/zenoh-v1/invalid_handle_length.hex
+@@ -1 +1 @@
+-dc001701cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff00
++dc001901cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff000709
+diff --git a/protocol/fixtures/zenoh-v1/invalid_handle_nan.hex b/protocol/fixtures/zenoh-v1/invalid_handle_nan.hex
+index baf5f0b..6a1fd16 100644
+--- a/protocol/fixtures/zenoh-v1/invalid_handle_nan.hex
++++ b/protocol/fixtures/zenoh-v1/invalid_handle_nan.hex
+@@ -1 +1 @@
+-dc001801cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca7fc00000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff00c410f2fe043f4c99ac140d7554631ee59eb1
++dc001a01cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca7fc00000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff000709c4109eb1fdc645f6406c7cbb44f7ac10c30d
+diff --git a/protocol/fixtures/zenoh-v1/invalid_handle_string_tag.hex b/protocol/fixtures/zenoh-v1/invalid_handle_string_tag.hex
+index c107fe0..b1524aa 100644
+--- a/protocol/fixtures/zenoh-v1/invalid_handle_string_tag.hex
++++ b/protocol/fixtures/zenoh-v1/invalid_handle_string_tag.hex
+@@ -1 +1 @@
+-dc001801cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff00b000000000000000000000000000000000
++dc001a01cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff000709b000000000000000000000000000000000
+diff --git a/protocol/fixtures/zenoh-v1/invalid_handle_trailing.hex b/protocol/fixtures/zenoh-v1/invalid_handle_trailing.hex
+index fc1154b..ba5fc71 100644
+--- a/protocol/fixtures/zenoh-v1/invalid_handle_trailing.hex
++++ b/protocol/fixtures/zenoh-v1/invalid_handle_trailing.hex
+@@ -1 +1 @@
+-dc001801cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff00c410f2fe043f4c99ac140d7554631ee59eb100
++dc001a01cf112233445566778864ce0001e24005c3cd04d2d1e9d2ca3f000000cabe800000ca3fc00000cac020000002c3ff02ca3f800000ca40000000ca00000000ca3e00000001ff000709c4109eb1fdc645f6406c7cbb44f7ac10c30d00
+diff --git a/介入机器人/A主端/协议/PROTOCOL.md b/介入机器人/A主端/协议/PROTOCOL.md
+index 13486a8..4518de0 100644
+--- a/介入机器人/A主端/协议/PROTOCOL.md
++++ b/介入机器人/A主端/协议/PROTOCOL.md
+@@ -19,7 +19,9 @@
+ 
+ 手柄按物理序列号 582、587 排列，每只 8 个字段直接放在顶层。关节/编码器/速度来自本机 SDK，轴向力单位 N，扭矩 N·m，位置及累计净距离 mm。
+ 
+-## HandleFrame（24 项）
++## HandleFrame（26 项）
++
++设备会话号按现有位置数组扩展惯例保留版本 1 和 Topic；严格解码仅接受 26 项，主端、VI.HandleHost 与数据端必须同步部署。会话号属于认证载荷，每只手柄成功重新打开时递增，主端监管器跨宿主重启保存计数。
+ 
+ | 索引 | 类型 | 字段 |
+ |---|---|---|
+@@ -46,7 +48,9 @@
+ | 20 | sbyte | Injector1Direction |
+ | 21 | sbyte | Injector2Direction |
+ | 22 | sbyte | Axis4Direction |
+-| 23 | byte[] | AuthTag |
++| 23 | ulong | DeviceEpoch582 |
++| 24 | ulong | DeviceEpoch587 |
++| 25 | byte[] | AuthTag |
+ 
+ ## CommandFrame（15 项）
+ 
+diff --git a/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/HandleHostTests.cs b/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/HandleHostTests.cs
+index d0c34f4..9afe216 100644
+--- a/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/HandleHostTests.cs
++++ b/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/HandleHostTests.cs
+@@ -15,18 +15,21 @@ namespace MasterConsole.Protocol.Tests
+             using var memory = new HandleHostMemory(args[1], false);
+             var started = Stopwatch.StartNew();
+             long sequence = 0;
++            ulong epochA = memory.NextDeviceEpoch(0), epochB = memory.NextDeviceEpoch(1);
+             while (!memory.Stop)
+             {
+                 if (args[2] == "crash" && started.ElapsedMilliseconds > 250) return 42;
+                 if (args[2] == "stall" && started.ElapsedMilliseconds > 250) Thread.Sleep(1500);
+                 var sample = new HostSample { Valid = 1, Tick = Environment.TickCount64,
+                     Sequence = ++sequence, Encoder0 = 582 };
+-                memory.Write(HandleHostMemory.SampleOffset, new HostSamples { A = sample, B = sample });
++                memory.Write(HandleHostMemory.SampleOffset, new HostSamples { A = WithEpoch(sample, epochA), B = WithEpoch(sample, epochB) });
+                 memory.Heartbeat = Environment.TickCount64;
+                 Thread.Sleep(5);
+             }
+             return 0;
+         }
++        private static HostSample WithEpoch(HostSample sample, ulong epoch)
++        { sample.DeviceEpoch = epoch; return sample; }
+         private static void HandleHostTests()
+         {
+             foreach (string fault in new[] { "crash", "stall", "usb", "remove" })
+@@ -45,6 +48,7 @@ namespace MasterConsole.Protocol.Tests
+                 }, false);
+                 service.Start();
+                 Check("宿主替身启动采样 " + fault, HostWait(() => service.GetSample(0).Valid, 3000));
++                ulong epochBefore = service.GetSample(0).DeviceEpoch;
+                 service.SetHaptic(0, new HapticOut { Enable = true, ForceN = 2, Axis = 1 });
+                 if (fault == "usb" || fault == "remove")
+                 {
+@@ -52,6 +56,7 @@ namespace MasterConsole.Protocol.Tests
+                     Check("拔插通知立即使两柄invalid " + fault, !service.GetSample(0).Valid && !service.GetSample(1).Valid);
+                 }
+                 Check("宿主自动重启并恢复采样 " + fault, HostWait(() => launches >= 2 && service.IsOnline(0) && service.IsOnline(1), 5000));
++                Check("宿主重启递增设备会话 " + fault, service.GetSample(0).DeviceEpoch == epochBefore + 1);
+                 Check("宿主重启间隔至少1s " + fault, secondStart - firstStart >= 1000);
+                 Console.WriteLine("V5替身 " + fault + " launch到双柄有效=" + (Environment.TickCount64 - secondStart) + "ms");
+                 var watch = Stopwatch.StartNew();
+@@ -101,6 +106,7 @@ namespace MasterConsole.Protocol.Tests
+                 HostWait(() => values.ReadDouble(24) == 2, 1000);
+                 service.SetHaptic(1, new HapticOut { Enable = true, Axis = 1, ForceN = 3, TorqueNm = .5f });
+                 Check("V5拔出前双路非零力", HostWait(() => values.ReadDouble(24) == 2 && values.ReadDouble(56) == 3, 1000));
++                ulong nativeEpochA = service.GetSample(0).DeviceEpoch, nativeEpochB = service.GetSample(1).DeviceEpoch;
+                 int beforeRestart = service.RestartCount;
+                 var removedClock = Stopwatch.StartNew();
+                 service.DeviceChanged(false);
+@@ -110,6 +116,7 @@ namespace MasterConsole.Protocol.Tests
+                 Console.WriteLine("V5拔出通知到双路清力=" + removedClock.Elapsed.TotalMilliseconds.ToString("F1") + "ms");
+                 Check("V5真实宿主拔出通知重启恢复双柄", HostWait(() => service.RestartCount > beforeRestart && service.IsOnline(0) && service.IsOnline(1), 3000));
+                 Console.WriteLine("V5真实宿主 remove launch到双柄有效=" + ((Stopwatch.GetTimestamp() - lastLaunch) * 1000.0 / Stopwatch.Frequency).ToString("F1") + "ms");
++                Check("H真实宿主重开两柄递增各自设备会话", service.GetSample(0).DeviceEpoch == nativeEpochA + 1 && service.GetSample(1).DeviceEpoch == nativeEpochB + 1);
+                 Check("V5重启不补发拔出前或重启期间力", values.ReadDouble(24) == 0 && values.ReadDouble(56) == 0);
+                 beforeRestart = service.RestartCount;
+                 service.DeviceChanged(true);
+diff --git a/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/Program.cs b/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/Program.cs
+index b23120c..850c8d0 100644
+--- a/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/Program.cs
++++ b/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/Program.cs
+@@ -21,6 +21,9 @@ namespace MasterConsole.Protocol.Tests
+                 string fixtures = args.Length > 0 ? args[0] : FindFixtures();
+                 byte[] key = ReadAuth(fixtures, "session_key");
+                 Golden(fixtures, "handle", NewHandle(), key);
++                var epochFrame = NewHandle(); epochFrame.AuthTag = ZenohWire.Sign(epochFrame, key);
++                epochFrame.DeviceEpoch582++;
++                Check("设备会话号篡改使认证失效", !ZenohWire.Verify(epochFrame, key));
+                 Golden(fixtures, "command", NewCommand(), key);
+                 Golden(fixtures, "state", NewState(), key);
+                 Golden(fixtures, "force", NewForce(), key);
+@@ -113,7 +116,7 @@ namespace MasterConsole.Protocol.Tests
+             Joint582_0 = .5f, Joint582_1 = -.25f, Velocity582_0 = 1.5f, Velocity582_1 = -2.5f,
+             Buttons587 = 2, Valid587 = true, Encoder587_0 = -1, Encoder587_1 = 2,
+             Joint587_0 = 1, Joint587_1 = 2, Velocity587_0 = 0, Velocity587_1 = .125f,
+-            Injector1Direction = 1, Injector2Direction = -1, Axis4Direction = 0
++            Injector1Direction = 1, Injector2Direction = -1, Axis4Direction = 0, DeviceEpoch582 = 7, DeviceEpoch587 = 9
+         };
+         private static CommandFrame NewCommand() => new CommandFrame
+         {
+diff --git a/介入机器人/A主端/工程/master/MasterConsole.Protocol/Frames.cs b/介入机器人/A主端/工程/master/MasterConsole.Protocol/Frames.cs
+index ca9a25f..81b4067 100644
+--- a/介入机器人/A主端/工程/master/MasterConsole.Protocol/Frames.cs
++++ b/介入机器人/A主端/工程/master/MasterConsole.Protocol/Frames.cs
+@@ -5,6 +5,7 @@ namespace MasterConsole.Protocol
+     {
+         public byte Buttons;
+         public bool Valid;
++        public ulong DeviceEpoch;
+         public int Encoder0, Encoder1;
+         public float Joint0, Joint1;
+         public float Vel0, Vel1;
+diff --git a/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohFrames.cs b/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohFrames.cs
+index 6e0e142..9f8bba5 100644
+--- a/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohFrames.cs
++++ b/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohFrames.cs
+@@ -48,7 +48,9 @@ namespace MasterConsole.Protocol
+         [Key(20)] public sbyte Injector1Direction { get; set; }
+         [Key(21)] public sbyte Injector2Direction { get; set; }
+         [Key(22)] public sbyte Axis4Direction { get; set; }
+-        [Key(23)] public byte[] AuthTag { get; set; } = new byte[0];
++        [Key(23)] public ulong DeviceEpoch582 { get; set; }
++        [Key(24)] public ulong DeviceEpoch587 { get; set; }
++        [Key(25)] public byte[] AuthTag { get; set; } = new byte[0];
+     }
+ 
+     [MessagePackObject]
+diff --git a/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohWire.cs b/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohWire.cs
+index 43a4c22..c6b66c9 100644
+--- a/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohWire.cs
++++ b/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohWire.cs
+@@ -67,7 +67,7 @@ namespace MasterConsole.Protocol
+         {
+             if (bytes == null || bytes.Length == 0 || bytes.Length > 65536) throw Invalid("载荷长度错误");
+             string schema;
+-            if (typeof(T) == typeof(HandleFrame)) schema = "bqqqbBiiffffbBiiffffsssx";
++            if (typeof(T) == typeof(HandleFrame)) schema = "bqqqbBiiffffbBiiffffsssqqx";
+             else if (typeof(T) == typeof(CommandFrame)) schema = "bqqqibiiddtxxxx";
+             else if (typeof(T) == typeof(StateFrame)) schema = "bqqbxquiiii" + "hhhhbsss" + "ffffffffffffffffffff" + "Bdd" + "bibi" + "rtffuuBdx";
+             else if (typeof(T) == typeof(ForceFrame)) schema = "bqqqBsffBsffx";
+diff --git a/介入机器人/A主端/工程/master/VI.HandleHost/Program.cs b/介入机器人/A主端/工程/master/VI.HandleHost/Program.cs
+index a3b709b..7805281 100644
+--- a/介入机器人/A主端/工程/master/VI.HandleHost/Program.cs
++++ b/介入机器人/A主端/工程/master/VI.HandleHost/Program.cs
+@@ -12,6 +12,7 @@ internal static class Program
+     private sealed class Device
+     {
+         internal uint Serial;
++        internal ulong DeviceEpoch;
+         internal int Id = -1;
+         internal long NextOpen, Sequence, LastZero;
+         internal bool Nonzero;
+@@ -42,6 +43,7 @@ internal static class Program
+                         d.Id = FlCatheterNative.openDevice(d.Serial);
+                         if (d.Id >= 0)
+                         {
++                            d.DeviceEpoch = memory.NextDeviceEpoch(i);
+                             if (!servoStarted) { FlCatheterNative.startServoLoop(Servo, IntPtr.Zero); servoStarted = true; }
+                             FlCatheterNative.enableForces(true, d.Id);
+                         }
+@@ -57,7 +59,7 @@ internal static class Program
+                             FlCatheterNative.getJoints(d.Joints, d.Id);
+                             FlCatheterNative.getEncoders(d.Encoders, d.Id);
+                             FlCatheterNative.getSwitch(out byte buttons, d.Id);
+-                            sample = new HostSample { Valid = 1, Tick = now, Sequence = ++d.Sequence, Buttons = buttons,
++                            sample = new HostSample { Valid = 1, DeviceEpoch = d.DeviceEpoch, Tick = now, Sequence = ++d.Sequence, Buttons = buttons,
+                                 Encoder0 = d.Encoders[0], Encoder1 = d.Encoders[1], Joint0 = (float)d.Joints[0], Joint1 = (float)d.Joints[1],
+                                 Vel0 = (float)d.Velocity[0], Vel1 = (float)d.Velocity[1] };
+                         }
+diff --git a/介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleHostMemory.cs b/介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleHostMemory.cs
+index a0bd43a..102a379 100644
+--- a/介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleHostMemory.cs
++++ b/介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleHostMemory.cs
+@@ -17,6 +17,14 @@ namespace MasterConsole.Services
+             _file = create ? MemoryMappedFile.CreateNew(name, 1024) : MemoryMappedFile.OpenExisting(name);
+             _view = _file.CreateViewAccessor();
+         }
++        internal ulong DeviceEpoch(int slot) => _view.ReadUInt64(16 + slot * 8);
++        internal void SetDeviceEpoch(int slot, ulong epoch) => _view.Write(16 + slot * 8, epoch);
++        internal ulong NextDeviceEpoch(int slot)
++        {
++            ulong epoch = DeviceEpoch(slot) + 1;
++            SetDeviceEpoch(slot, epoch);
++            return epoch;
++        }
+         internal long Heartbeat { get => _view.ReadInt64(0); set => _view.Write(0, value); }
+         internal int Error { get => _view.ReadInt32(8); set => _view.Write(8, value); }
+         internal bool Stop { get => _view.ReadInt32(12) != 0; set => _view.Write(12, value ? 1 : 0); }
+@@ -43,9 +51,10 @@ namespace MasterConsole.Services
+     internal struct HostSample
+     {
+         internal long Sequence, Tick;
++        internal ulong DeviceEpoch;
+         internal int Valid, Buttons, Encoder0, Encoder1;
+         internal float Joint0, Joint1, Vel0, Vel1;
+-        internal HandleSample Sample => new HandleSample { Valid = Valid != 0, Buttons = (byte)Buttons,
++        internal HandleSample Sample => new HandleSample { Valid = Valid != 0, DeviceEpoch = DeviceEpoch, Buttons = (byte)Buttons,
+             Encoder0 = Encoder0, Encoder1 = Encoder1, Joint0 = Joint0, Joint1 = Joint1, Vel0 = Vel0, Vel1 = Vel1 };
+     }
+     [StructLayout(LayoutKind.Sequential)]
+diff --git a/介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleService.cs b/介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleService.cs
+index 3436fbe..4504d56 100644
+--- a/介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleService.cs
++++ b/介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleService.cs
+@@ -21,6 +21,7 @@ namespace MasterConsole.Services
+         private HostSamples _samples;
+         private HostForces _forces;
+         private long _sentSequenceA, _sentSequenceB;
++        private readonly ulong[] _deviceEpochs = new ulong[2];
+         private string _status = "";
+         internal int RestartCount { get; private set; }
+ 
+@@ -129,6 +130,7 @@ namespace MasterConsole.Services
+                         }
+                         else if (!process.HasExited) process.Kill(true);
+                         process.WaitForExit(); process.Dispose(); process = null;
++                        for (int slot = 0; slot < 2; ++slot) _deviceEpochs[slot] = memory.DeviceEpoch(slot);
+                         memory.Dispose(); memory = null;
+                     }
+                     if (process == null && now - lastStart >= 1000)
+@@ -136,6 +138,7 @@ namespace MasterConsole.Services
+                         _restartRequested = false;
+                         string name = "Local\\VI.HandleHost." + Guid.NewGuid().ToString("N");
+                         memory = new HandleHostMemory(name, true);
++                        for (int slot = 0; slot < 2; ++slot) memory.SetDeviceEpoch(slot, _deviceEpochs[slot]);
+                         lastStart = Environment.TickCount64;
+                         try { process = _launch(name); ++RestartCount; }
+                         catch (Win32Exception ex)
+@@ -167,7 +170,11 @@ namespace MasterConsole.Services
+                     if (!process.WaitForExit(1000)) { process.Kill(true); process.WaitForExit(); }
+                     process.Dispose();
+                 }
+-                memory?.Dispose();
++                if (memory != null)
++                {
++                    for (int slot = 0; slot < 2; ++slot) _deviceEpochs[slot] = memory.DeviceEpoch(slot);
++                    memory.Dispose();
++                }
+             }
+         }
+         public void Dispose() { lock (_lifecycleLock) { if (_disposed) return; Stop(); _disposed = true; } }
+diff --git a/介入机器人/A主端/工程/master/VI.Service.Robot/Services/RemoteRobotLink.cs b/介入机器人/A主端/工程/master/VI.Service.Robot/Services/RemoteRobotLink.cs
+index 30b0995..5f37a93 100644
+--- a/介入机器人/A主端/工程/master/VI.Service.Robot/Services/RemoteRobotLink.cs
++++ b/介入机器人/A主端/工程/master/VI.Service.Robot/Services/RemoteRobotLink.cs
+@@ -414,7 +414,7 @@ namespace MasterConsole.Services
+                                 Encoder587_1 = b.Encoder1, Joint587_0 = b.Joint0, Joint587_1 = b.Joint1,
+                                 Velocity587_0 = b.Vel0, Velocity587_1 = b.Vel1,
+                                 Injector1Direction = control.Injector1Dir, Injector2Direction = control.Injector2Dir,
+-                                Axis4Direction = control.Axis4Dir, AuthTag = new byte[0]
++                                Axis4Direction = control.Axis4Dir, DeviceEpoch582 = a.DeviceEpoch, DeviceEpoch587 = b.DeviceEpoch, AuthTag = new byte[0]
+                             };
+                             frame.AuthTag = ZenohWire.Sign(frame, key);
+                             publisher.Publish(frame);
+diff --git a/介入机器人/A主端/工程/protocol/PROTOCOL.md b/介入机器人/A主端/工程/protocol/PROTOCOL.md
+index 13486a8..4518de0 100644
+--- a/介入机器人/A主端/工程/protocol/PROTOCOL.md
++++ b/介入机器人/A主端/工程/protocol/PROTOCOL.md
+@@ -19,7 +19,9 @@
+ 
+ 手柄按物理序列号 582、587 排列，每只 8 个字段直接放在顶层。关节/编码器/速度来自本机 SDK，轴向力单位 N，扭矩 N·m，位置及累计净距离 mm。
+ 
+-## HandleFrame（24 项）
++## HandleFrame（26 项）
++
++设备会话号按现有位置数组扩展惯例保留版本 1 和 Topic；严格解码仅接受 26 项，主端、VI.HandleHost 与数据端必须同步部署。会话号属于认证载荷，每只手柄成功重新打开时递增，主端监管器跨宿主重启保存计数。
+ 
+ | 索引 | 类型 | 字段 |
+ |---|---|---|
+@@ -46,7 +48,9 @@
+ | 20 | sbyte | Injector1Direction |
+ | 21 | sbyte | Injector2Direction |
+ | 22 | sbyte | Axis4Direction |
+-| 23 | byte[] | AuthTag |
++| 23 | ulong | DeviceEpoch582 |
++| 24 | ulong | DeviceEpoch587 |
++| 25 | byte[] | AuthTag |
+ 
+ ## CommandFrame（15 项）
+ 
+diff --git a/介入机器人/B数据端/工程/ADS项目/ads_communication.cpp b/介入机器人/B数据端/工程/ADS项目/ads_communication.cpp
+index 457433b..6be999e 100644
+--- a/介入机器人/B数据端/工程/ADS项目/ads_communication.cpp
++++ b/介入机器人/B数据端/工程/ADS项目/ads_communication.cpp
+@@ -1064,7 +1064,6 @@ bool AdsCommunicationService::ensure_connection(bool reconnecting)
+ 		ads_.CloseComm();
+ 		return false;
+ 	}
+-	std::cout << "[ADS-DIAG] connected " << ads_.ConnectionDescription() << std::endl;
+ 	return true;
+ }
+ 
+@@ -2038,8 +2037,8 @@ void AdsCommunicationService::mark_plc_restart(bool reconnect_required)
+ 	{
+ 		std::lock_guard<std::mutex> lock(stats_mutex_);
+ 		if (first_detection) ++stats_.plc_restart_count;
+-		stats_.state = AdsConnectionState::PlcRestarted;
+ 	}
++	set_connection_state(AdsConnectionState::PlcRestarted);
+ }
+ 
+ 
+@@ -2262,6 +2261,12 @@ void AdsCommunicationService::record_failure(const char* operation, const std::s
+ void AdsCommunicationService::set_connection_state(AdsConnectionState state)
+ {
+ 	std::lock_guard<std::mutex> lock(stats_mutex_);
++	if (stats_.state == state) return;
++	std::cout << "[ADS-STATE] " << static_cast<int>(stats_.state) << " -> " << static_cast<int>(state)
++		<< " reason=" << (state == AdsConnectionState::Running ? "完整ADS读写成功" :
++			(state == AdsConnectionState::Disconnected ? "通信线程已停止" :
++				(stats_.diagnostic_sequence ? stats_.diagnostic : "建立ADS连接")))
++		<< " " << ads_.ConnectionDescription() << std::endl;
+ 	stats_.state = state;
+ }
+ 
+diff --git a/介入机器人/B数据端/工程/ADS项目/main.cpp b/介入机器人/B数据端/工程/ADS项目/main.cpp
+index 90a1121..202ead3 100644
+--- a/介入机器人/B数据端/工程/ADS项目/main.cpp
++++ b/介入机器人/B数据端/工程/ADS项目/main.cpp
+@@ -806,8 +806,6 @@ int main()
+ 	bool plc_app_name_read = false;
+ 	ULONGLONG handle1_next_retry_ms = 0;
+ 	ULONGLONG handle6_next_retry_ms = 0;
+-	bool handle1_reconnect_pending_poll = false;
+-	bool handle6_reconnect_pending_poll = false;
+ 	bool handle_soft_hold_active = true;
+ 	bool connection_hold_active_prev = true;
+ 
+@@ -951,8 +949,6 @@ int main()
+ 	LARGE_INTEGER vis_qpc_frequency{};
+ 	QueryPerformanceFrequency(&vis_qpc_frequency);
+ 	std::int64_t next_vis_publish_qpc = 0;
+-	std::uint64_t reported_ads_diagnostic_sequence = 0;
+-	ULONGLONG last_ads_diagnostic_log_ms = 0;
+ 	ExperimentStartInfo recording_info{};
+ 	recording_info.axis1_handle_serial = serial_axis1_handle;
+ 	recording_info.axis6_handle_serial = serial_axis6_handle;
+@@ -1122,8 +1118,7 @@ int main()
+ 				handle1_next_retry_ms = loop_now_ms + 1000;
+ 				if (handle_axis1.init())
+ 				{
+-					handle1_reconnect_pending_poll = true;
+-					std::cout << "导管手柄 (SN " << serial_axis1_handle << ") 重新打开成功，等待首帧有效采样..." << std::endl;
++					std::cout << "导管手柄 (SN " << serial_axis1_handle << ") 重新打开成功，等待连续 0.5 s 有效采样..." << std::endl;
+ 				}
+ 			}
+ 			if (!handle_axis6.is_open() && loop_now_ms >= handle6_next_retry_ms)
+@@ -1131,8 +1126,7 @@ int main()
+ 				handle6_next_retry_ms = loop_now_ms + 1000;
+ 				if (handle_axis6.init())
+ 				{
+-					handle6_reconnect_pending_poll = true;
+-					std::cout << "导丝手柄 (SN " << serial_axis6_handle << ") 重新打开成功，等待首帧有效采样..." << std::endl;
++					std::cout << "导丝手柄 (SN " << serial_axis6_handle << ") 重新打开成功，等待连续 0.5 s 有效采样..." << std::endl;
+ 				}
+ 			}
+ 		}
+@@ -1150,18 +1144,6 @@ int main()
+ 					{
+ 						handle1_poll_ok = true;
+ 						handle6_poll_ok = true;
+-						if (handle1_reconnect_pending_poll || handle6_reconnect_pending_poll)
+-						{
+-							handle1_reconnect_pending_poll = false;
+-							handle6_reconnect_pending_poll = false;
+-							axis1_handle_filter.reset(active_handle->fJoints2[0], active_handle->fJoints2[1]);
+-							axis6_handle_filter.reset(active_handle->fJoints2[0], active_handle->fJoints2[1]);
+-							axis1_prev_linear_filtered = axis1_handle_filter.axis0_filtered;
+-							axis6_prev_linear_filtered = axis6_handle_filter.axis0_filtered;
+-							axis1_prev_rot_filtered = axis1_handle_filter.axis1_filtered;
+-							axis6_prev_rot_filtered = axis6_handle_filter.axis1_filtered;
+-							std::cout << "单手柄重连后取得首帧有效采样，基准已重新建立。" << std::endl;
+-						}
+ 					}
+ 					else
+ 					{
+@@ -1179,14 +1161,6 @@ int main()
+ 					if (handle_axis1.poll())
+ 					{
+ 						handle1_poll_ok = true;
+-						if (handle1_reconnect_pending_poll)
+-						{
+-							handle1_reconnect_pending_poll = false;
+-							axis1_handle_filter.reset(handle_axis1.fJoints2[0], handle_axis1.fJoints2[1]);
+-							axis1_prev_linear_filtered = axis1_handle_filter.axis0_filtered;
+-							axis1_prev_rot_filtered = axis1_handle_filter.axis1_filtered;
+-							std::cout << "导管手柄 (SN " << serial_axis1_handle << ") 取得首帧有效采样，基准已重新建立。" << std::endl;
+-						}
+ 					}
+ 					else
+ 					{
+@@ -1200,14 +1174,6 @@ int main()
+ 					if (handle_axis6.poll())
+ 					{
+ 						handle6_poll_ok = true;
+-						if (handle6_reconnect_pending_poll)
+-						{
+-							handle6_reconnect_pending_poll = false;
+-							axis6_handle_filter.reset(handle_axis6.fJoints2[0], handle_axis6.fJoints2[1]);
+-							axis6_prev_linear_filtered = axis6_handle_filter.axis0_filtered;
+-							axis6_prev_rot_filtered = axis6_handle_filter.axis1_filtered;
+-							std::cout << "导丝手柄 (SN " << serial_axis6_handle << ") 取得首帧有效采样，基准已重新建立。" << std::endl;
+-						}
+ 					}
+ 					else
+ 					{
+@@ -1220,8 +1186,14 @@ int main()
+ 		}
+ 
+ 		handle_soft_hold_active = single_handle_mode
+-			? (!handle1_poll_ok && !handle6_poll_ok)
+-			: (!handle1_poll_ok || !handle6_poll_ok);
++			? ((!handle1_poll_ok && !handle6_poll_ok) || axis1_input_handle->resume_settling())
++			: (!handle1_poll_ok || !handle6_poll_ok || handle_axis1.resume_settling() || handle_axis6.resume_settling());
++        if (handle_axis1.resume_settling() || handle_axis6.resume_settling())
++        {
++            recovery_event_text = handle_axis1.resume_settling() ? "导管手柄恢复中" : "";
++            if (handle_axis6.resume_settling())
++                recovery_event_text += recovery_event_text.empty() ? "导丝手柄恢复中" : "；导丝手柄恢复中";
++        }
+ 
+ 		const bool handle1_rebase_requested = handle_axis1.take_rebase_request();
+ 		const bool handle6_rebase_requested = handle_axis6.take_rebase_request();
+@@ -1263,24 +1235,8 @@ int main()
+ 				std::ofstream diagnostic_log(diagnostic_path, std::ios::app | std::ios::binary);
+ 				if (diagnostic_log) diagnostic_log << diagnostic.str();
+ 				else std::cerr << "[ADS-DIAG] 无法写入故障文件，请保留控制台输出。" << std::endl;
+-				reported_ads_diagnostic_sequence = ads_stats.diagnostic_sequence;
+-				last_ads_diagnostic_log_ms = loop_now_ms;
+ 				std::cout << "ADS/PLC 运动条件未就绪：保持最后参考并丢弃故障期间手柄增量，原因见前面的诊断字段。" << std::endl;
+ 			}
+-			else if (ads_stats.diagnostic_sequence != reported_ads_diagnostic_sequence &&
+-				loop_now_ms - last_ads_diagnostic_log_ms >= 1000)
+-			{
+-				// 主循环可能先等满300ms，底层超时随后才返回；补记迟到原因，最多每秒一次。
+-				std::ostringstream diagnostic;
+-				diagnostic << "[ADS-DIAG] hold_update tick_ms=" << loop_now_ms
+-					<< " failure_tick_ms=" << ads_stats.diagnostic_tick_ms << " seq=" << ads_stats.diagnostic_sequence
+-					<< " state=" << static_cast<int>(ads_stats.state) << " " << ads_stats.diagnostic << "\n";
+-				std::cout << diagnostic.str();
+-				std::ofstream diagnostic_log(diagnostic_path, std::ios::app | std::ios::binary);
+-				if (diagnostic_log) diagnostic_log << diagnostic.str();
+-				reported_ads_diagnostic_sequence = ads_stats.diagnostic_sequence;
+-				last_ads_diagnostic_log_ms = loop_now_ms;
+-			}
+ 		}
+ 		else if (ads_soft_hold_active && planned_return.active())
+ 		{
+@@ -1288,7 +1244,7 @@ int main()
+ 			ads_soft_hold_active = false;
+ 		}
+ 		else if ((ads_soft_hold_active || handle_rebase_requested || (connection_hold_active_prev && initial_sync_done)) &&
+-			!planned_return.active())
++			!handle_soft_hold_active && !planned_return.active())
+ 		{
+ 			if (!handle_soft_hold_active)
+ 			{
+@@ -1348,7 +1304,11 @@ int main()
+ 			tracking_controller.disable_compensation();
+ 			if (spacing_recovery.phase != SpacingRecoveryPhase::ExitSync) spacing_recovery.reset();
+ 			clear_force_output();
+-			std::cout << "连接保持激活：保留回退任务，等待有效快照与手柄采样，清零力反馈。" << std::endl;
++			std::cout << "连接保持激活：source="
++				<< (!initial_sync_done ? "初始化;" : "")
++				<< (ads_soft_hold_active ? "ADS;" : "")
++				<< (handle_soft_hold_active ? "手柄;" : "")
++				<< " 保留回退任务，等待有效快照与手柄采样，清零力反馈。" << std::endl;
+ 		}
+ 		if (connection_hold_exit_edge && !planned_return.active())
+ 		{
+@@ -1358,7 +1318,8 @@ int main()
+ 			axis2_hold_rel = plc_act_pos[1];
+ 			axis7_hold_rel = plc_act_pos[6];
+ 			independent_axis2_hold_rel = plc_act_pos[1];
+-			std::cout << "连接就绪：保持 PLC 当前反馈位置，不恢复历史目标。axis2="
++			std::cout << "连接保持退出：source=" << recovery_event_text
++				<< " 保持 PLC 当前反馈位置，不恢复历史目标。axis2="
+ 				<< plc_act_pos[1] << "，axis7=" << plc_act_pos[6] << "（相对角度）" << std::endl;
+ 		}
+ 
+@@ -4687,7 +4648,7 @@ int main()
+ 			handle_axis6,
+ 			handle_axis1,
+ 			control_active && !spacing_recovery.active() &&
+-				!ads_soft_hold_active && !return_ads_fault_hold,
++				!ads_soft_hold_active && !handle_soft_hold_active && !return_ads_fault_hold,
+ 			estop_hold_active,
+ 			plc_act_pos[0] + plc_init_pos[0],
+ 			plc_act_pos[5] + plc_init_pos[5],
+@@ -4750,6 +4711,8 @@ int main()
+             if (estop_hold_active) recovery_status << "本体急停恢复中；";
+             if (!handle1_poll_ok) recovery_status << "手柄587无有效样本或采样断开；";
+             if (!handle6_poll_ok) recovery_status << "手柄582无有效样本或采样断开；";
++            if (handle_axis1.resume_settling()) recovery_status << "导管手柄恢复中；";
++            if (handle_axis6.resume_settling()) recovery_status << "导丝手柄恢复中；";
+             if (handle1_poll_ok && handle_axis1.sample_age_ms() > 250) recovery_status << "手柄587采样中断 " << handle_axis1.sample_age_ms() << " ms；";
+             if (handle6_poll_ok && handle_axis6.sample_age_ms() > 250) recovery_status << "手柄582采样中断 " << handle_axis6.sample_age_ms() << " ms；";
+             if (ads_stats.state != AdsConnectionState::Running) recovery_status << "ADS 重连/保持中，状态=" << static_cast<int>(ads_stats.state) << "；";
+diff --git a/介入机器人/B数据端/工程/ADS项目/protocol/PROTOCOL.md b/介入机器人/B数据端/工程/ADS项目/protocol/PROTOCOL.md
+index 13486a8..4518de0 100644
+--- a/介入机器人/B数据端/工程/ADS项目/protocol/PROTOCOL.md
++++ b/介入机器人/B数据端/工程/ADS项目/protocol/PROTOCOL.md
+@@ -19,7 +19,9 @@
+ 
+ 手柄按物理序列号 582、587 排列，每只 8 个字段直接放在顶层。关节/编码器/速度来自本机 SDK，轴向力单位 N，扭矩 N·m，位置及累计净距离 mm。
+ 
+-## HandleFrame（24 项）
++## HandleFrame（26 项）
++
++设备会话号按现有位置数组扩展惯例保留版本 1 和 Topic；严格解码仅接受 26 项，主端、VI.HandleHost 与数据端必须同步部署。会话号属于认证载荷，每只手柄成功重新打开时递增，主端监管器跨宿主重启保存计数。
+ 
+ | 索引 | 类型 | 字段 |
+ |---|---|---|
+@@ -46,7 +48,9 @@
+ | 20 | sbyte | Injector1Direction |
+ | 21 | sbyte | Injector2Direction |
+ | 22 | sbyte | Axis4Direction |
+-| 23 | byte[] | AuthTag |
++| 23 | ulong | DeviceEpoch582 |
++| 24 | ulong | DeviceEpoch587 |
++| 25 | byte[] | AuthTag |
+ 
+ ## CommandFrame（15 项）
+ 
+diff --git a/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_protocol.h b/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_protocol.h
+index 1c935da..898a3c9 100644
+--- a/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_protocol.h
++++ b/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_protocol.h
+@@ -12,7 +12,7 @@ namespace vi_protocol
+     constexpr const char* kCommandTopic = "vi/ads/command/v1";
+     constexpr const char* kStateTopic = "vi/ads/state/v1";
+     constexpr const char* kForceTopic = "vi/ads/force/v1";
+-    constexpr std::size_t kHandleFields = 24;
++    constexpr std::size_t kHandleFields = 26;
+     constexpr std::size_t kCommandFields = 15;
+     constexpr std::size_t kCommandResultFields = 3;
+     constexpr std::size_t kStateFields = 55;
+@@ -53,12 +53,13 @@ namespace vi_protocol
+         std::int32_t encoder587_0{}, encoder587_1{};
+         float joint587_0{}, joint587_1{}, velocity587_0{}, velocity587_1{};
+         std::int8_t injector1_direction{}, injector2_direction{}, axis4_direction{};
++        std::uint64_t device_epoch582{}, device_epoch587{};
+         std::vector<std::uint8_t> auth_tag;
+         MSGPACK_DEFINE(version, session_id, sequence, monotonic_ms, buttons582, valid582,
+             encoder582_0, encoder582_1, joint582_0, joint582_1, velocity582_0, velocity582_1,
+             buttons587, valid587, encoder587_0, encoder587_1, joint587_0, joint587_1,
+             velocity587_0, velocity587_1, injector1_direction, injector2_direction,
+-            axis4_direction, auth_tag);
++            axis4_direction, device_epoch582, device_epoch587, auth_tag);
+     };
+ 
+     struct CommandFrame
+diff --git a/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_validation.h b/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_validation.h
+index 31085e2..54f59b0 100644
+--- a/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_validation.h
++++ b/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_validation.h
+@@ -45,7 +45,8 @@ namespace vi_protocol
+                 !detail::i32(p[offset + 2]) || !detail::i32(p[offset + 3])) return false;
+             for (int i = offset + 4; i < offset + 8; ++i) if (!detail::f32(p[i])) return false;
+         }
+-        return detail::direction(p[20]) && detail::direction(p[21]) && detail::direction(p[22]) && detail::optional_bin(p[23], 16);
++        return detail::direction(p[20]) && detail::direction(p[21]) && detail::direction(p[22]) && detail::uint(p[23], UINT64_MAX) &&
++            detail::uint(p[24], UINT64_MAX) && detail::optional_bin(p[25], 16);
+     }
+ 
+     inline bool validate_object(const msgpack::object& o, const CommandFrame*)
+diff --git a/介入机器人/B数据端/工程/ADS项目/tests/zenoh/protocol_tests.cpp b/介入机器人/B数据端/工程/ADS项目/tests/zenoh/protocol_tests.cpp
+index 2759f61..423eb01 100644
+--- a/介入机器人/B数据端/工程/ADS项目/tests/zenoh/protocol_tests.cpp
++++ b/介入机器人/B数据端/工程/ADS项目/tests/zenoh/protocol_tests.cpp
+@@ -79,6 +79,7 @@ namespace
+         f.buttons587 = 2; f.valid587 = true; f.encoder587_0 = -1; f.encoder587_1 = 2;
+         f.joint587_0 = 1; f.joint587_1 = 2; f.velocity587_0 = 0; f.velocity587_1 = .125f;
+         f.injector1_direction = 1; f.injector2_direction = -1; f.axis4_direction = 0;
++        f.device_epoch582 = 7; f.device_epoch587 = 9;
+         return f;
+     }
+     vi_protocol::CommandFrame new_command()
+@@ -131,6 +132,9 @@ int wmain(int argc, wchar_t** argv)
+         material.insert(material.end(), nc.begin(), nc.end()); material.insert(material.end(), ns.begin(), ns.end());
+         const auto key = hmac(token, material);
+         golden(dir, "handle", new_handle(), key);
++        auto epoch_frame = new_handle(); epoch_frame.auth_tag = sign(epoch_frame, key);
++        ++epoch_frame.device_epoch582;
++        check("Device epoch participates in authentication", sign(epoch_frame, key) != epoch_frame.auth_tag);
+         golden(dir, "command", new_command(), key);
+         golden(dir, "state", new_state(), key);
+         golden(dir, "force", new_force(), key);
+diff --git a/介入机器人/B数据端/工程/ADS项目/tests/zenoh/service_tests.cpp b/介入机器人/B数据端/工程/ADS项目/tests/zenoh/service_tests.cpp
+index 2ff4540..610c49b 100644
+--- a/介入机器人/B数据端/工程/ADS项目/tests/zenoh/service_tests.cpp
++++ b/介入机器人/B数据端/工程/ADS项目/tests/zenoh/service_tests.cpp
+@@ -1,6 +1,7 @@
+ #include <winsock2.h>
+ #include <bcrypt.h>
+ #include "zenoh_service.h"
++#include "手柄/remote_handle_bridge.h"
+ #include <algorithm>
+ #include <cassert>
+ #include <iostream>
+@@ -234,7 +235,11 @@ struct ZenohServiceTestAccess
+         ZenohService service; initialize(service);
+         vi_protocol::HandleFrame handle; handle.version = 1; handle.session_id = 41; handle.sequence = 10;
+         handle.valid582 = handle.valid587 = true; handle.injector1_direction = 1;
++        handle.device_epoch582 = 7; handle.device_epoch587 = 9;
+         handle.auth_tag = service.sign(handle); service.on_handle(handle);
++        remote_handle_bridge::Sample a, b;
++        assert(remote_handle_bridge::get_sample(0, a, 500) && a.device_epoch == 7);
++        assert(remote_handle_bridge::get_sample(1, b, 500) && b.device_epoch == 9);
+         VisCommand control;
+         assert(service.poll_command(control) && control.param2 == 1); service.command_processed();
+         handle.injector1_direction = -1;
+diff --git a/介入机器人/B数据端/工程/ADS项目/tools/ads_diagnostics_test.cpp b/介入机器人/B数据端/工程/ADS项目/tools/ads_diagnostics_test.cpp
+index a39f949..99f4c21 100644
+--- a/介入机器人/B数据端/工程/ADS项目/tools/ads_diagnostics_test.cpp
++++ b/介入机器人/B数据端/工程/ADS项目/tools/ads_diagnostics_test.cpp
+@@ -28,6 +28,7 @@ namespace {
+     std::atomic<std::uint32_t> cycle{10};
+     std::atomic<bool> fail_read{false}, fail_transport{false}, stall{false}, nonfinite{false};
+     std::atomic<bool> fail_read_once{false};
++    std::atomic<bool> network_down{false};
+     std::atomic<unsigned int> single_read_failures{0};
+     bool fail_local = false, fail_remote = false;
+     std::string missing_symbol, nonfinite_velocity;
+@@ -64,11 +65,11 @@ namespace {
+ CADSComm::CADSComm() : m_PAmsAddr(nullptr), m_adsPort(0), m_bOpen(true), m_timeoutMs(300) {}
+ CADSComm::~CADSComm() {}
+ bool CADSComm::IsCommOpen() const { return m_bOpen; }
+-bool CADSComm::OpenCommInsideReadOnly() { if (fail_local) { error = "LOCAL_READ_STATE 1861"; return false; } m_bOpen = true; return true; }
+-bool CADSComm::OpenCommReadOnly() { if (fail_remote) { error = "REMOTE_READ_STATE 29"; return false; } m_bOpen = true; return true; }
++bool CADSComm::OpenCommInsideReadOnly() { if (fail_local || network_down) { error = "LOCAL_READ_STATE 1861"; return false; } m_bOpen = true; return true; }
++bool CADSComm::OpenCommReadOnly() { if (fail_remote || network_down) { error = "REMOTE_READ_STATE 29"; return false; } m_bOpen = true; return true; }
+ bool CADSComm::CloseComm() { m_bOpen = false; ++closes; error.clear(); return true; }
+ bool CADSComm::SetTimeout(unsigned long) { return true; }
+-bool CADSComm::ReadDeviceState(unsigned short& a, unsigned short& d) { a = ADSSTATE_RUN; d = 0; return true; }
++bool CADSComm::ReadDeviceState(unsigned short& a, unsigned short& d) { if (network_down) { error = "READ_STATE 1861"; return false; } a = ADSSTATE_RUN; d = 0; return true; }
+ std::string CADSComm::GetLastErrorCopy() const { return error; }
+ std::string CADSComm::ConnectionDescription() const { return "target=offline:851 timeout_ms=300"; }
+ unsigned long CADSComm::ADSGetAddr(const char* name) {
+@@ -95,6 +96,7 @@ bool CADSComm::ADSWriteSum(const char* const*, const unsigned long*, const void*
+ bool CADSComm::ADSAddNotification(const char* name, unsigned long size, PAdsNotificationFuncEx, std::uint32_t, unsigned long* h, ADSTRANSMODE, unsigned long, unsigned long) { validate_size(name, size); *h = next_handle++; return true; }
+ bool CADSComm::ADSDeleteNotification(unsigned long) { return true; }
+ bool CADSComm::ADSReadSumByHandle(const unsigned long* handles, const unsigned long* sizes, void* const* out, unsigned long count) {
++    if (network_down) { error = "network read timeout code=1861"; return false; }
+     if (fail_read_once.exchange(false)) { ++single_read_failures; error = "injected single read failure"; return false; }
+     if (fail_read) { error = "injected read timeout code=1861"; return false; }
+     if (!stall) ++cycle;
+@@ -111,8 +113,8 @@ bool CADSComm::ADSReadSumByHandle(const unsigned long* handles, const unsigned l
+     error.clear(); return true;
+ }
+ bool CADSComm::ADSWriteSumByHandle(const unsigned long* handles, const unsigned long* sizes, const void* const* in, unsigned long count, unsigned long* results, bool* transport) {
+-    *transport = !fail_transport;
+-    if (fail_transport) { error = "injected write timeout code=1861"; return false; }
++    *transport = !fail_transport && !network_down;
++    if (!*transport) { error = "injected write timeout code=1861"; return false; }
+     bool ok = true;
+     for (unsigned long i = 0; i < count; ++i) {
+         std::string s; { std::lock_guard<std::mutex> lock(symbols_mutex); s = symbols.at(handles[i]); }
+diff --git a/介入机器人/B数据端/工程/ADS项目/tools/main_recovery_test.cpp b/介入机器人/B数据端/工程/ADS项目/tools/main_recovery_test.cpp
+index 9aacd89..68e4fa6 100644
+--- a/介入机器人/B数据端/工程/ADS项目/tools/main_recovery_test.cpp
++++ b/介入机器人/B数据端/工程/ADS项目/tools/main_recovery_test.cpp
+@@ -77,6 +77,11 @@ struct Fixture {
+     }
+ };
+ int main() {
++    Fixture missing_handles;
++    missing_handles.handle_soft_hold_active = true;
++    for (int cycle = 0; cycle < 100; ++cycle) missing_handles.recover();
++    check(missing_handles.recovery_event_text.empty() && motion_sync::dual_calls == 0,
++          "missing handles cannot report a rebuilt baseline while connection hold is still active");
+     Fixture repeated;
+     repeated.planned_return.running = true;
+     repeated.start();
+diff --git a/介入机器人/B数据端/工程/ADS项目/tools/remote_handle_test.cpp b/介入机器人/B数据端/工程/ADS项目/tools/remote_handle_test.cpp
+index 199d567..c3b3dc7 100644
+--- a/介入机器人/B数据端/工程/ADS项目/tools/remote_handle_test.cpp
++++ b/介入机器人/B数据端/工程/ADS项目/tools/remote_handle_test.cpp
+@@ -116,7 +116,17 @@ int main()
+             check(a.poll(), "6s gap can reconnect without process restart");
+         }
+         put_sample(0, sa);
+-        if (gap <= 5000) check(a.poll() && a.take_rebase_request() == (gap > 1500), "rebase threshold is strictly greater than 1500ms");
++        if (gap <= 5000) {
++            check(a.poll() && a.resume_settling() == (gap > 1500) && !a.take_rebase_request(),
++                "rebase threshold is strictly greater than 1500ms");
++            if (gap > 1500) {
++                // 原间隔门槛不变；重建现在延后到连续有效采样满500ms。
++                const auto began = GetTickCount64();
++                do { Sleep(10); put_sample(0, sa); check(a.poll(), "settling receives valid samples"); }
++                while (GetTickCount64() - began < kHandleResumeSettleMs);
++                check(!a.resume_settling() && a.take_rebase_request(), "gap rebase waits for500ms continuous samples");
++            }
++        }
+     }
+     put_sample(0, sa);
+     Sample retained;
+diff --git a/介入机器人/B数据端/工程/ADS项目/zenoh_service.cpp b/介入机器人/B数据端/工程/ADS项目/zenoh_service.cpp
+index d03edba..c596ba0 100644
+--- a/介入机器人/B数据端/工程/ADS项目/zenoh_service.cpp
++++ b/介入机器人/B数据端/工程/ADS项目/zenoh_service.cpp
+@@ -648,6 +648,7 @@ void ZenohService::on_handle(const vi_protocol::HandleFrame& frame)
+         remote_handle_bridge::Sample sample;
+         if (slot == 0)
+         {
++            sample.device_epoch = frame.device_epoch582;
+             sample.valid = frame.valid582; sample.buttons = frame.buttons582;
+             sample.encoders[0] = frame.encoder582_0; sample.encoders[1] = frame.encoder582_1;
+             sample.joints[0] = frame.joint582_0; sample.joints[1] = frame.joint582_1;
+@@ -655,6 +656,7 @@ void ZenohService::on_handle(const vi_protocol::HandleFrame& frame)
+         }
+         else
+         {
++            sample.device_epoch = frame.device_epoch587;
+             sample.valid = frame.valid587; sample.buttons = frame.buttons587;
+             sample.encoders[0] = frame.encoder587_0; sample.encoders[1] = frame.encoder587_1;
+             sample.joints[0] = frame.joint587_0; sample.joints[1] = frame.joint587_1;
+diff --git a/介入机器人/B数据端/工程/ADS项目/手柄/Handle.h b/介入机器人/B数据端/工程/ADS项目/手柄/Handle.h
+index 1ef658d..6e17a96 100644
+--- a/介入机器人/B数据端/工程/ADS项目/手柄/Handle.h
++++ b/介入机器人/B数据端/工程/ADS项目/手柄/Handle.h
+@@ -1,7 +1,10 @@
+ #pragma once
+ #include <windows.h>
++#include <cstdint>
+ #define Rad  57.29577951308232
+ 
++inline constexpr ULONGLONG kHandleResumeSettleMs = 500;
++
+ struct USERData
+ {
+ 	unsigned char buttons2;
+@@ -27,6 +30,7 @@ public:
+ 	bool poll();
+ 	// 抖动恢复时通知主循环重建当前位置基准，避免追赶断流期间的手柄位移。
+ 	bool take_rebase_request() { const bool value = rebase_requested_; rebase_requested_ = false; return value; }
++	bool resume_settling() const { return resume_settling_; }
+ 
+ 	ULONGLONG sample_gap_ms() const { return sample_gap_ms_; }
+ 	ULONGLONG sample_age_ms() const { return last_sample_rx_ms_ == 0 ? 0 : GetTickCount64() - last_sample_rx_ms_; }
+@@ -52,4 +56,9 @@ private:
+ 	ULONGLONG last_sample_rx_ms_ = 0;
+ 	bool rebase_requested_ = false;
+ 	ULONGLONG sample_gap_ms_ = 0;
++    bool opened_once_ = false;
++    bool device_epoch_known_ = false;
++    std::uint64_t device_epoch_ = 0;
++    bool resume_settling_ = false;
++    ULONGLONG resume_since_ms_ = 0;
+ };
+diff --git a/介入机器人/B数据端/工程/ADS项目/手柄/remote_handle_bridge.h b/介入机器人/B数据端/工程/ADS项目/手柄/remote_handle_bridge.h
+index 84f7d8e..543da40 100644
+--- a/介入机器人/B数据端/工程/ADS项目/手柄/remote_handle_bridge.h
++++ b/介入机器人/B数据端/工程/ADS项目/手柄/remote_handle_bridge.h
+@@ -26,6 +26,8 @@ namespace remote_handle_bridge
+ 	{
+ 		bool valid = false;
+ 		ULONGLONG rx_ms = 0;
++        ULONGLONG continuous_since_ms = 0;
++        std::uint64_t device_epoch = 0;
+ 		std::uint8_t buttons = 0;
+ 		std::int32_t encoders[2] = {};
+ 		float joints[2] = {};
+@@ -58,10 +60,20 @@ namespace remote_handle_bridge
+ 	// ---- 采样：网关写入，Handle 读取 ----
+ 	inline void put_sample(int slot, Sample s)
+ 	{
+-		if (slot < 0 || slot > 1 || !s.valid) return;
++		if (slot < 0 || slot > 1) return;
+ 		s.rx_ms = GetTickCount64();
+ 		auto& st = detail::state();
+ 		std::lock_guard<std::mutex> lock(st.m);
++        auto& previous = st.samples[slot];
++        if (!s.valid)
++        {
++            // 无效帧不刷新缓存龄期，但必须中断恢复静置的连续有效采样。
++            previous.continuous_since_ms = 0;
++            return;
++        }
++        s.continuous_since_ms = previous.valid && previous.continuous_since_ms != 0 &&
++            previous.device_epoch == s.device_epoch && s.rx_ms - previous.rx_ms <= 250
++            ? previous.continuous_since_ms : s.rx_ms;
+ 		st.samples[slot] = s;
+ 	}
+ 
+diff --git a/介入机器人/B数据端/工程/ADS项目/手柄/手柄.cpp b/介入机器人/B数据端/工程/ADS项目/手柄/手柄.cpp
+index 24b8ece..37c73f8 100644
+--- a/介入机器人/B数据端/工程/ADS项目/手柄/手柄.cpp
++++ b/介入机器人/B数据端/工程/ADS项目/手柄/手柄.cpp
+@@ -31,6 +31,12 @@ bool Handle::init(DWORD serial)
+ 		return false;
+ 	}
+ 	iID1 = 0;
++    if (opened_once_)
++    {
++        resume_settling_ = true;
++        resume_since_ms_ = 0;
++    }
++    opened_once_ = true;
+ 	printf(u8"已接入远程手柄（物理 SN %lu）。\n", static_cast<unsigned long>(serial_number_));
+ 	return true;
+ }
+@@ -47,16 +53,46 @@ bool Handle::poll()
+ 	{
+ 		return false;
+ 	}
+-	if (last_sample_rx_ms_ != 0 && sample.rx_ms > last_sample_rx_ms_ &&
+-		sample.rx_ms - last_sample_rx_ms_ > 1500)
++	const bool new_sample = sample.rx_ms > last_sample_rx_ms_;
++    const bool epoch_changed = device_epoch_known_ && device_epoch_ != sample.device_epoch;
++    if (last_sample_rx_ms_ != 0 && new_sample && sample.rx_ms - last_sample_rx_ms_ > 1500)
+ 	{
+ 		sample_gap_ms_ = sample.rx_ms - last_sample_rx_ms_;
+-		rebase_requested_ = true;
++        resume_settling_ = true;
++        resume_since_ms_ = sample.rx_ms;
+ 	}
++    if (epoch_changed)
++    {
++        resume_settling_ = true;
++        resume_since_ms_ = sample.rx_ms;
++    }
++    device_epoch_ = sample.device_epoch;
++    device_epoch_known_ = true;
++    const bool settling_this_poll = resume_settling_;
++    if (resume_settling_)
++    {
++        const ULONGLONG now = GetTickCount64();
++        if (sample.continuous_since_ms == 0 || now - sample.rx_ms > 250)
++        {
++            resume_since_ms_ = 0;
++        }
++        else if (new_sample)
++        {
++            // 计时只推进到实际新采样；重复读取缓存不能完成静置。
++            if (resume_since_ms_ == 0) resume_since_ms_ = sample.rx_ms;
++            if (sample.continuous_since_ms > resume_since_ms_) resume_since_ms_ = sample.continuous_since_ms;
++            if (sample.rx_ms - resume_since_ms_ >= kHandleResumeSettleMs)
++            {
++                resume_settling_ = false;
++                rebase_requested_ = true;
++            }
++        }
++    }
+ 	last_sample_rx_ms_ = sample.rx_ms;
+ 	for (int i = 0; i < 2; ++i)
+ 	{
+-		fVels2[i] = GetTickCount64() - sample.rx_ms > 250 ? 0.0 : static_cast<double>(sample.vels[i]);
++		fVels2[i] = settling_this_poll || GetTickCount64() - sample.rx_ms > 250
++            ? 0.0 : static_cast<double>(sample.vels[i]);
+ 		fJoints2[i] = static_cast<double>(sample.joints[i]);
+ 		encoders2[i] = static_cast<long>(sample.encoders[i]);
+ 	}
+@@ -72,6 +108,8 @@ void Handle::clear_cache()
+ 	last_sample_rx_ms_ = 0;
+ 	rebase_requested_ = false;
+ 	sample_gap_ms_ = 0;
++    resume_settling_ = false;
++    resume_since_ms_ = 0;
+ 	objData.buttons2 = 0;
+ 	objData.encoders2[0] = 0;
+ 	objData.encoders2[1] = 0;
+diff --git a/造影机器人/261010/下位机 b/造影机器人/261010/下位机
+--- a/造影机器人/261010/下位机
++++ b/造影机器人/261010/下位机
+@@ -1 +1 @@
+-Subproject commit 655706d040d998e3862870fc23712e5963b01ba5
++Subproject commit 655706d040d998e3862870fc23712e5963b01ba5-dirty

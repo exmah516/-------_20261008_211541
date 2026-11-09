@@ -45,7 +45,8 @@ namespace vi_protocol
                 !detail::i32(p[offset + 2]) || !detail::i32(p[offset + 3])) return false;
             for (int i = offset + 4; i < offset + 8; ++i) if (!detail::f32(p[i])) return false;
         }
-        return detail::direction(p[20]) && detail::direction(p[21]) && detail::direction(p[22]) && detail::optional_bin(p[23], 16);
+        return detail::direction(p[20]) && detail::direction(p[21]) && detail::direction(p[22]) && detail::uint(p[23], UINT64_MAX) &&
+            detail::uint(p[24], UINT64_MAX) && detail::optional_bin(p[25], 16);
     }
 
     inline bool validate_object(const msgpack::object& o, const CommandFrame*)

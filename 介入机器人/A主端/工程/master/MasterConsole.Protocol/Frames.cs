@@ -5,6 +5,7 @@ namespace MasterConsole.Protocol
     {
         public byte Buttons;
         public bool Valid;
+        public ulong DeviceEpoch;
         public int Encoder0, Encoder1;
         public float Joint0, Joint1;
         public float Vel0, Vel1;

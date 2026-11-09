@@ -12,6 +12,7 @@ internal static class Program
     private sealed class Device
     {
         internal uint Serial;
+        internal ulong DeviceEpoch;
         internal int Id = -1;
         internal long NextOpen, Sequence, LastZero;
         internal bool Nonzero;
@@ -42,6 +43,7 @@ internal static class Program
                         d.Id = FlCatheterNative.openDevice(d.Serial);
                         if (d.Id >= 0)
                         {
+                            d.DeviceEpoch = memory.NextDeviceEpoch(i);
                             if (!servoStarted) { FlCatheterNative.startServoLoop(Servo, IntPtr.Zero); servoStarted = true; }
                             FlCatheterNative.enableForces(true, d.Id);
                         }
@@ -57,7 +59,7 @@ internal static class Program
                             FlCatheterNative.getJoints(d.Joints, d.Id);
                             FlCatheterNative.getEncoders(d.Encoders, d.Id);
                             FlCatheterNative.getSwitch(out byte buttons, d.Id);
-                            sample = new HostSample { Valid = 1, Tick = now, Sequence = ++d.Sequence, Buttons = buttons,
+                            sample = new HostSample { Valid = 1, DeviceEpoch = d.DeviceEpoch, Tick = now, Sequence = ++d.Sequence, Buttons = buttons,
                                 Encoder0 = d.Encoders[0], Encoder1 = d.Encoders[1], Joint0 = (float)d.Joints[0], Joint1 = (float)d.Joints[1],
                                 Vel0 = (float)d.Velocity[0], Vel1 = (float)d.Velocity[1] };
                         }

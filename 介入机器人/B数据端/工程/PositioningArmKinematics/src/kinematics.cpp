@@ -92,7 +92,7 @@ ArmPose PositioningArmKinematics::forward(const JointVector& joints) const
     result.position += config_.link_lengths[1]
         * Eigen::Vector3d(std::sin(second_link_yaw), -std::cos(second_link_yaw), 0);
 
-    const double tool_yaw = joints[1] + joints[2] + joints[3] - Pi / 2;
+    const double tool_yaw = joints[1] + joints[2] + joints[3];
     const Eigen::Quaterniond wrist_rotation = rotationZ(tool_yaw)
         * Eigen::Quaterniond(Eigen::AngleAxisd(joints[4], Eigen::Vector3d::UnitX()));
     result.position += wrist_rotation
@@ -131,7 +131,7 @@ FrameJacobian PositioningArmKinematics::computeFrameJacobian(
     }
 
     const Eigen::Vector3d pitch_axis_world =
-        rotationZ(yaw - Pi / 2) * Eigen::Vector3d::UnitX();
+        rotationZ(yaw) * Eigen::Vector3d::UnitX();
     result.block<3, 1>(0, 4) =
         pitch_axis_world.cross(pose.position - joint_origin);
     result.block<3, 1>(3, 4) = pitch_axis_world;
@@ -264,8 +264,7 @@ IkResult PositioningArmKinematics::solveCartesianJog(
     }
 
     // 解析解只处理平面三轴：先扣除工具偏置，再解轴2、3两连杆，最后由总偏航角解轴4。
-    const double target_yaw = current[1] + current[2] + current[3]
-        - Pi / 2 + command.yaw;
+    const double target_yaw = current[1] + current[2] + current[3] + command.yaw;
     const double pitch = current[4];
     const double tool_x = config_.lateral_offset * std::cos(target_yaw)
         + config_.tool_length * std::cos(pitch) * std::sin(target_yaw);
@@ -313,7 +312,7 @@ IkResult PositioningArmKinematics::solveCartesianJog(
         candidate[1] = nearest_equivalent(q2, current[1]);
         candidate[2] = nearest_equivalent(q3, current[2]);
         candidate[3] = nearest_equivalent(
-            target_yaw + Pi / 2 - candidate[1] - candidate[2], current[3]);
+            target_yaw - candidate[1] - candidate[2], current[3]);
 
         if (current_branch * std::sin(candidate[2]) <= 0) {
             blocked = IkStatus::NearSingularity;

@@ -25,7 +25,7 @@ namespace MasterConsole.ViewModels
 
         public int Index { get; }
         public int OpenValue { get; }
-        public string Title => $"电缸 {Index}";
+        public string Title => Index switch { 1 => "导管夹持", 2 => "导管旋捻", 3 => "导丝夹持", _ => "导丝旋捻" };
         public string Caption => $"打开 = {OpenValue}";
 
         /// <summary>只认从端回报的手动覆盖状态（与旧 AdsControlUI 一致）。</summary>
@@ -233,6 +233,9 @@ namespace MasterConsole.ViewModels
         public double Axis7PointerX => CalculatePointerX(_hasStatus ? _s.AxisPos[6] : 0.0);
         public double Axis7PointerY => CalculatePointerY(_hasStatus ? _s.AxisPos[6] : 0.0);
 
+        public string Axis2AngleText => _hasStatus ? _s.AxisPos[1].ToString("0.0", CultureInfo.InvariantCulture) + "°" : "—";
+        public string Axis7AngleText => _hasStatus ? _s.AxisPos[6].ToString("0.0", CultureInfo.InvariantCulture) + "°" : "—";
+
         private double CalculatePointerX(double angleDeg)
         {
             // 0度指向上方，顺时针旋转
@@ -383,6 +386,8 @@ namespace MasterConsole.ViewModels
         public string DroppedText => _stats.DroppedFrames.ToString();
         public string AdsText => !_hasStatus ? "—" : (AdsHealthy ? "正常" : "异常");
 
+        public bool Handle582Online => _stats.Handle582Online;
+        public bool Handle587Online => _stats.Handle587Online;
         /// <summary>主端本机手柄：两只都在线时指示灯亮；SDK 缺失时文字提示。</summary>
         public bool HandlesOnline => _stats.Handle582Online && _stats.Handle587Online;
         public string RecoveryText => string.Join("；", new[] { _stats.HandleRecoveryText, _s.RecoveryText }
@@ -472,6 +477,8 @@ namespace MasterConsole.ViewModels
             OnPropertyChanged(nameof(StatusHzText));
             OnPropertyChanged(nameof(DroppedText));
             OnPropertyChanged(nameof(AdsText));
+            OnPropertyChanged(nameof(Handle582Online));
+            OnPropertyChanged(nameof(Handle587Online));
             OnPropertyChanged(nameof(HandlesOnline));
             OnPropertyChanged(nameof(HandleText));
             OnPropertyChanged(nameof(RecoveryText));
@@ -521,6 +528,7 @@ namespace MasterConsole.ViewModels
             nameof(AdsHealthy), nameof(ModeText), nameof(PhaseText), nameof(RecoveryText), nameof(CanStartControl),
             nameof(Force582F), nameof(Force582N), nameof(Force587F), nameof(Force587N),
             nameof(Axis1NetDistance), nameof(Axis6NetDistance),
+            nameof(Axis2AngleText), nameof(Axis7AngleText),
             nameof(Axis2PointerX), nameof(Axis2PointerY), nameof(Axis7PointerX), nameof(Axis7PointerY),
             nameof(PrepareStatusText), nameof(FfCaption), nameof(YValveCaption), nameof(Injector1Text), nameof(Injector2Text), nameof(Axis4Text),
             nameof(StatusFresh),

@@ -67,7 +67,7 @@ namespace MasterConsole.Protocol
         {
             if (bytes == null || bytes.Length == 0 || bytes.Length > 65536) throw Invalid("载荷长度错误");
             string schema;
-            if (typeof(T) == typeof(HandleFrame)) schema = "bqqqbBiiffffbBiiffffsssx";
+            if (typeof(T) == typeof(HandleFrame)) schema = "bqqqbBiiffffbBiiffffsssqqx";
             else if (typeof(T) == typeof(CommandFrame)) schema = "bqqqibiiddtxxxx";
             else if (typeof(T) == typeof(StateFrame)) schema = "bqqbxquiiii" + "hhhhbsss" + "ffffffffffffffffffff" + "Bdd" + "bibi" + "rtffuuBdx";
             else if (typeof(T) == typeof(ForceFrame)) schema = "bqqqBsffBsffx";

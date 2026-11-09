@@ -17,6 +17,14 @@ namespace MasterConsole.Services
             _file = create ? MemoryMappedFile.CreateNew(name, 1024) : MemoryMappedFile.OpenExisting(name);
             _view = _file.CreateViewAccessor();
         }
+        internal ulong DeviceEpoch(int slot) => _view.ReadUInt64(16 + slot * 8);
+        internal void SetDeviceEpoch(int slot, ulong epoch) => _view.Write(16 + slot * 8, epoch);
+        internal ulong NextDeviceEpoch(int slot)
+        {
+            ulong epoch = DeviceEpoch(slot) + 1;
+            SetDeviceEpoch(slot, epoch);
+            return epoch;
+        }
         internal long Heartbeat { get => _view.ReadInt64(0); set => _view.Write(0, value); }
         internal int Error { get => _view.ReadInt32(8); set => _view.Write(8, value); }
         internal bool Stop { get => _view.ReadInt32(12) != 0; set => _view.Write(12, value ? 1 : 0); }
@@ -43,9 +51,10 @@ namespace MasterConsole.Services
     internal struct HostSample
     {
         internal long Sequence, Tick;
+        internal ulong DeviceEpoch;
         internal int Valid, Buttons, Encoder0, Encoder1;
         internal float Joint0, Joint1, Vel0, Vel1;
-        internal HandleSample Sample => new HandleSample { Valid = Valid != 0, Buttons = (byte)Buttons,
+        internal HandleSample Sample => new HandleSample { Valid = Valid != 0, DeviceEpoch = DeviceEpoch, Buttons = (byte)Buttons,
             Encoder0 = Encoder0, Encoder1 = Encoder1, Joint0 = Joint0, Joint1 = Joint1, Vel0 = Vel0, Vel1 = Vel1 };
     }
     [StructLayout(LayoutKind.Sequential)]

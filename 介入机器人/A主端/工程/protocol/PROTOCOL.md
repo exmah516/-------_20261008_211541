@@ -19,7 +19,9 @@
 
 手柄按物理序列号 582、587 排列，每只 8 个字段直接放在顶层。关节/编码器/速度来自本机 SDK，轴向力单位 N，扭矩 N·m，位置及累计净距离 mm。
 
-## HandleFrame（24 项）
+## HandleFrame（26 项）
+
+设备会话号按现有位置数组扩展惯例保留版本 1 和 Topic；严格解码仅接受 26 项，主端、VI.HandleHost 与数据端必须同步部署。会话号属于认证载荷，每只手柄成功重新打开时递增，主端监管器跨宿主重启保存计数。
 
 | 索引 | 类型 | 字段 |
 |---|---|---|
@@ -46,7 +48,9 @@
 | 20 | sbyte | Injector1Direction |
 | 21 | sbyte | Injector2Direction |
 | 22 | sbyte | Axis4Direction |
-| 23 | byte[] | AuthTag |
+| 23 | ulong | DeviceEpoch582 |
+| 24 | ulong | DeviceEpoch587 |
+| 25 | byte[] | AuthTag |
 
 ## CommandFrame（15 项）
 

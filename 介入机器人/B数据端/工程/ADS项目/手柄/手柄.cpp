@@ -31,6 +31,12 @@ bool Handle::init(DWORD serial)
 		return false;
 	}
 	iID1 = 0;
+    if (opened_once_)
+    {
+        resume_settling_ = true;
+        resume_since_ms_ = 0;
+    }
+    opened_once_ = true;
 	printf(u8"已接入远程手柄（物理 SN %lu）。\n", static_cast<unsigned long>(serial_number_));
 	return true;
 }
@@ -47,16 +53,46 @@ bool Handle::poll()
 	{
 		return false;
 	}
-	if (last_sample_rx_ms_ != 0 && sample.rx_ms > last_sample_rx_ms_ &&
-		sample.rx_ms - last_sample_rx_ms_ > 1500)
+	const bool new_sample = sample.rx_ms > last_sample_rx_ms_;
+    const bool epoch_changed = device_epoch_known_ && device_epoch_ != sample.device_epoch;
+    if (last_sample_rx_ms_ != 0 && new_sample && sample.rx_ms - last_sample_rx_ms_ > 1500)
 	{
 		sample_gap_ms_ = sample.rx_ms - last_sample_rx_ms_;
-		rebase_requested_ = true;
+        resume_settling_ = true;
+        resume_since_ms_ = sample.rx_ms;
 	}
+    if (epoch_changed)
+    {
+        resume_settling_ = true;
+        resume_since_ms_ = sample.rx_ms;
+    }
+    device_epoch_ = sample.device_epoch;
+    device_epoch_known_ = true;
+    const bool settling_this_poll = resume_settling_;
+    if (resume_settling_)
+    {
+        const ULONGLONG now = GetTickCount64();
+        if (sample.continuous_since_ms == 0 || now - sample.rx_ms > 250)
+        {
+            resume_since_ms_ = 0;
+        }
+        else if (new_sample)
+        {
+            // 计时只推进到实际新采样；重复读取缓存不能完成静置。
+            if (resume_since_ms_ == 0) resume_since_ms_ = sample.rx_ms;
+            if (sample.continuous_since_ms > resume_since_ms_) resume_since_ms_ = sample.continuous_since_ms;
+            if (sample.rx_ms - resume_since_ms_ >= kHandleResumeSettleMs)
+            {
+                resume_settling_ = false;
+                rebase_requested_ = true;
+            }
+        }
+    }
 	last_sample_rx_ms_ = sample.rx_ms;
 	for (int i = 0; i < 2; ++i)
 	{
-		fVels2[i] = GetTickCount64() - sample.rx_ms > 250 ? 0.0 : static_cast<double>(sample.vels[i]);
+		fVels2[i] = settling_this_poll || GetTickCount64() - sample.rx_ms > 250
+            ? 0.0 : static_cast<double>(sample.vels[i]);
 		fJoints2[i] = static_cast<double>(sample.joints[i]);
 		encoders2[i] = static_cast<long>(sample.encoders[i]);
 	}
@@ -72,6 +108,8 @@ void Handle::clear_cache()
 	last_sample_rx_ms_ = 0;
 	rebase_requested_ = false;
 	sample_gap_ms_ = 0;
+    resume_settling_ = false;
+    resume_since_ms_ = 0;
 	objData.buttons2 = 0;
 	objData.encoders2[0] = 0;
 	objData.encoders2[1] = 0;

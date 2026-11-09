@@ -806,8 +806,6 @@ int main()
 	bool plc_app_name_read = false;
 	ULONGLONG handle1_next_retry_ms = 0;
 	ULONGLONG handle6_next_retry_ms = 0;
-	bool handle1_reconnect_pending_poll = false;
-	bool handle6_reconnect_pending_poll = false;
 	bool handle_soft_hold_active = true;
 	bool connection_hold_active_prev = true;
 
@@ -951,8 +949,6 @@ int main()
 	LARGE_INTEGER vis_qpc_frequency{};
 	QueryPerformanceFrequency(&vis_qpc_frequency);
 	std::int64_t next_vis_publish_qpc = 0;
-	std::uint64_t reported_ads_diagnostic_sequence = 0;
-	ULONGLONG last_ads_diagnostic_log_ms = 0;
 	ExperimentStartInfo recording_info{};
 	recording_info.axis1_handle_serial = serial_axis1_handle;
 	recording_info.axis6_handle_serial = serial_axis6_handle;
@@ -1122,8 +1118,7 @@ int main()
 				handle1_next_retry_ms = loop_now_ms + 1000;
 				if (handle_axis1.init())
 				{
-					handle1_reconnect_pending_poll = true;
-					std::cout << "导管手柄 (SN " << serial_axis1_handle << ") 重新打开成功，等待首帧有效采样..." << std::endl;
+					std::cout << "导管手柄 (SN " << serial_axis1_handle << ") 重新打开成功，等待连续 0.5 s 有效采样..." << std::endl;
 				}
 			}
 			if (!handle_axis6.is_open() && loop_now_ms >= handle6_next_retry_ms)
@@ -1131,8 +1126,7 @@ int main()
 				handle6_next_retry_ms = loop_now_ms + 1000;
 				if (handle_axis6.init())
 				{
-					handle6_reconnect_pending_poll = true;
-					std::cout << "导丝手柄 (SN " << serial_axis6_handle << ") 重新打开成功，等待首帧有效采样..." << std::endl;
+					std::cout << "导丝手柄 (SN " << serial_axis6_handle << ") 重新打开成功，等待连续 0.5 s 有效采样..." << std::endl;
 				}
 			}
 		}
@@ -1150,18 +1144,6 @@ int main()
 					{
 						handle1_poll_ok = true;
 						handle6_poll_ok = true;
-						if (handle1_reconnect_pending_poll || handle6_reconnect_pending_poll)
-						{
-							handle1_reconnect_pending_poll = false;
-							handle6_reconnect_pending_poll = false;
-							axis1_handle_filter.reset(active_handle->fJoints2[0], active_handle->fJoints2[1]);
-							axis6_handle_filter.reset(active_handle->fJoints2[0], active_handle->fJoints2[1]);
-							axis1_prev_linear_filtered = axis1_handle_filter.axis0_filtered;
-							axis6_prev_linear_filtered = axis6_handle_filter.axis0_filtered;
-							axis1_prev_rot_filtered = axis1_handle_filter.axis1_filtered;
-							axis6_prev_rot_filtered = axis6_handle_filter.axis1_filtered;
-							std::cout << "单手柄重连后取得首帧有效采样，基准已重新建立。" << std::endl;
-						}
 					}
 					else
 					{
@@ -1179,14 +1161,6 @@ int main()
 					if (handle_axis1.poll())
 					{
 						handle1_poll_ok = true;
-						if (handle1_reconnect_pending_poll)
-						{
-							handle1_reconnect_pending_poll = false;
-							axis1_handle_filter.reset(handle_axis1.fJoints2[0], handle_axis1.fJoints2[1]);
-							axis1_prev_linear_filtered = axis1_handle_filter.axis0_filtered;
-							axis1_prev_rot_filtered = axis1_handle_filter.axis1_filtered;
-							std::cout << "导管手柄 (SN " << serial_axis1_handle << ") 取得首帧有效采样，基准已重新建立。" << std::endl;
-						}
 					}
 					else
 					{
@@ -1200,14 +1174,6 @@ int main()
 					if (handle_axis6.poll())
 					{
 						handle6_poll_ok = true;
-						if (handle6_reconnect_pending_poll)
-						{
-							handle6_reconnect_pending_poll = false;
-							axis6_handle_filter.reset(handle_axis6.fJoints2[0], handle_axis6.fJoints2[1]);
-							axis6_prev_linear_filtered = axis6_handle_filter.axis0_filtered;
-							axis6_prev_rot_filtered = axis6_handle_filter.axis1_filtered;
-							std::cout << "导丝手柄 (SN " << serial_axis6_handle << ") 取得首帧有效采样，基准已重新建立。" << std::endl;
-						}
 					}
 					else
 					{
@@ -1220,8 +1186,14 @@ int main()
 		}
 
 		handle_soft_hold_active = single_handle_mode
-			? (!handle1_poll_ok && !handle6_poll_ok)
-			: (!handle1_poll_ok || !handle6_poll_ok);
+			? ((!handle1_poll_ok && !handle6_poll_ok) || axis1_input_handle->resume_settling())
+			: (!handle1_poll_ok || !handle6_poll_ok || handle_axis1.resume_settling() || handle_axis6.resume_settling());
+        if (handle_axis1.resume_settling() || handle_axis6.resume_settling())
+        {
+            recovery_event_text = handle_axis1.resume_settling() ? "导管手柄恢复中" : "";
+            if (handle_axis6.resume_settling())
+                recovery_event_text += recovery_event_text.empty() ? "导丝手柄恢复中" : "；导丝手柄恢复中";
+        }
 
 		const bool handle1_rebase_requested = handle_axis1.take_rebase_request();
 		const bool handle6_rebase_requested = handle_axis6.take_rebase_request();
@@ -1263,23 +1235,7 @@ int main()
 				std::ofstream diagnostic_log(diagnostic_path, std::ios::app | std::ios::binary);
 				if (diagnostic_log) diagnostic_log << diagnostic.str();
 				else std::cerr << "[ADS-DIAG] 无法写入故障文件，请保留控制台输出。" << std::endl;
-				reported_ads_diagnostic_sequence = ads_stats.diagnostic_sequence;
-				last_ads_diagnostic_log_ms = loop_now_ms;
 				std::cout << "ADS/PLC 运动条件未就绪：保持最后参考并丢弃故障期间手柄增量，原因见前面的诊断字段。" << std::endl;
-			}
-			else if (ads_stats.diagnostic_sequence != reported_ads_diagnostic_sequence &&
-				loop_now_ms - last_ads_diagnostic_log_ms >= 1000)
-			{
-				// 主循环可能先等满300ms，底层超时随后才返回；补记迟到原因，最多每秒一次。
-				std::ostringstream diagnostic;
-				diagnostic << "[ADS-DIAG] hold_update tick_ms=" << loop_now_ms
-					<< " failure_tick_ms=" << ads_stats.diagnostic_tick_ms << " seq=" << ads_stats.diagnostic_sequence
-					<< " state=" << static_cast<int>(ads_stats.state) << " " << ads_stats.diagnostic << "\n";
-				std::cout << diagnostic.str();
-				std::ofstream diagnostic_log(diagnostic_path, std::ios::app | std::ios::binary);
-				if (diagnostic_log) diagnostic_log << diagnostic.str();
-				reported_ads_diagnostic_sequence = ads_stats.diagnostic_sequence;
-				last_ads_diagnostic_log_ms = loop_now_ms;
 			}
 		}
 		else if (ads_soft_hold_active && planned_return.active())
@@ -1288,7 +1244,7 @@ int main()
 			ads_soft_hold_active = false;
 		}
 		else if ((ads_soft_hold_active || handle_rebase_requested || (connection_hold_active_prev && initial_sync_done)) &&
-			!planned_return.active())
+			!handle_soft_hold_active && !planned_return.active())
 		{
 			if (!handle_soft_hold_active)
 			{
@@ -1348,7 +1304,11 @@ int main()
 			tracking_controller.disable_compensation();
 			if (spacing_recovery.phase != SpacingRecoveryPhase::ExitSync) spacing_recovery.reset();
 			clear_force_output();
-			std::cout << "连接保持激活：保留回退任务，等待有效快照与手柄采样，清零力反馈。" << std::endl;
+			std::cout << "连接保持激活：source="
+				<< (!initial_sync_done ? "初始化;" : "")
+				<< (ads_soft_hold_active ? "ADS;" : "")
+				<< (handle_soft_hold_active ? "手柄;" : "")
+				<< " 保留回退任务，等待有效快照与手柄采样，清零力反馈。" << std::endl;
 		}
 		if (connection_hold_exit_edge && !planned_return.active())
 		{
@@ -1358,7 +1318,8 @@ int main()
 			axis2_hold_rel = plc_act_pos[1];
 			axis7_hold_rel = plc_act_pos[6];
 			independent_axis2_hold_rel = plc_act_pos[1];
-			std::cout << "连接就绪：保持 PLC 当前反馈位置，不恢复历史目标。axis2="
+			std::cout << "连接保持退出：source=" << recovery_event_text
+				<< " 保持 PLC 当前反馈位置，不恢复历史目标。axis2="
 				<< plc_act_pos[1] << "，axis7=" << plc_act_pos[6] << "（相对角度）" << std::endl;
 		}
 
@@ -4687,7 +4648,7 @@ int main()
 			handle_axis6,
 			handle_axis1,
 			control_active && !spacing_recovery.active() &&
-				!ads_soft_hold_active && !return_ads_fault_hold,
+				!ads_soft_hold_active && !handle_soft_hold_active && !return_ads_fault_hold,
 			estop_hold_active,
 			plc_act_pos[0] + plc_init_pos[0],
 			plc_act_pos[5] + plc_init_pos[5],
@@ -4750,6 +4711,8 @@ int main()
             if (estop_hold_active) recovery_status << "本体急停恢复中；";
             if (!handle1_poll_ok) recovery_status << "手柄587无有效样本或采样断开；";
             if (!handle6_poll_ok) recovery_status << "手柄582无有效样本或采样断开；";
+            if (handle_axis1.resume_settling()) recovery_status << "导管手柄恢复中；";
+            if (handle_axis6.resume_settling()) recovery_status << "导丝手柄恢复中；";
             if (handle1_poll_ok && handle_axis1.sample_age_ms() > 250) recovery_status << "手柄587采样中断 " << handle_axis1.sample_age_ms() << " ms；";
             if (handle6_poll_ok && handle_axis6.sample_age_ms() > 250) recovery_status << "手柄582采样中断 " << handle_axis6.sample_age_ms() << " ms；";
             if (ads_stats.state != AdsConnectionState::Running) recovery_status << "ADS 重连/保持中，状态=" << static_cast<int>(ads_stats.state) << "；";
