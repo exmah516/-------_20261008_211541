@@ -72,6 +72,7 @@ namespace MasterConsole.Protocol
         /// <summary>轴6窗口的距左限位边界，仅供显示，零宽度表示当前不可用。</summary>
         public float Axis6WindowStartFromLeftMm, Axis6WindowEndFromLeftMm;
 
+        public int ArmCartesianStatus, ArmCartesianError;
         public uint ArmCjogState, ArmCjogError;
         public bool ArmCjogLimited;
         public double ArmCjogPathSpeed;

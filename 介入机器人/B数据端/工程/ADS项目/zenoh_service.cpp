@@ -1092,6 +1092,8 @@ void ZenohService::publish_state_frame()
         frame.arm_cjog_error = state_.arm_cjog_error;
         frame.arm_cjog_limited = state_.arm_cjog_limited;
         frame.arm_cjog_path_speed = state_.arm_cjog_path_speed;
+        frame.arm_cartesian_status = state_.arm_cartesian_status;
+        frame.arm_cartesian_error = state_.arm_cartesian_error;
         authed = authenticated_ && frame.auth_state == 2; key = session_key_;
     }
     if (authed)

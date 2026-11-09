@@ -16,7 +16,9 @@ internal static class EncodingCheck
         Directory.CreateDirectory(work);
         try
         {
-            var settings = StreamingSettings.Load(new NameValueCollection());
+            var settings = StreamingSettings.Load(new NameValueCollection {
+                ["VideoWidth"]="960", ["VideoHeight"]="540", ["VideoFps"]="25", ["VideoBitrateKbps"]="512"
+            });
             const int frames = 200;
             string arguments = settings.FfmpegArguments(Rectangle.Empty, true).Replace("-re ", "");
             int output = arguments.LastIndexOf("-f rtsp ", StringComparison.Ordinal);

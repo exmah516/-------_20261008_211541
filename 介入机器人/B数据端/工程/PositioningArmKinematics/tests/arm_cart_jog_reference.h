@@ -12,7 +12,7 @@ struct ArmCartJogReference {
     static constexpr double TOOL_LENGTH_MM = 554.5;
     static constexpr double T_ACC = 1.0, T_DEC = 0.5;
     static constexpr int INITIAL_BRANCH = 1, BISECTION_COUNT = 12;
-    static constexpr std::array<double, 5> JOINT_VCAP{{24,10,10,10,10}};
+    static constexpr std::array<double, 5> JOINT_VCAP{{24,30,30,30,30}};
     std::array<double, 5> p{}, v{}, a{}, anchor{};
     double path_speed = 0, target_speed = 0, path_v = 0;
     double v0 = 0, v1 = 0, duration = T_ACC, tau = 0, sigma = 0;

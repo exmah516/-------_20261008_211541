@@ -141,7 +141,13 @@ public partial class PositioningArmPanel : UserControl
 
     private async void ArmProgramZero_Click(object sender, RoutedEventArgs e)
     {
-        if (!_viewModel.CanOperate || _cartesianMode != 0 || _jogAxis != 0) return;
+        if (!_viewModel.CanOperate || _cartesianMode != 0 || _jogAxis != 0)
+        {
+            ArmCartesianError.Text = !_viewModel.CanOperate
+                ? "归零失败：尚未取得控制权或状态未就绪"
+                : "归零失败：1008（请先松开点动按钮）";
+            return;
+        }
         ArmCartesianError.Text = "";
         int version = ++_holdVersion;
         _programReturnActive = true;

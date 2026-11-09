@@ -11,7 +11,9 @@ namespace ScreenCut
         private const int ArchiveCount = 3;
         private static readonly object Gate = new object();
         private static readonly Encoding Utf8 = new UTF8Encoding(false);
-        internal static string LogPath { get; } = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "streaming.log");
+        private static readonly string Name = Path.GetFileNameWithoutExtension(AppDomain.CurrentDomain.FriendlyName) == "CameraMonitor"
+            ? "monitoring" : "streaming";
+        internal static string LogPath { get; } = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Name + ".log");
 
         internal static string Write(string text)
         {
@@ -24,7 +26,7 @@ namespace ScreenCut
                     var file = new FileInfo(LogPath);
                     if (file.Exists && file.Length > 0 && file.Length + Utf8.GetByteCount(entry) > MaxFileBytes)
                     {
-                        string Archive(int n) => Path.Combine(Path.GetDirectoryName(LogPath), "streaming." + n + ".log");
+                        string Archive(int n) => Path.Combine(Path.GetDirectoryName(LogPath), Name + "." + n + ".log");
                         File.Delete(Archive(ArchiveCount));
                         for (int i = ArchiveCount - 1; i >= 1; i--)
                             if (File.Exists(Archive(i))) File.Move(Archive(i), Archive(i + 1));

@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="ArmCartJogGen" Id="{721fd06a-290f-4fa0-98ad-8295ece245f4}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK ArmCartJogGen
+VAR_INPUT
+    start : BOOL;
+    held : BOOL;
+    mode : INT;
+    dir : INT;
+    speed : LREAL;
+    seed : ARRAY[1..5] OF LREAL;
+    cycle_dt : LREAL;
+END_VAR
+VAR_OUTPUT
+    p : ARRAY[1..5] OF LREAL;
+    v : ARRAY[1..5] OF LREAL;
+    a : ARRAY[1..5] OF LREAL;
+    path_speed : LREAL;
+    target_speed : LREAL;
+    limited : BOOL;
+END_VAR
+VAR CONSTANT
+    PI : LREAL := 3.14159265358979323846;
+    RAD : LREAL := PI / 180.0;
+    L1 : LREAL := 200.0; // 毫米，取自kinematics.h
+    L2 : LREAL := 180.0;
+    TOOL_LATERAL_OFFSET_MM : LREAL := 456.3;
+    TOOL_LENGTH_MM : LREAL := 554.5;
+    T_ACC : LREAL := 1.0; // 秒
+    T_DEC : LREAL := 0.5;
+    JOINT_VCAP : ARRAY[1..5] OF LREAL := [24,30,30,30,30]; // 毫米/秒、度/秒
+    DLS_PSI_WEIGHT : LREAL := 200.0; // 毫米/弧度
+    DLS_S0 : LREAL := 0.5;
+    DLS_LAMBDA_MAX : LREAL := 30.0; // 毫米
+END_VAR
+VAR
+    anchor : ARRAY[1..5] OF LREAL;
+    position_before, velocity_before, qdot : ARRAY[1..5] OF LREAL;
+    path_v, path_v_previous, v0, v1, tau, sigma : LREAL;
+    duration : LREAL := T_ACC;
+    latched_mode, latched_dir : INT;
+    reanchor : BOOL;
+    i, j : INT;
+    u, delta_sigma_des, delta_sigma, signed_path : LREAL;
+    q2, q3, q4, psi, tool_y, s, lambda, ratio, scale : LREAL;
+    j11, j12, j13, j21, j22, j23 : LREAL;
+    m11, m12, m13, m22, m23, m33 : LREAL;
+    c11, c12, c13, c22, c23, c33, det : LREAL;
+    task_x, task_y, task_psi, z1, z2, z3 : LREAL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// 输入速度采用平滑曲线，路径增量用相邻周期速度的梯形积分。
+reanchor := start;
+IF start THEN
+    p := seed;
+    FOR i := 1 TO 5 DO v[i] := 0; a[i] := 0; END_FOR
+    path_v := 0; v0 := 0; v1 := 0; tau := 0; duration := T_ACC;
+    latched_mode := mode; latched_dir := dir;
+END_IF
+position_before := p; velocity_before := v; path_v_previous := path_v;
+target_speed := 0;
+IF held AND (mode = latched_mode) AND (dir = latched_dir) THEN target_speed := speed; END_IF
+IF target_speed <> v1 THEN
+    v0 := path_v; v1 := target_speed;
+    IF v1 > v0 THEN duration := T_ACC; ELSE duration := T_DEC; END_IF
+    tau := 0;
+END_IF
+IF NOT start THEN tau := tau + cycle_dt; END_IF
+u := MIN(1.0, tau / duration);
+path_v := v0 + (v1-v0)*(3.0*u*u-2.0*u*u*u);
+// 模式或方向变化在曲线零速点重新锚定。
+IF (path_v = 0) AND (v1 = 0) AND held
+    AND ((mode <> latched_mode) OR (dir <> latched_dir)) THEN reanchor := TRUE; END_IF
+IF reanchor THEN
+    anchor := p; latched_mode := mode; latched_dir := dir; sigma := 0;
+END_IF
+limited := FALSE;
+IF start THEN path_speed := 0; target_speed := 0; RETURN; END_IF
+IF (latched_mode = 3) OR (latched_mode = 4) THEN
+    // Z和俯仰保留原单轴梯形积分。
+    delta_sigma_des := 0.5*(path_v_previous+path_v)*cycle_dt;
+    IF latched_mode = 3 THEN j := 1; ELSE j := 5; END_IF
+    delta_sigma := MIN(delta_sigma_des, JOINT_VCAP[j]*cycle_dt);
+    signed_path := latched_dir*(sigma+delta_sigma);
+    p := anchor;
+    p[j] := anchor[j]-signed_path;
+    sigma := sigma+delta_sigma;
+    path_speed := delta_sigma/cycle_dt;
+ELSE
+    // 对新零位正解解析求导；第三行加权偏航的三个元素均为DLS_PSI_WEIGHT。
+    q2 := p[2]*RAD; q3 := p[3]*RAD; q4 := p[4]*RAD;
+    psi := q2+q3+q4;
+    tool_y := TOOL_LENGTH_MM*COS(anchor[5]*RAD);
+    j13 := -TOOL_LATERAL_OFFSET_MM*SIN(psi)+tool_y*COS(psi);
+    j23 := TOOL_LATERAL_OFFSET_MM*COS(psi)+tool_y*SIN(psi);
+    j12 := L2*COS(q2+q3+PI)+j13;
+    j22 := L2*SIN(q2+q3+PI)+j23;
+    j11 := L1*COS(q2)+j12;
+    j21 := L1*SIN(q2)+j22;
+    s := ABS(SIN(q3));
+    lambda := 0;
+    IF s < DLS_S0 THEN
+        ratio := 1.0-s/DLS_S0;
+        lambda := DLS_LAMBDA_MAX*ratio*ratio*(3.0-2.0*ratio);
+    END_IF
+    m11 := j11*j11+j12*j12+j13*j13+lambda*lambda;
+    m12 := j11*j21+j12*j22+j13*j23;
+    m13 := DLS_PSI_WEIGHT*(j11+j12+j13);
+    m22 := j21*j21+j22*j22+j23*j23+lambda*lambda;
+    m23 := DLS_PSI_WEIGHT*(j21+j22+j23);
+    m33 := 3.0*DLS_PSI_WEIGHT*DLS_PSI_WEIGHT+lambda*lambda;
+    // 对称3×3矩阵的伴随矩阵和行列式。
+    c11 := m22*m33-m23*m23;
+    c12 := m13*m23-m12*m33;
+    c13 := m12*m23-m13*m22;
+    c22 := m11*m33-m13*m13;
+    c23 := m12*m13-m11*m23;
+    c33 := m11*m22-m12*m12;
+    det := m11*c11+m12*c12+m13*c13;
+    task_x := 0; task_y := 0; task_psi := 0;
+    IF latched_mode = 1 THEN task_x := latched_dir*path_v;
+    ELSIF latched_mode = 2 THEN task_y := latched_dir*path_v;
+    ELSE task_psi := DLS_PSI_WEIGHT*latched_dir*path_v*RAD; END_IF
+    z1 := (c11*task_x+c12*task_y+c13*task_psi)/det;
+    z2 := (c12*task_x+c22*task_y+c23*task_psi)/det;
+    z3 := (c13*task_x+c23*task_y+c33*task_psi)/det;
+    qdot[2] := j11*z1+j21*z2+DLS_PSI_WEIGHT*z3;
+    qdot[3] := j12*z1+j22*z2+DLS_PSI_WEIGHT*z3;
+    qdot[4] := j13*z1+j23*z2+DLS_PSI_WEIGHT*z3;
+    scale := 1.0;
+    FOR i := 2 TO 4 DO
+        IF ABS(qdot[i]) > JOINT_VCAP[i]*RAD THEN
+            scale := MIN(scale, JOINT_VCAP[i]*RAD/ABS(qdot[i]));
+        END_IF
+    END_FOR
+    p[1] := anchor[1]; p[5] := anchor[5];
+    FOR i := 2 TO 4 DO
+        qdot[i] := scale*qdot[i];
+        p[i] := p[i]+qdot[i]*cycle_dt/RAD;
+    END_FOR
+    IF latched_mode = 1 THEN
+        path_speed := latched_dir*(j11*qdot[2]+j12*qdot[3]+j13*qdot[4]);
+    ELSIF latched_mode = 2 THEN
+        path_speed := latched_dir*(j21*qdot[2]+j22*qdot[3]+j23*qdot[4]);
+    ELSE
+        path_speed := (qdot[2]+qdot[3]+qdot[4])/RAD;
+    END_IF
+    sigma := sigma+path_speed*cycle_dt;
+    limited := (lambda > 0) AND (path_v > 0);
+END_IF
+FOR i := 1 TO 5 DO
+    v[i] := (p[i]-position_before[i])/cycle_dt;
+    a[i] := (v[i]-velocity_before[i])/cycle_dt;
+END_FOR]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

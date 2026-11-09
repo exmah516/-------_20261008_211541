@@ -1,0 +1,15 @@
+<Window x:Class="CameraMonitor.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="影像传输 · 相机监控" Width="680" Height="320" MinWidth="480" MinHeight="260">
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="16">
+      <TextBlock Text="两路海康相机转发" FontWeight="SemiBold" FontSize="18"/>
+      <TextBlock x:Name="cameraState" Text="正在启动媒体服务…" TextWrapping="Wrap" Margin="0,10,0,0"/>
+      <TextBlock x:Name="cameraWarning" TextWrapping="Wrap" Foreground="#B14627" FontWeight="SemiBold" Margin="0,8,0,0"/>
+      <TextBlock x:Name="status" TextWrapping="Wrap" Foreground="#586576" Margin="0,8,0,0"/>
+      <TextBlock Text="画质在海康网页或 iVMS 中设置，本软件转发相机原码流。&#10;config/hik_cameras.ini：stream=0 主码流（高清），stream=1 子码流。修改后重启监控。"
+                 TextWrapping="Wrap" Foreground="#586576" Margin="0,12,0,0"/>
+    </StackPanel>
+  </ScrollViewer>
+</Window>

@@ -62,7 +62,7 @@ check("v[i] := (p[i]-position_before[i])/cycle_dt;" in gen
       and "a[i] := (v[i]-velocity_before[i])/cycle_dt;" in gen, "feed velocity/acceleration are finite differences")
 check("path_speed := delta_sigma/cycle_dt;" in gen and "limited := delta_sigma < delta_sigma_des;" in gen,
       "executed path speed and limited flag")
-check("[24,10,10,10,10]" in decl, "joint caps 24 mm/s, 10/10/10/10 deg/s")
+check("[24,30,30,30,30]" in decl, "joint caps 24 mm/s, 30/30/30/30 deg/s")
 check("TOOL_LATERAL_OFFSET_MM : LREAL := 456.3;" in decl
       and "TOOL_LENGTH_MM : LREAL := 554.5;" in decl, "TCP tool offsets match kinematics.h in millimetres")
 check("IF latched_mode = 5 THEN" in gen
@@ -102,7 +102,11 @@ for name, body, error in [("ArmCartJog", wrapper, "arm_cjog_error"), ("ArmCartes
 for name in ["ArmCartJogGen.TcPOU", "ArmManual.TcPOU"]:
     working = (plc / "POUs" / name).read_text(encoding="utf-8-sig").replace("\r\n", "\n")
     before = subprocess.check_output(["git", "show", "713d8830aaf04cd23b1547c3f0da03528f5c5d94:介入机器人/C从端/250902/Untitled2/POUs/" + name], cwd=repo).decode("utf-8-sig").replace("\r\n", "\n")
-    check(working == before, name + " unchanged from pre-round4 (line endings normalized)")
+    if name == "ArmCartJogGen.TcPOU":
+        # 接受极简轮零位和本轮限速两处规定改动；其余旧算法因DLS停项而保持逐字一致。
+        before = before.replace("[24,10,10,10,10]", "[24,30,30,30,30]").replace(
+            "psi0 := anchor[2]+anchor[3]+anchor[4]-90.0;", "psi0 := anchor[2]+anchor[3]+anchor[4];")
+    check(working == before, name + " matches pre-round4 after the accepted zero/cap changes (line endings normalized)")
 check("IF G.arm_curve_owned OR G.arm_cjog_owned THEN" in manual
       and "reset_exec[i] := TRUE;" in manual
       and "Execute:=reset_exec[i] AND (axis_state[i] = 0)" in manual,

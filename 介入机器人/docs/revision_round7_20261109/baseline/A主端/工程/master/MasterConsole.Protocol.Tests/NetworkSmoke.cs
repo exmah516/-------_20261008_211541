@@ -1,0 +1,246 @@
+using System;
+using System.Diagnostics;
+using System.Collections.Concurrent;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using MasterConsole.Services;
+using VI.Service.Net;
+
+namespace MasterConsole.Protocol.Tests
+{
+    internal static partial class Program
+    {
+        private sealed class NetworkHandles : IHandleService
+        {
+            internal volatile bool Valid = true;
+            public bool SdkMissing => false;
+            public bool IsOnline(int slot) => Valid;
+            public HandleSample GetSample(int slot) => new HandleSample { Valid = Valid, Joint0 = .125f };
+            public void SetHaptic(int slot, HapticOut output) { }
+            public void ClearHaptic() { }
+            public void Start() { }
+            public void Stop() { }
+            public void Dispose() { }
+        }
+        static partial void NetworkSmoke(string[] args, byte[] key)
+        {
+            string simulator = Option(args, "--simulator");
+            string router = Option(args, "--router");
+            string endpoint = Option(args, "--endpoint", "tcp/127.0.0.1:17447");
+            if (!Uri.TryCreate(endpoint.Replace("tcp/", "tcp://"), UriKind.Absolute, out var endpointUri) ||
+                !endpointUri.IsLoopback || endpointUri.Scheme != "tcp")
+                throw new ArgumentException("离线通信测试只允许本机回环地址。");
+            string tokenFile = Path.Combine(Path.GetTempPath(), "vi-zenoh-" + Guid.NewGuid().ToString("N") + ".token");
+            byte[] token = Encoding.ASCII.GetBytes("zenoh-offline-integration-token-32");
+            File.WriteAllBytes(tokenFile, token);
+            Process process = null;
+            var ready = new ManualResetEventSlim();
+            int handleCount = 0, forceCount = 0, stateCount = 0, commandCount = 0;
+            int windowStateMatched = 0, forceMask = -1;
+            var commands = new ConcurrentQueue<CommandFrame>();
+            try
+            {
+                process = StartSimulator(simulator, endpoint, tokenFile, router, ready);
+                if (!ready.Wait(15000)) throw new TimeoutException("模拟数据端未就绪。");
+                using (var observer = new ZenohSession(endpoint))
+                using (var link = new RemoteRobotLink(new RemoteLinkSettings { Host = "127.0.0.1", Endpoint = endpoint, Token = token }, null))
+                {
+                    observer.Subscribe<HandleFrame>(ZenohProtocol.HandleTopic, f => Interlocked.Increment(ref handleCount));
+                    observer.Subscribe<ForceFrame>(ZenohProtocol.ForceTopic, f =>
+                    {
+                        Interlocked.Increment(ref forceCount);
+                        Interlocked.Exchange(ref forceMask, (f.Enable582 ? 1 : 0) | (f.Enable587 ? 2 : 0));
+                    });
+                    observer.Subscribe<StateFrame>(ZenohProtocol.StateTopic, f => Interlocked.Increment(ref stateCount));
+                    observer.Subscribe<CommandFrame>(ZenohProtocol.CommandTopic, f => { Interlocked.Increment(ref commandCount); commands.Enqueue(f); });
+                    var cachedPublisher = observer.Advertise<CommandFrame>(ZenohProtocol.CommandTopic);
+                    cachedPublisher.Dispose(); cachedPublisher.Dispose();
+                    Check("相同 Topic 复用与 Publisher 幂等释放", !cachedPublisher.IsAvailable);
+                    link.LogReceived += (sender, log) => Console.WriteLine("[链路] " + log.Text);
+                    link.StatusReceived += (sender, state) =>
+                    {
+                        if (state.AxisFromLeft[5] == 627 && state.Axis6WindowStartFromLeftMm == 611 && state.Axis6WindowEndFromLeftMm == 643)
+                            Interlocked.Exchange(ref windowStateMatched, 1);
+                    };
+                    process.StandardInput.WriteLine("pause"); process.StandardInput.Flush();
+                    Thread.Sleep(700); // 等缓存状态过期，确保 ConnectAsync 后状态帧尚未到达。
+                    var acquire = Task.Run(async () =>
+                    {
+                        await link.ConnectAsync();
+                        return await link.AcquireControlAsync();
+                    });
+                    Thread.Sleep(100);
+                    process.StandardInput.WriteLine("resume"); process.StandardInput.Flush();
+                    var acquired = Result(acquire, 16000);
+                    Check("连接后立即申请控制权会等待首个有效状态帧", acquired.Ok);
+                    if (!acquired.Ok) return;
+                    Check("原生 Zenoh-C 与真实主端认证", link.IsConnected);
+                    Check("有控制权", Wait(() => link.HasControl, 3000));
+                    Check("轴6位置与窗口边界通过原生数据端映射到主端", Wait(() => Volatile.Read(ref windowStateMatched) == 1, 3000));
+                    Check("准备位置专用状态", Result(link.PreparePositionAsync(12, 125), 7000).Ok);
+                    Check("开始控制专用状态", Result(link.StartControlAsync(), 7000).Ok);
+                    Check("显式取零通过真实Zenoh命令/状态回执", Result(link.ZeroForceSensorAsync(), 7000).Ok);
+                    Check("单独开启导管反馈", Result(link.SetForceFeedbackAsync(true, 1), 7000).Ok && Wait(() => Volatile.Read(ref forceMask) == 2, 2000));
+                    Check("单独开启导丝反馈", Result(link.SetForceFeedbackAsync(true, 2), 7000).Ok && Wait(() => Volatile.Read(ref forceMask) == 3, 2000));
+                    Check("单独关闭导管反馈", Result(link.SetForceFeedbackAsync(false, 1), 7000).Ok && Wait(() => Volatile.Read(ref forceMask) == 1, 2000));
+                    Check("开启与关闭保持", Result(link.SetForceFeedbackHoldAsync(true), 7000).Ok && Result(link.SetForceFeedbackHoldAsync(false), 7000).Ok);
+                    Check("点动直接返回发送结果", Result(link.SetArmCartesianJogAsync(1, 1000), 1000).Ok);
+                    link.KeepArmCartesianAlive(); link.SetArmAxisJog(1, 0);
+                    Parallel.For(0, 64, i => link.SetArmAxisJog(1, 0));
+                    Thread.Sleep(100);
+                    ulong previous = 0; bool increasing = true;
+                    foreach (var command in commands)
+                    { if (command.Sequence <= previous) increasing = false; previous = command.Sequence; }
+                    Check("并发发送命令的序号按发送顺序递增", increasing && commands.Count >= 64);
+                    foreach (double scale in new[] { 2.0, 1.0, 0.5 }) link.SetArmAxisJog(2, -1, scale);
+                    link.SetArmAxisJog(2, -1, 0.75);
+                    Check("三档点动倍率通过 MessagePack 和 Zenoh 发送，非法倍率不发送", Wait(() => commands
+                        .Where(frame => frame.Command == ZenohCommand.ArmAxisJog && frame.Param1 == 2 && frame.Param2 == -1)
+                        .Select(frame => frame.Value1).SequenceEqual(new[] { 2.0, 1.0, 0.5 }), 2000));
+                    link.SetArmAxisJog(2, 0);
+                    int startHandle = handleCount, startState = stateCount, startForce = forceCount;
+                    var frequencyClock = Stopwatch.StartNew();
+                    Thread.Sleep(3000);
+                    double seconds = frequencyClock.Elapsed.TotalSeconds;
+                    double handleHz = (handleCount - startHandle) / seconds;
+                    double stateHz = (stateCount - startState) / seconds;
+                    double forceHz = (forceCount - startForce) / seconds;
+                    Console.WriteLine("频率：handle=" + handleHz.ToString("F1") + "Hz state=" + stateHz.ToString("F1") + "Hz force=" + forceHz.ToString("F1") + "Hz");
+                    Check("手柄与力反馈接近 100Hz，状态接近 30Hz", handleHz >= 85 && handleHz <= 115 && forceHz >= 85 && forceHz <= 115 && stateHz >= 25 && stateHz <= 35);
+                    Check("四个 Topic 均有流量", handleCount >= 100 && forceCount >= 100 && stateCount >= 20 && commandCount >= 5);
+                    Check("单调 Echo RTT 与有效触觉帧", !double.IsNaN(link.GetStats().RttMs) && link.GetStats().HapticAgeMs < 500);
+                    int acquireCount = commands.Count(frame => frame.Command == ZenohCommand.Acquire);
+                    process.StandardInput.WriteLine("pause-handles"); process.StandardInput.Flush();
+                    Thread.Sleep(3600);
+                    Check("单向手柄断流不撤销已认证控制权", link.IsConnected && link.HasControl &&
+                        commands.Count(frame => frame.Command == ZenohCommand.Acquire) == acquireCount);
+                    process.StandardInput.WriteLine("resume-handles"); process.StandardInput.Flush();
+                    process.StandardInput.WriteLine("pause"); process.StandardInput.Flush();
+                    Check("有效状态超过 2s 断联", Wait(() => !link.IsConnected, ProtocolConstants.StatusTimeoutMs + 1000));
+                    process.StandardInput.WriteLine("resume"); process.StandardInput.Flush();
+                    Check("短暂中断自动恢复", Wait(() => link.IsConnected, 4000));
+                    process.StandardInput.WriteLine("pause"); process.StandardInput.Flush();
+                    Thread.Sleep(3600);
+                    Check("状态停止后无假在线", !link.IsConnected);
+                    process.StandardInput.WriteLine("resume"); process.StandardInput.Flush();
+                    Check("长中断后重新认证恢复", Wait(() => link.IsConnected, 10000));
+                    Check("重新认证后自动恢复此前已申请的控制权", Wait(() => link.HasControl, 7000));
+                    int acquireBeforeClosedSession = commands.Count(frame => frame.Command == ZenohCommand.Acquire);
+                    var transportField = typeof(RemoteRobotLink).GetField("_zenoh", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                    ((ZenohSession)transportField.GetValue(link)).Dispose();
+                    Check("V7关闭会话后自动重建并重新认证", Wait(() => link.IsConnected, 10000));
+                    Check("V7重新认证后恢复控制权申请", Wait(() => link.HasControl && commands.Count(frame => frame.Command == ZenohCommand.Acquire) > acquireBeforeClosedSession, 7000));
+                    Check("释放控制权", Result(link.ReleaseControlAsync(), 7000).Ok);
+                    Check("主动释放后保持无控制权", Wait(() => !link.HasControl, 3000));
+                    process.StandardInput.WriteLine("pause"); process.StandardInput.Flush();
+                    Thread.Sleep(3600);
+                    process.StandardInput.WriteLine("resume"); process.StandardInput.Flush();
+                    Check("主动释放后重连不自动取得控制权", Wait(() => link.IsConnected, 10000) && !link.HasControl);
+                    link.Disconnect();
+                    Check("主动断开", !link.IsConnected);
+                    link.ConnectAsync().GetAwaiter().GetResult();
+                    Check("同一对象重新连接", Wait(() => link.IsConnected, 10000));
+                    link.Disconnect();
+                }
+                process.StandardInput.WriteLine("check-handles"); process.StandardInput.Flush();
+                using var restartObserver = new ZenohSession(endpoint);
+                restartObserver.Subscribe<CommandFrame>(ZenohProtocol.CommandTopic, frame => commands.Enqueue(frame));
+                int hellosBefore = commands.Count(frame => frame.Command == ZenohCommand.Hello);
+                var handles = new NetworkHandles();
+                using (var restartedMaster = new RemoteRobotLink(new RemoteLinkSettings { Host = "127.0.0.1", Endpoint = endpoint, Token = token }, handles))
+                {
+                    int active = 0, rebuilt = 0;
+                    restartedMaster.StatusReceived += (_, state) =>
+                    {
+                        Volatile.Write(ref active, (state.Flags & StatusFlags.ControlActive) != 0 ? 1 : 0);
+                        if (state.RecoveryText.Contains("V6")) Volatile.Write(ref rebuilt, 1);
+                    };
+                    restartedMaster.ConnectAsync().GetAwaiter().GetResult();
+                    Check("V6新主端对象重新Hello/认证/Acquire", Result(restartedMaster.AcquireControlAsync(), 7000).Ok &&
+                        Wait(() => commands.Count(frame => frame.Command == ZenohCommand.Hello) > hellosBefore, 2000));
+                    Check("V6数据端保持先前控制状态", Wait(() => Volatile.Read(ref active) == 1, 3000));
+                    handles.Valid = false;
+                    Check("V6 valid=false持续6s进入断柄保持", Wait(() => Volatile.Read(ref active) == 0, 6500));
+                    Thread.Sleep(1000);
+                    handles.Valid = true;
+                    Check("V6六秒断流后无需重启数据端恢复控制", Wait(() => Volatile.Read(ref active) == 1 && Volatile.Read(ref rebuilt) == 1, 3000));
+                    Check("V6恢复过程中模拟器进程保持运行", !process.HasExited);
+                }
+                StopSimulator(process); process.Dispose(); process = null;
+                var unavailableClock = Stopwatch.StartNew();
+                CheckThrows("自启路由器随数据端关闭", () => { using (var unavailable = new ZenohSession(endpoint)) { } });
+                Check("无路由器时连接有界返回", unavailableClock.ElapsedMilliseconds < 5000);
+                using (var external = Process.Start(new ProcessStartInfo(router, "--listen " + Quote(endpoint))
+                    { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true }))
+                {
+                    external.OutputDataReceived += (sender, e) => { };
+                    external.ErrorDataReceived += (sender, e) => { };
+                    external.BeginOutputReadLine(); external.BeginErrorReadLine();
+                    try
+                    {
+                        Thread.Sleep(300);
+                        ready.Reset();
+                        process = StartSimulator(simulator, endpoint, tokenFile, router, ready);
+                        Check("数据端复用已有路由器", ready.Wait(15000));
+                        StopSimulator(process); process.Dispose(); process = null;
+                        Check("退出数据端保留外部路由器", !external.HasExited);
+                    }
+                    finally { if (!external.HasExited) { external.Kill(); external.WaitForExit(5000); } }
+                }
+            }
+            finally
+            {
+                if (process != null)
+                {
+                    StopSimulator(process);
+                    process.Dispose();
+                }
+                ready.Dispose();
+                if (File.Exists(tokenFile)) File.Delete(tokenFile);
+            }
+        }
+
+        private static CommandResult Result(Task<CommandResult> task, int milliseconds)
+        { if (!task.Wait(milliseconds)) throw new TimeoutException("主端命令等待超时。"); return task.GetAwaiter().GetResult(); }
+        private static bool Wait(Func<bool> condition, int milliseconds)
+        {
+            var clock = Stopwatch.StartNew();
+            do { if (condition()) return true; Thread.Sleep(10); } while (clock.ElapsedMilliseconds < milliseconds);
+            return condition();
+        }
+        private static string Option(string[] args, string name, string fallback = null)
+        {
+            int index = Array.IndexOf(args, name);
+            if (index >= 0 && index + 1 < args.Length) return args[index + 1];
+            if (fallback != null) return fallback;
+            throw new ArgumentException("缺少参数 " + name);
+        }
+        private static string Quote(string value) => "\"" + value.Replace("\"", "") + "\"";
+        private static Process StartSimulator(string simulator, string endpoint, string tokenFile, string router, ManualResetEventSlim ready)
+        {
+            var process = new Process
+            {
+                StartInfo = new ProcessStartInfo(simulator,
+                    "--endpoint " + Quote(endpoint) + " --token " + Quote(tokenFile) + " --router " + Quote(router))
+                {
+                    UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true,
+                    RedirectStandardOutput = true, RedirectStandardError = true
+                }
+            };
+            process.OutputDataReceived += (sender, e) => { if (e.Data != null) { Console.WriteLine("[模拟] " + e.Data); if (e.Data.Contains("SIM_READY")) ready.Set(); } };
+            process.ErrorDataReceived += (sender, e) => { if (e.Data != null) Console.WriteLine("[模拟] " + e.Data); };
+            process.Start(); process.BeginOutputReadLine(); process.BeginErrorReadLine();
+            return process;
+        }
+        private static void StopSimulator(Process process)
+        {
+            if (process.HasExited) return;
+            process.StandardInput.WriteLine("quit"); process.StandardInput.Flush();
+            if (!process.WaitForExit(5000)) { process.Kill(); process.WaitForExit(5000); }
+            process.WaitForExit(); // 等异步输出回调退出后再释放就绪事件。
+        }
+    }
+}

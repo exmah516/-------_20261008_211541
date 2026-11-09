@@ -21,7 +21,8 @@ internal static partial class Program
     {
         try
         {
-            Run(args.Length == 0 ? Path.Combine(AppContext.BaseDirectory, "UiChecks") : args[0]);
+            if (args.Length == 3 && args[0] == "--home-chain") CheckHomeChain(args[1], args[2]);
+            else Run(args.Length == 0 ? Path.Combine(AppContext.BaseDirectory, "UiChecks") : args[0]);
             return 0;
         }
         catch (Exception ex)
@@ -253,10 +254,35 @@ internal static partial class Program
         Pump();
         Check(statusChanges == 10 && holdVm.ArmCartesianJogStatusText == "",
             "Cartesian status property notifies and clears after the condition ends");
+        int homesBeforeOccupied = recordingLink.ArmProgramZeroCount;
+        Invoke(holdArm, "ArmProgramZero_Click", holdArm.FindName("ProgramHome")!, new RoutedEventArgs());
+        Check(recordingLink.ArmProgramZeroCount == homesBeforeOccupied &&
+            ((TextBlock)holdArm.FindName("ArmCartesianError")!).Text.Contains("1008", StringComparison.Ordinal),
+            "occupied local jog rejects home with a visible reason");
+        int homeStatusChanges = 0;
+        holdVm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(MainViewModel.ArmProgramZeroStatusText)) homeStatusChanges++; };
+        foreach (var (state, error, expected) in new[]
+        {
+            (1, 0, "归零进行中"), (2, 0, "归零已完成"), (3, 0, "已在零位"),
+            (5, 1002, "归零失败：1002（当前关节位置超出允许范围）"),
+            (5, 2003, "归零失败：2003（PLC 驱动、使能、心跳或急停条件未满足）"),
+            (5, 1008, "归零失败：1008（末端点动占用，请松开点动并等待停稳）")
+        })
+        {
+            recordingLink.PublishProgramZero(state, error);
+            Pump();
+            Check(holdVm.ArmProgramZeroStatusText == expected &&
+                ((TextBlock)holdArm.FindName("ArmProgramZeroStatus")!).Text == expected,
+                $"home status {state}/{error} reaches the view model and adjacent status text");
+        }
+        Check(homeStatusChanges == 6, "every home status update notifies the view");
         Invoke(holdArm, "ArmCartesian_Up", holdArm.FindName("CartesianForward")!,
             new RoutedEventArgs(UIElement.PreviewMouseLeftButtonUpEvent));
         Invoke(holdArm, "ArmProgramZero_Click", holdArm.FindName("ProgramHome")!, new RoutedEventArgs());
         Check(recordingLink.ArmProgramZeroCount == 1, "Program home sends directly without parameter input");
+        int homeAlives = recordingLink.ArmCartesianAliveCount;
+        Invoke(holdArm, "KeepaliveTimer_Tick", null!, EventArgs.Empty);
+        Check(recordingLink.ArmCartesianAliveCount == homeAlives + 1, "home keepalive remains active after request dispatch");
         Invoke(holdArm, "ArmStop_Click", holdArm.FindName("ProgramHome")!, new RoutedEventArgs());
         Invoke(holdArm, "ArmJogButton_Down", axis, MouseArgs(axis));
         Invoke(holdArm, "ArmJogButton_Up", axis, new RoutedEventArgs(UIElement.PreviewMouseLeftButtonUpEvent));
@@ -396,6 +422,17 @@ public class RecordingRobotLink : DispatchProxy
     public (int Mode, int SpeedMilli) LastArmCartesianJog { get; private set; }
     public int ArmProgramZeroCount { get; private set; }
     public int ArmCartesianJogCount { get; private set; }
+    public int ArmJogCount { get; private set; }
+    public int ArmCartesianAliveCount { get; private set; }
+    public void PublishProgramZero(int state, int error)
+    {
+        _events.TryGetValue("StatusReceived", out Delegate? handler);
+        ((EventHandler<StatusFrame>?)handler)?.Invoke(this, new StatusFrame
+        {
+            Flags = StatusFlags.LeaseHeld, AxisPos = new float[7], AxisFromLeft = new float[7],
+            ArmCartesianStatus = state, ArmCartesianError = error
+        });
+    }
     public void PublishCartJog(uint state, uint error, bool limited, double speed)
     {
         _events.TryGetValue("StatusReceived", out Delegate? handler);
@@ -486,6 +523,7 @@ public class RecordingRobotLink : DispatchProxy
         if (name == "SetAxis4") { LastAxis4 = (int)args![0]!; return null; }
         if (name == "SetArmAxisJog")
         {
+            ArmJogCount++;
             LastArmJog = ((int)args![0]!, (int)args[1]!);
             LastArmSpeedScale = (double)args[2]!;
             ArmJogDirections[LastArmJog.Axis] = LastArmJog.Direction;
@@ -498,6 +536,7 @@ public class RecordingRobotLink : DispatchProxy
             LastArmCartesianSpeedScale = (double)args[2]!;
             return Task.FromResult(CommandResult.Done());
         }
+        if (name == "KeepArmCartesianAlive") { ArmCartesianAliveCount++; return null; }
         if (name == "ReturnArmProgramZeroAsync") { ArmProgramZeroCount++; return Task.FromResult(CommandResult.Done()); }
         if (name == "SetForceFeedbackAsync") { LastForce = ((bool)args![0]!, (int)args[1]!); return Task.FromResult(CommandResult.Done()); }
         if (name == "SetForceFeedbackHoldAsync") { LastForceHold = (bool)args![0]!; return Task.FromResult(CommandResult.Done()); }

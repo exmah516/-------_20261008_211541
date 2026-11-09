@@ -484,7 +484,8 @@ namespace MasterConsole.Services
                     HasNetDistance = f.HasNetDistance, Axis1NetDistanceMm = f.Axis1NetDistanceMm, Axis6NetDistanceMm = f.Axis6NetDistanceMm,
                     Axis6WindowStartFromLeftMm = f.Axis6WindowStartFromLeftMm, Axis6WindowEndFromLeftMm = f.Axis6WindowEndFromLeftMm,
                     ArmCjogState = f.ArmCjogState, ArmCjogError = f.ArmCjogError,
-                    ArmCjogLimited = f.ArmCjogLimited, ArmCjogPathSpeed = f.ArmCjogPathSpeed
+                    ArmCjogLimited = f.ArmCjogLimited, ArmCjogPathSpeed = f.ArmCjogPathSpeed,
+                    ArmCartesianStatus = f.ArmCartesianStatus, ArmCartesianError = f.ArmCartesianError
                 };
                 if (f.EchoMainMonotonicMs != 0 && f.EchoMainMonotonicMs <= (ulong)now)
                 {

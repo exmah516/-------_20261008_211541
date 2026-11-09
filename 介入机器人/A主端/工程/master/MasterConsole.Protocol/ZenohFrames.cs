@@ -138,7 +138,9 @@ namespace MasterConsole.Protocol
         [Key(51)] public uint ArmCjogError { get; set; }
         [Key(52)] public bool ArmCjogLimited { get; set; }
         [Key(53)] public double ArmCjogPathSpeed { get; set; }
-        [Key(54)] public byte[] AuthTag { get; set; } = new byte[0];
+        [Key(54)] public int ArmCartesianStatus { get; set; }
+        [Key(55)] public int ArmCartesianError { get; set; }
+        [Key(56)] public byte[] AuthTag { get; set; } = new byte[0];
     }
 
     [MessagePackObject]

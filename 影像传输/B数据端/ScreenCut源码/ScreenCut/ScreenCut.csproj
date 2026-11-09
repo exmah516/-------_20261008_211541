@@ -15,7 +15,9 @@
   <ItemGroup>
     <Reference Include="System.Configuration" />
     <Reference Include="System.Net.Http" />
-    <Content Include="..\..\ScreenCut\config\hik_cameras.ini" Link="config\hik_cameras.ini" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\ScreenCut\config\hik_cameras.ini')" />
+    <Reference Include="System.Web" />
+    <Reference Include="System.Web.Extensions" />
+    <Content Include="streaming.config" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\..\依赖\runtime\ffmpeg.exe;..\..\..\依赖\runtime\mediamtx.exe;..\..\..\依赖\runtime\*-LICENSE*" Link="runtime\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -20,6 +20,7 @@ internal static partial class Program
         string fixtures = Path.Combine(AppContext.BaseDirectory, "Fixtures");
         string[] files = ["MainWindow.xaml", "InterventionPanel.xaml", "PositioningArmPanel.xaml"];
         var oldViews = files.Select(file => XDocument.Load(Path.Combine(fixtures, "Baseline." + file + ".xml"))).ToArray();
+        ApplyMinimalBaseline(oldViews[2]);
         var newViews = files.Select(file => XDocument.Load(Path.Combine(fixtures, file))).ToArray();
         var newControls = newViews.SelectMany(view => view.Descendants()).ToArray();
         var rows = new List<string> { "原文件,原控件,新控件,Command或事件,Tag,CommandParameter,IsEnabled,ToolTip,结果" };
@@ -33,7 +34,7 @@ internal static partial class Program
             if (cylinder) mapped = Enumerable.Range(1, 4).Select(index => newControls.Single(element => (string?)element.Attribute(X + "Name") == "Cylinder" + index)).ToArray();
             else if (original.Attribute(X + "Name") is XAttribute name)
                 mapped = [newControls.Single(element => (string?)element.Attribute(X + "Name") == name.Value)];
-            else mapped = [newControls.Single(element => element.Name == original.Name &&
+            else mapped = [newControls.Single(element => (string?)element.Attribute(X + "Name") is not ("Cartesian3Reverse" or "Cartesian3Forward") && element.Name == original.Name &&
                 actions.Concat(["Tag", "CommandParameter"]).All(key => (string?)element.Attribute(key) == (string?)original.Attribute(key)))];
 
             foreach (var current in mapped)
@@ -58,8 +59,8 @@ internal static partial class Program
             }
         }
         var cartesianButtons = newControls.Where(element => (string?)element.Attribute("PreviewMouseLeftButtonDown") == "ArmCartesian_Down").ToArray();
-        Check(cartesianButtons.Length == 10, "all ten Cartesian buttons exist");
-        for (int mode = 1; mode <= 5; mode++)
+        Check(cartesianButtons.Length == 8, "eight Cartesian buttons remain; Z uses axis1 jog");
+        foreach (int mode in new[] { 1, 2, 4, 5 })
         foreach (int direction in new[] { -1, 1 })
         {
             var button = cartesianButtons.Single(element => (string?)element.Attribute("Tag") == mode.ToString(CultureInfo.InvariantCulture) && (string?)element.Attribute("CommandParameter") == direction.ToString(CultureInfo.InvariantCulture));
@@ -106,6 +107,33 @@ internal static partial class Program
 
         CheckV3Mapping(fixtures, newViews);
         CheckDisplayAndMotion(interventionType, armType, output);
+    }
+
+    // 四项极简修改已作为本轮基线；历史控件逐项映射到合并控制和轴1点动。
+    private static void ApplyMinimalBaseline(XDocument view)
+    {
+        foreach (var element in view.Descendants())
+        {
+            if ((string?)element.Attribute("Click") == "ArmAxisEnable_Click")
+            {
+                element.SetAttributeValue(X + "Name", "ArmManualEnable");
+                element.SetAttributeValue("Click", "ArmManualEnable_Click");
+                element.SetAttributeValue("Content", "总使能");
+                element.SetAttributeValue("Tag", null);
+            }
+            if ((string?)element.Attribute("Click") == "ArmAxisReset_Click") element.SetAttributeValue("Tag", null);
+            if (((string?)element.Attribute(X + "Name")) is "Cartesian3Reverse" or "Cartesian3Forward")
+            {
+                element.SetAttributeValue("Tag", "1");
+                element.SetAttributeValue("CommandParameter", (string?)element.Attribute("Content") == "+" ? "-1" : "1");
+                element.SetAttributeValue("PreviewMouseLeftButtonDown", "ArmJogButton_Down");
+                element.SetAttributeValue("PreviewMouseLeftButtonUp", "ArmJogButton_Up");
+                element.SetAttributeValue("LostMouseCapture", "ArmJogButton_Up");
+                element.SetAttributeValue("IsEnabled", "{Binding CanOperate}");
+            }
+            if (element.Attribute("ToolTip") is XAttribute tip && tip.Value.Contains("，Z 轴", StringComparison.Ordinal))
+                tip.Value = tip.Value[..tip.Value.IndexOf("，Z 轴", StringComparison.Ordinal)];
+        }
     }
 
     private static string EnabledPaths(XElement element) => string.Join(" & ", element.AncestorsAndSelf().Attributes("IsEnabled").Select(attribute => attribute.Value).Order());
@@ -190,6 +218,17 @@ internal static partial class Program
         {
             string name = mode == 1 ? (direction == 1 ? "CartesianForward" : "CartesianReverse") : $"Cartesian{mode}{(direction == 1 ? "Forward" : "Reverse")}";
             var button = (Button)arm.FindName(name)!;
+            if (mode == 3)
+            {
+                Invoke(arm, "ArmJogButton_Down", button, MouseArgs(button));
+                Check(recording.LastArmJog == (1, -direction), $"Z button {name} jogs axis1 in the accepted direction");
+                int jogs = recording.ArmJogCount;
+                Invoke(arm, "KeepaliveTimer_Tick", null!, EventArgs.Empty);
+                Check(recording.ArmJogCount == jogs + 1, $"Z button {name} retains axis1 keepalive");
+                button.RaiseEvent(new System.Windows.Input.MouseEventArgs(System.Windows.Input.Mouse.PrimaryDevice, Environment.TickCount) { RoutedEvent = System.Windows.Input.Mouse.LostMouseCaptureEvent });
+                Check(recording.LastArmJog == (1, 0), $"Z button {name} stops axis1 on lost capture");
+                continue;
+            }
             Invoke(arm, "ArmCartesian_Down", button, MouseArgs(button));
             Check(recording.LastArmCartesianJog == (mode, direction * (int)Math.Round(vm.GetArmCartesianJogSpeed(mode) * 1000)), $"Cartesian button {name} sends its own mode and direction");
             int requests = recording.ArmCartesianJogCount;
@@ -207,7 +246,7 @@ internal static partial class Program
         for (int mode = 1; mode <= 5; mode++)
         {
             double speed = vm.GetArmCartesianJogSpeed(mode);
-            string expected = mode is 4 or 5 ? $"{speed:0.##}°/s" : $"{speed:0.##} mm/s";
+            string expected = mode == 3 ? "轴1点动" : mode is 4 or 5 ? $"{speed:0.##}°/s" : $"{speed:0.##} mm/s";
             Check(((TextBlock)arm.FindName("ArmCartesianRate" + mode)!).Text == expected, $"speed row {mode} refreshes from GetArmCartesianJogSpeed with the original units");
         }
         Invoke(arm, "ArmCartesian_Up", yaw, new RoutedEventArgs(UIElement.PreviewMouseLeftButtonUpEvent));

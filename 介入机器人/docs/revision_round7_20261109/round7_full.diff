@@ -1,0 +1,2431 @@
+diff --git "a/protocol/fixtures/zenoh-v1/README.md" "b/protocol/fixtures/zenoh-v1/README.md"
+--- "a/protocol/fixtures/zenoh-v1/README.md"
++++ "b/protocol/fixtures/zenoh-v1/README.md"
+@@ -4,7 +4,7 @@
+ 
+ - handle.hex：顶层 26 字段，两个手柄各 8 字段完全扁平化，另带两只手柄各自的 ulong 设备会话号。
+ - command.hex：15 字段，UTF-8 文本和 float64 参数。
+-- state.hex：55 字段、float32 状态和轴6窗口边界、float64 净距离及末端点动速度、末端点动状态/错误/降速标志、两个任务与两项回执。
++- state.hex：57 字段、float32 状态和轴6窗口边界、float64 净距离及末端点动速度、末端点动状态/错误/降速标志、归零状态/错误码、两个任务与两项回执。
+ - force.hex：13 字段、float32 力/扭矩。
+ - hello.hex、authenticate.hex、challenge.hex：认证握手。
+ - invalid_*.hex：数组长度、类型、浮点宽度、非有限值、认证长度和字段范围错误。
+diff --git "a/protocol/fixtures/zenoh-v1/challenge.hex" "b/protocol/fixtures/zenoh-v1/challenge.hex"
+--- "a/protocol/fixtures/zenoh-v1/challenge.hex"
++++ "b/protocol/fixtures/zenoh-v1/challenge.hex"
+@@ -1 +1 @@
+-dc003701cf11223344556677880101c410101112131415161718191a1b1c1d1e1fce0001e240cd039100010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc0090000000000000228012992932700a0932601a6e68b92e7bb9da57265616479ca41800000ca424000000200c3cb4029000000000000c400
++dc003901cf11223344556677880101c410101112131415161718191a1b1c1d1e1fce0001e240cd039100010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc0090000000000000228012992932700a0932601a6e68b92e7bb9da57265616479ca41800000ca424000000200c3cb40290000000000000100c400
+diff --git "a/protocol/fixtures/zenoh-v1/generate_vectors.py" "b/protocol/fixtures/zenoh-v1/generate_vectors.py"
+--- "a/protocol/fixtures/zenoh-v1/generate_vectors.py"
++++ "b/protocol/fixtures/zenoh-v1/generate_vectors.py"
+@@ -57,7 +57,7 @@
+     "state": [1, sid, 102, 2, ns, 123456, 913, 0, 1, 4, 2, 2000, 10, 2000, 10, 5, 1, -1, 0,
+               f(.25), f(.01), f(.5), f(-.02), f(.3), f(100),
+               *map(f, [1, 2, 3, 4, 5, 6, 7]), *map(f, [11, 12, 13, 14, 15, 16, 17]),
+-              True, 12.25, -3.125, 2, 40, 1, 41, [[39, 0, ""], [38, 1, "拒绝"]], "ready", f(16), f(48), 2, 0, True, 12.5, b""],
++              True, 12.25, -3.125, 2, 40, 1, 41, [[39, 0, ""], [38, 1, "拒绝"]], "ready", f(16), f(48), 2, 0, True, 12.5, 1, 0, b""],
+     "force": [1, sid, 103, 123456, True, 1, f(.5), f(.01), False, 0, f(0), f(0), b""],
+ }
+ for name, value in samples.items():
+diff --git "a/protocol/fixtures/zenoh-v1/invalid_state_auth.hex" "b/protocol/fixtures/zenoh-v1/invalid_state_auth.hex"
+--- "a/protocol/fixtures/zenoh-v1/invalid_state_auth.hex"
++++ "b/protocol/fixtures/zenoh-v1/invalid_state_auth.hex"
+@@ -1 +1 @@
+-dc003701cf11223344556677886602c410101112131415161718191a1b1c1d1e1fce0001e240cd039100010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc0090000000000000228012992932700a0932601a6e68b92e7bb9da57265616479ca41800000ca424000000200c3cb4029000000000000c40f000000000000000000000000000000
++dc003901cf11223344556677886602c410101112131415161718191a1b1c1d1e1fce0001e240cd039100010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc0090000000000000228012992932700a0932601a6e68b92e7bb9da57265616479ca41800000ca424000000200c3cb40290000000000000100c40f000000000000000000000000000000
+diff --git "a/protocol/fixtures/zenoh-v1/invalid_state_length.hex" "b/protocol/fixtures/zenoh-v1/invalid_state_length.hex"
+--- "a/protocol/fixtures/zenoh-v1/invalid_state_length.hex"
++++ "b/protocol/fixtures/zenoh-v1/invalid_state_length.hex"
+@@ -1 +1 @@
+-dc003601cf11223344556677886602c410101112131415161718191a1b1c1d1e1fce0001e240cd039100010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc0090000000000000228012992932700a0932601a6e68b92e7bb9da57265616479ca41800000ca424000000200c3cb4029000000000000
++dc003801cf11223344556677886602c410101112131415161718191a1b1c1d1e1fce0001e240cd039100010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc0090000000000000228012992932700a0932601a6e68b92e7bb9da57265616479ca41800000ca424000000200c3cb40290000000000000100
+diff --git "a/protocol/fixtures/zenoh-v1/invalid_state_result_id.hex" "b/protocol/fixtures/zenoh-v1/invalid_state_result_id.hex"
+--- "a/protocol/fixtures/zenoh-v1/invalid_state_result_id.hex"
++++ "b/protocol/fixtures/zenoh-v1/invalid_state_result_id.hex"
+@@ -1 +1 @@
+-dc003701cf11223344556677886602c410101112131415161718191a1b1c1d1e1fce0001e240cd039100010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc0090000000000000228012991930000a0a57265616479ca41800000ca424000000200c3cb4029000000000000c4109f0c1020036efd1571d8b2ea78d9aa96
++dc003901cf11223344556677886602c410101112131415161718191a1b1c1d1e1fce0001e240cd039100010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc0090000000000000228012991930000a0a57265616479ca41800000ca424000000200c3cb40290000000000000100c410412cf50f9d2aa8162f97d07b98e0e280
+diff --git "a/protocol/fixtures/zenoh-v1/invalid_state_results.hex" "b/protocol/fixtures/zenoh-v1/invalid_state_results.hex"
+--- "a/protocol/fixtures/zenoh-v1/invalid_state_results.hex"
++++ "b/protocol/fixtures/zenoh-v1/invalid_state_results.hex"
+@@ -1 +1 @@
+-dc003701cf11223344556677886602c410101112131415161718191a1b1c1d1e1fce0001e240cd039100010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc00900000000000002280129dc0021930100a0930200a0930300a0930400a0930500a0930600a0930700a0930800a0930900a0930a00a0930b00a0930c00a0930d00a0930e00a0930f00a0931000a0931100a0931200a0931300a0931400a0931500a0931600a0931700a0931800a0931900a0931a00a0931b00a0931c00a0931d00a0931e00a0931f00a0932000a0932100a0a57265616479ca41800000ca424000000200c3cb4029000000000000c4109f0c1020036efd1571d8b2ea78d9aa96
++dc003901cf11223344556677886602c410101112131415161718191a1b1c1d1e1fce0001e240cd039100010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc00900000000000002280129dc0021930100a0930200a0930300a0930400a0930500a0930600a0930700a0930800a0930900a0930a00a0930b00a0930c00a0930d00a0930e00a0930f00a0931000a0931100a0931200a0931300a0931400a0931500a0931600a0931700a0931800a0931900a0931a00a0931b00a0931c00a0931d00a0931e00a0931f00a0932000a0932100a0a57265616479ca41800000ca424000000200c3cb40290000000000000100c410412cf50f9d2aa8162f97d07b98e0e280
+diff --git "a/protocol/fixtures/zenoh-v1/invalid_state_task.hex" "b/protocol/fixtures/zenoh-v1/invalid_state_task.hex"
+--- "a/protocol/fixtures/zenoh-v1/invalid_state_task.hex"
++++ "b/protocol/fixtures/zenoh-v1/invalid_state_task.hex"
+@@ -1 +1 @@
+-dc003701cf11223344556677886602c410101112131415161718191a1b1c1d1e1fce0001e240cd039100010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc0090000000000000428012992932700a0932601a6e68b92e7bb9da57265616479ca41800000ca424000000200c3cb4029000000000000c4109f0c1020036efd1571d8b2ea78d9aa96
++dc003901cf11223344556677886602c410101112131415161718191a1b1c1d1e1fce0001e240cd039100010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc0090000000000000428012992932700a0932601a6e68b92e7bb9da57265616479ca41800000ca424000000200c3cb40290000000000000100c410412cf50f9d2aa8162f97d07b98e0e280
+diff --git "a/protocol/fixtures/zenoh-v1/invalid_state_window_float64.hex" "b/protocol/fixtures/zenoh-v1/invalid_state_window_float64.hex"
+--- "a/protocol/fixtures/zenoh-v1/invalid_state_window_float64.hex"
++++ "b/protocol/fixtures/zenoh-v1/invalid_state_window_float64.hex"
+@@ -1 +1 @@
+-dc003701cf11223344556677886602c410101112131415161718191a1b1c1d1e1fce0001e240cd039100010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc0090000000000000228012992932700a0932601a6e68b92e7bb9da57265616479ca41800000cb40480000000000000200c3cb4029000000000000c4109f0c1020036efd1571d8b2ea78d9aa96
++dc003901cf11223344556677886602c410101112131415161718191a1b1c1d1e1fce0001e240cd039100010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc0090000000000000228012992932700a0932601a6e68b92e7bb9da57265616479ca41800000cb40480000000000000200c3cb40290000000000000100c410412cf50f9d2aa8162f97d07b98e0e280
+diff --git "a/protocol/fixtures/zenoh-v1/invalid_state_window_nan.hex" "b/protocol/fixtures/zenoh-v1/invalid_state_window_nan.hex"
+--- "a/protocol/fixtures/zenoh-v1/invalid_state_window_nan.hex"
++++ "b/protocol/fixtures/zenoh-v1/invalid_state_window_nan.hex"
+@@ -1 +1 @@
+-dc003701cf11223344556677886602c410101112131415161718191a1b1c1d1e1fce0001e240cd039100010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc0090000000000000228012992932700a0932601a6e68b92e7bb9da57265616479ca7fc00000ca424000000200c3cb4029000000000000c4109f0c1020036efd1571d8b2ea78d9aa96
++dc003901cf11223344556677886602c410101112131415161718191a1b1c1d1e1fce0001e240cd039100010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc0090000000000000228012992932700a0932601a6e68b92e7bb9da57265616479ca7fc00000ca424000000200c3cb40290000000000000100c410412cf50f9d2aa8162f97d07b98e0e280
+diff --git "a/protocol/fixtures/zenoh-v1/state.hex" "b/protocol/fixtures/zenoh-v1/state.hex"
+--- "a/protocol/fixtures/zenoh-v1/state.hex"
++++ "b/protocol/fixtures/zenoh-v1/state.hex"
+@@ -1 +1 @@
+-dc003701cf11223344556677886602c410101112131415161718191a1b1c1d1e1fce0001e240cd039100010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc0090000000000000228012992932700a0932601a6e68b92e7bb9da57265616479ca41800000ca424000000200c3cb4029000000000000c4109f0c1020036efd1571d8b2ea78d9aa96
++dc003901cf11223344556677886602c410101112131415161718191a1b1c1d1e1fce0001e240cd039100010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc0090000000000000228012992932700a0932601a6e68b92e7bb9da57265616479ca41800000ca424000000200c3cb40290000000000000100c410412cf50f9d2aa8162f97d07b98e0e280
+diff --git "a/protocol/fixtures/zenoh-v1/state_force_controls.hex" "b/protocol/fixtures/zenoh-v1/state_force_controls.hex"
+--- "a/protocol/fixtures/zenoh-v1/state_force_controls.hex"
++++ "b/protocol/fixtures/zenoh-v1/state_force_controls.hex"
+@@ -1 +1 @@
+-dc003701cf11223344556677886602c410101112131415161718191a1b1c1d1e1fce0001e240cde39900010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc0090000000000000228012992932700a0932601a6e68b92e7bb9da57265616479ca41800000ca424000000200c3cb4029000000000000c410dc12f02d117d8dc873832de231d55b5d
++dc003901cf11223344556677886602c410101112131415161718191a1b1c1d1e1fce0001e240cde39900010402cd07d00acd07d00a0501ff00ca3e800000ca3c23d70aca3f000000cabca3d70aca3e99999aca42c80000ca3f800000ca40000000ca40400000ca40800000ca40a00000ca40c00000ca40e00000ca41300000ca41400000ca41500000ca41600000ca41700000ca41800000ca41880000c3cb4028800000000000cbc0090000000000000228012992932700a0932601a6e68b92e7bb9da57265616479ca41800000ca424000000200c3cb40290000000000000100c41095dab340550386b01e4744e75165c9fd
+diff --git "a/介入机器人/A主端/协议/PROTOCOL.md" "b/介入机器人/A主端/协议/PROTOCOL.md"
+--- "a/介入机器人/A主端/协议/PROTOCOL.md"
++++ "b/介入机器人/A主端/协议/PROTOCOL.md"
+@@ -72,7 +72,7 @@
+ | 13 | byte[] | Proof |
+ | 14 | byte[] | AuthTag |
+ 
+-## StateFrame（55 项）
++## StateFrame（57 项）
+ 
+ | 索引 | 类型 | 字段 |
+ |---|---|---|
+@@ -130,9 +130,11 @@
+ | 51 | uint | ArmCjogError |
+ | 52 | bool | ArmCjogLimited |
+ | 53 | float64 | ArmCjogPathSpeed（mm/s 或 °/s） |
+-| 54 | byte[] | AuthTag |
++| 54 | int | ArmCartesianStatus（0 空闲、1 进行中、2 完成、3 已在零位、4 停止、5 失败） |
++| 55 | int | ArmCartesianError（归零错误码） |
++| 56 | byte[] | AuthTag |
+ 
+-末端点动状态沿用版本 1 的字段扩展惯例；主端和数据端须同步部署。严格解码只接受 55 项，不兼容旧长度。命令格式未改变。
++末端点动状态沿用版本 1 的字段扩展惯例；主端和数据端须同步部署。严格解码只接受 57 项，不兼容旧长度。命令格式未改变。
+ 
+ ## ForceFrame（13 项）
+ 
+diff --git "a/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/Program.cs" "b/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/Program.cs"
+--- "a/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/Program.cs"
++++ "b/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/Program.cs"
+@@ -138,7 +138,8 @@
+             PrepareTaskState = 2, PrepareTaskCommandId = 40, StartTaskState = 1, StartTaskCommandId = 41,
+             Results = new[] { new CommandResultFrame { CommandId = 39, Result = 0 }, new CommandResultFrame { CommandId = 38, Result = 1, Reason = "拒绝" } },
+             EventText = "ready", Axis6WindowStartFromLeftMm = 16, Axis6WindowEndFromLeftMm = 48,
+-            ArmCjogState = 2, ArmCjogError = 0, ArmCjogLimited = true, ArmCjogPathSpeed = 12.5
++            ArmCjogState = 2, ArmCjogError = 0, ArmCjogLimited = true, ArmCjogPathSpeed = 12.5,
++            ArmCartesianStatus = 1, ArmCartesianError = 0
+         };
+         private static ForceFrame NewForce() => new ForceFrame
+         {
+diff --git "a/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/RobotServiceTests.cs" "b/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/RobotServiceTests.cs"
+--- "a/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/RobotServiceTests.cs"
++++ "b/介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/RobotServiceTests.cs"
+@@ -58,6 +58,7 @@
+                 Check("窗口边界只读映射到主端状态", receivedState.Axis6WindowStartFromLeftMm == 16 && receivedState.Axis6WindowEndFromLeftMm == 48);
+                 Check("末端点动四个字段映射到主端状态", receivedState.ArmCjogState == 2 && receivedState.ArmCjogError == 0 &&
+                     receivedState.ArmCjogLimited && receivedState.ArmCjogPathSpeed == 12.5);
++                Check("归零状态与错误码映射到主端状态", receivedState.ArmCartesianStatus == 1 && receivedState.ArmCartesianError == 0);
+                 link.OnForce(Force(1));
+                 link.SetInjector(1, 1);
+                 link.SetInjector(2, -1);
+diff --git "a/介入机器人/A主端/工程/master/MasterConsole.Protocol/Frames.cs" "b/介入机器人/A主端/工程/master/MasterConsole.Protocol/Frames.cs"
+--- "a/介入机器人/A主端/工程/master/MasterConsole.Protocol/Frames.cs"
++++ "b/介入机器人/A主端/工程/master/MasterConsole.Protocol/Frames.cs"
+@@ -72,6 +72,7 @@
+         /// <summary>轴6窗口的距左限位边界，仅供显示，零宽度表示当前不可用。</summary>
+         public float Axis6WindowStartFromLeftMm, Axis6WindowEndFromLeftMm;
+ 
++        public int ArmCartesianStatus, ArmCartesianError;
+         public uint ArmCjogState, ArmCjogError;
+         public bool ArmCjogLimited;
+         public double ArmCjogPathSpeed;
+diff --git "a/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohFrames.cs" "b/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohFrames.cs"
+--- "a/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohFrames.cs"
++++ "b/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohFrames.cs"
+@@ -138,7 +138,9 @@
+         [Key(51)] public uint ArmCjogError { get; set; }
+         [Key(52)] public bool ArmCjogLimited { get; set; }
+         [Key(53)] public double ArmCjogPathSpeed { get; set; }
+-        [Key(54)] public byte[] AuthTag { get; set; } = new byte[0];
++        [Key(54)] public int ArmCartesianStatus { get; set; }
++        [Key(55)] public int ArmCartesianError { get; set; }
++        [Key(56)] public byte[] AuthTag { get; set; } = new byte[0];
+     }
+ 
+     [MessagePackObject]
+diff --git "a/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohWire.cs" "b/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohWire.cs"
+--- "a/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohWire.cs"
++++ "b/介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohWire.cs"
+@@ -69,7 +69,7 @@
+             string schema;
+             if (typeof(T) == typeof(HandleFrame)) schema = "bqqqbBiiffffbBiiffffsssqqx";
+             else if (typeof(T) == typeof(CommandFrame)) schema = "bqqqibiiddtxxxx";
+-            else if (typeof(T) == typeof(StateFrame)) schema = "bqqbxquiiii" + "hhhhbsss" + "ffffffffffffffffffff" + "Bdd" + "bibi" + "rtffuuBdx";
++            else if (typeof(T) == typeof(StateFrame)) schema = "bqqbxquiiii" + "hhhhbsss" + "ffffffffffffffffffff" + "Bdd" + "bibi" + "rtffuuBdiix";
+             else if (typeof(T) == typeof(ForceFrame)) schema = "bqqqBsffBsffx";
+             else throw Invalid("仅支持四个介入机器人协议数组");
+             var reader = new MessagePackReader(new ReadOnlySequence<byte>(bytes));
+diff --git "a/介入机器人/A主端/工程/master/VI.Control.Tests/HomeChainChecks.cs" "b/介入机器人/A主端/工程/master/VI.Control.Tests/HomeChainChecks.cs"
+new file mode 100644
+--- /dev/null
++++ "b/介入机器人/A主端/工程/master/VI.Control.Tests/HomeChainChecks.cs"
+@@ -0,0 +1,128 @@
++using System.Diagnostics;
++using System.IO;
++using System.Reflection;
++using System.Windows;
++using System.Windows.Controls;
++using MasterConsole.Protocol;
++using MasterConsole.Services;
++using MasterConsole.ViewModels;
++
++internal static partial class Program
++{
++    private sealed class HomeChainHandles : IHandleService
++    {
++        public bool SdkMissing => false;
++        public bool IsOnline(int slot) => true;
++        public HandleSample GetSample(int slot) => new() { Valid = true };
++        public void SetHaptic(int slot, HapticOut output) { }
++        public void ClearHaptic() { }
++        public void Start() { }
++        public void Stop() { }
++        public void Dispose() { }
++    }
++
++    private static void CheckHomeChain(string simulator, string router)
++    {
++        var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
++        application.Resources.MergedDictionaries.Add(new ResourceDictionary
++        {
++            Source = new Uri("pack://application:,,,/VI.Control;component/Themes/LightClinical.xaml", UriKind.Absolute)
++        });
++        string tokenFile = Path.Combine(Path.GetTempPath(), "vi-home-chain-" + Guid.NewGuid().ToString("N") + ".token");
++        byte[] token = System.Text.Encoding.ASCII.GetBytes("round7-home-chain-offline-token");
++        File.WriteAllBytes(tokenFile, token);
++        using var ready = new ManualResetEventSlim();
++        int readyCase = -1;
++        using var process = new Process
++        {
++            StartInfo = new ProcessStartInfo(simulator)
++            {
++                UseShellExecute = false, CreateNoWindow = true,
++                RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true
++            }
++        };
++        process.StartInfo.ArgumentList.Add(tokenFile);
++        process.StartInfo.ArgumentList.Add(router);
++        process.OutputDataReceived += (_, e) =>
++        {
++            if (e.Data is null) return;
++            Console.WriteLine("[home mock] " + e.Data);
++            if (e.Data == "HOME_SIM_READY") ready.Set();
++            if (e.Data.StartsWith("CASE_READY ", StringComparison.Ordinal))
++                Volatile.Write(ref readyCase, int.Parse(e.Data[11..], System.Globalization.CultureInfo.InvariantCulture));
++        };
++        process.ErrorDataReceived += (_, e) => { if (e.Data is not null) Console.WriteLine(e.Data); };
++        process.Start(); process.BeginOutputReadLine(); process.BeginErrorReadLine();
++        try
++        {
++            Check(ready.Wait(15000), "home chain simulator starts on loopback without hardware");
++            using var handles = new HomeChainHandles();
++            using var link = new RemoteRobotLink(new RemoteLinkSettings
++            {
++                Host = "127.0.0.1", Endpoint = "tcp/127.0.0.1:17448", Token = token
++            }, handles);
++            using var vm = new MainViewModel(link);
++            var module = Assembly.LoadFrom(Path.Combine(AppContext.BaseDirectory, "Modules/Features/VI.Module.PositioningArm.dll"));
++            var panel = (UserControl)Activator.CreateInstance(module.GetType("VI.Module.PositioningArm.PositioningArmPanel", true)!, vm)!;
++            var home = (Button)panel.FindName("ProgramHome")!;
++            var text = (TextBlock)panel.FindName("ArmProgramZeroStatus")!;
++            var alive = Stopwatch.StartNew();
++            void Until(Func<bool> condition)
++            {
++                var deadline = Stopwatch.StartNew();
++                while (!condition())
++                {
++                    CheckDeadline(deadline.ElapsedMilliseconds < 20000);
++                    Pump();
++                    if (alive.ElapsedMilliseconds >= 100)
++                    {
++                        Invoke(panel, "KeepaliveTimer_Tick", null!, EventArgs.Empty);
++                        alive.Restart();
++                    }
++                    Thread.Sleep(5);
++                }
++                Pump();
++            }
++            var connected = link.ConnectAsync(); Until(() => connected.IsCompleted); connected.GetAwaiter().GetResult();
++            var acquired = link.AcquireControlAsync(); Until(() => acquired.IsCompleted);
++            Check(acquired.GetAwaiter().GetResult().Ok, "home chain authenticates and acquires control");
++            Until(() => vm.CanOperate);
++            var seen = new HashSet<string>();
++            vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(MainViewModel.ArmProgramZeroStatusText)) seen.Add(vm.ArmProgramZeroStatusText); };
++            foreach (var (scenario, expected) in new[]
++            {
++                (0, "归零已完成"), (1, "已在零位"),
++                (2, "归零失败：1002（当前关节位置超出允许范围）"),
++                (3, "归零失败：2003（PLC 驱动、使能、心跳或急停条件未满足）"),
++                (4, "归零失败：1008（末端点动占用，请松开点动并等待停稳）")
++            })
++            {
++                Invoke(panel, "ArmStop_Click", home, new RoutedEventArgs());
++                process.StandardInput.WriteLine(scenario); process.StandardInput.Flush();
++                Until(() => Volatile.Read(ref readyCase) == scenario);
++                seen.Clear();
++                Check(home.IsEnabled, $"home chain case {scenario}: button enabled by real telemetry");
++                home.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
++                Until(() => text.Text == expected);
++                Check(vm.ArmProgramZeroStatusText == expected, $"E10 chain case {scenario}: {text.Text}");
++                if (scenario == 0) Check(seen.Contains("归零进行中"), "normal home exposes running then completion through the entire chain");
++            }
++            Invoke(panel, "ArmStop_Click", home, new RoutedEventArgs());
++            Console.WriteLine("PASS E10: WPF click -> MainViewModel -> RemoteRobotLink -> Zenoh -> request_program_zero -> update_cartesian -> plan_arm_curve(mode0) -> mock PLC -> StateFrame -> WPF; five scenarios.");
++        }
++        finally
++        {
++            if (!process.HasExited)
++            {
++                process.StandardInput.WriteLine("quit"); process.StandardInput.Flush();
++                process.WaitForExit(10000);
++            }
++            File.Delete(tokenFile);
++        }
++    }
++
++    private static void CheckDeadline(bool condition)
++    {
++        if (!condition) throw new TimeoutException("归零全链路 mock 等待超时。");
++    }
++}
+diff --git "a/介入机器人/A主端/工程/master/VI.Control.Tests/Program.cs" "b/介入机器人/A主端/工程/master/VI.Control.Tests/Program.cs"
+--- "a/介入机器人/A主端/工程/master/VI.Control.Tests/Program.cs"
++++ "b/介入机器人/A主端/工程/master/VI.Control.Tests/Program.cs"
+@@ -21,7 +21,8 @@
+     {
+         try
+         {
+-            Run(args.Length == 0 ? Path.Combine(AppContext.BaseDirectory, "UiChecks") : args[0]);
++            if (args.Length == 3 && args[0] == "--home-chain") CheckHomeChain(args[1], args[2]);
++            else Run(args.Length == 0 ? Path.Combine(AppContext.BaseDirectory, "UiChecks") : args[0]);
+             return 0;
+         }
+         catch (Exception ex)
+@@ -253,10 +254,35 @@
+         Pump();
+         Check(statusChanges == 10 && holdVm.ArmCartesianJogStatusText == "",
+             "Cartesian status property notifies and clears after the condition ends");
++        int homesBeforeOccupied = recordingLink.ArmProgramZeroCount;
++        Invoke(holdArm, "ArmProgramZero_Click", holdArm.FindName("ProgramHome")!, new RoutedEventArgs());
++        Check(recordingLink.ArmProgramZeroCount == homesBeforeOccupied &&
++            ((TextBlock)holdArm.FindName("ArmCartesianError")!).Text.Contains("1008", StringComparison.Ordinal),
++            "occupied local jog rejects home with a visible reason");
++        int homeStatusChanges = 0;
++        holdVm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(MainViewModel.ArmProgramZeroStatusText)) homeStatusChanges++; };
++        foreach (var (state, error, expected) in new[]
++        {
++            (1, 0, "归零进行中"), (2, 0, "归零已完成"), (3, 0, "已在零位"),
++            (5, 1002, "归零失败：1002（当前关节位置超出允许范围）"),
++            (5, 2003, "归零失败：2003（PLC 驱动、使能、心跳或急停条件未满足）"),
++            (5, 1008, "归零失败：1008（末端点动占用，请松开点动并等待停稳）")
++        })
++        {
++            recordingLink.PublishProgramZero(state, error);
++            Pump();
++            Check(holdVm.ArmProgramZeroStatusText == expected &&
++                ((TextBlock)holdArm.FindName("ArmProgramZeroStatus")!).Text == expected,
++                $"home status {state}/{error} reaches the view model and adjacent status text");
++        }
++        Check(homeStatusChanges == 6, "every home status update notifies the view");
+         Invoke(holdArm, "ArmCartesian_Up", holdArm.FindName("CartesianForward")!,
+             new RoutedEventArgs(UIElement.PreviewMouseLeftButtonUpEvent));
+         Invoke(holdArm, "ArmProgramZero_Click", holdArm.FindName("ProgramHome")!, new RoutedEventArgs());
+         Check(recordingLink.ArmProgramZeroCount == 1, "Program home sends directly without parameter input");
++        int homeAlives = recordingLink.ArmCartesianAliveCount;
++        Invoke(holdArm, "KeepaliveTimer_Tick", null!, EventArgs.Empty);
++        Check(recordingLink.ArmCartesianAliveCount == homeAlives + 1, "home keepalive remains active after request dispatch");
+         Invoke(holdArm, "ArmStop_Click", holdArm.FindName("ProgramHome")!, new RoutedEventArgs());
+         Invoke(holdArm, "ArmJogButton_Down", axis, MouseArgs(axis));
+         Invoke(holdArm, "ArmJogButton_Up", axis, new RoutedEventArgs(UIElement.PreviewMouseLeftButtonUpEvent));
+@@ -396,6 +422,17 @@
+     public (int Mode, int SpeedMilli) LastArmCartesianJog { get; private set; }
+     public int ArmProgramZeroCount { get; private set; }
+     public int ArmCartesianJogCount { get; private set; }
++    public int ArmJogCount { get; private set; }
++    public int ArmCartesianAliveCount { get; private set; }
++    public void PublishProgramZero(int state, int error)
++    {
++        _events.TryGetValue("StatusReceived", out Delegate? handler);
++        ((EventHandler<StatusFrame>?)handler)?.Invoke(this, new StatusFrame
++        {
++            Flags = StatusFlags.LeaseHeld, AxisPos = new float[7], AxisFromLeft = new float[7],
++            ArmCartesianStatus = state, ArmCartesianError = error
++        });
++    }
+     public void PublishCartJog(uint state, uint error, bool limited, double speed)
+     {
+         _events.TryGetValue("StatusReceived", out Delegate? handler);
+@@ -486,6 +523,7 @@
+         if (name == "SetAxis4") { LastAxis4 = (int)args![0]!; return null; }
+         if (name == "SetArmAxisJog")
+         {
++            ArmJogCount++;
+             LastArmJog = ((int)args![0]!, (int)args[1]!);
+             LastArmSpeedScale = (double)args[2]!;
+             ArmJogDirections[LastArmJog.Axis] = LastArmJog.Direction;
+@@ -498,6 +536,7 @@
+             LastArmCartesianSpeedScale = (double)args[2]!;
+             return Task.FromResult(CommandResult.Done());
+         }
++        if (name == "KeepArmCartesianAlive") { ArmCartesianAliveCount++; return null; }
+         if (name == "ReturnArmProgramZeroAsync") { ArmProgramZeroCount++; return Task.FromResult(CommandResult.Done()); }
+         if (name == "SetForceFeedbackAsync") { LastForce = ((bool)args![0]!, (int)args[1]!); return Task.FromResult(CommandResult.Done()); }
+         if (name == "SetForceFeedbackHoldAsync") { LastForceHold = (bool)args![0]!; return Task.FromResult(CommandResult.Done()); }
+diff --git "a/介入机器人/A主端/工程/master/VI.Control.Tests/ResponsiveLayoutChecks.cs" "b/介入机器人/A主端/工程/master/VI.Control.Tests/ResponsiveLayoutChecks.cs"
+--- "a/介入机器人/A主端/工程/master/VI.Control.Tests/ResponsiveLayoutChecks.cs"
++++ "b/介入机器人/A主端/工程/master/VI.Control.Tests/ResponsiveLayoutChecks.cs"
+@@ -19,12 +19,13 @@
+         for (int i = 0; i < files.Length; i++)
+         {
+             var before = XDocument.Load(Path.Combine(fixtures, "V3Baseline." + files[i] + ".xml"));
++            if (i == 2) ApplyMinimalBaseline(before);
+             foreach (var original in before.Descendants().Where(element => element.Name.LocalName is "Button" or "ToggleButton" or "RadioButton" or "TextBox"))
+             {
+                 string? name = (string?)original.Attribute(X + "Name");
+                 var current = name is not null
+                     ? currentViews[i].Descendants().Single(element => (string?)element.Attribute(X + "Name") == name)
+-                    : currentViews[i].Descendants().Single(element => element.Name == original.Name && behavior.All(key => (string?)element.Attribute(key) == (string?)original.Attribute(key)));
++                    : currentViews[i].Descendants().Single(element => (string?)element.Attribute(X + "Name") is not ("Cartesian3Reverse" or "Cartesian3Forward") && element.Name == original.Name && behavior.All(key => (string?)element.Attribute(key) == (string?)original.Attribute(key)));
+                 string label = name ?? (string?)original.Attribute("Content") ?? original.Name.LocalName;
+                 Check(behavior.All(key => (string?)current.Attribute(key) == (string?)original.Attribute(key)) && EnabledPaths(current) == EnabledPaths(original),
+                     "v3 retains every command, event, parameter, binding and enabled path: " + label);
+diff --git "a/介入机器人/A主端/工程/master/VI.Control.Tests/RevisionUChecks.cs" "b/介入机器人/A主端/工程/master/VI.Control.Tests/RevisionUChecks.cs"
+--- "a/介入机器人/A主端/工程/master/VI.Control.Tests/RevisionUChecks.cs"
++++ "b/介入机器人/A主端/工程/master/VI.Control.Tests/RevisionUChecks.cs"
+@@ -20,6 +20,7 @@
+         string fixtures = Path.Combine(AppContext.BaseDirectory, "Fixtures");
+         string[] files = ["MainWindow.xaml", "InterventionPanel.xaml", "PositioningArmPanel.xaml"];
+         var oldViews = files.Select(file => XDocument.Load(Path.Combine(fixtures, "Baseline." + file + ".xml"))).ToArray();
++        ApplyMinimalBaseline(oldViews[2]);
+         var newViews = files.Select(file => XDocument.Load(Path.Combine(fixtures, file))).ToArray();
+         var newControls = newViews.SelectMany(view => view.Descendants()).ToArray();
+         var rows = new List<string> { "原文件,原控件,新控件,Command或事件,Tag,CommandParameter,IsEnabled,ToolTip,结果" };
+@@ -33,7 +34,7 @@
+             if (cylinder) mapped = Enumerable.Range(1, 4).Select(index => newControls.Single(element => (string?)element.Attribute(X + "Name") == "Cylinder" + index)).ToArray();
+             else if (original.Attribute(X + "Name") is XAttribute name)
+                 mapped = [newControls.Single(element => (string?)element.Attribute(X + "Name") == name.Value)];
+-            else mapped = [newControls.Single(element => element.Name == original.Name &&
++            else mapped = [newControls.Single(element => (string?)element.Attribute(X + "Name") is not ("Cartesian3Reverse" or "Cartesian3Forward") && element.Name == original.Name &&
+                 actions.Concat(["Tag", "CommandParameter"]).All(key => (string?)element.Attribute(key) == (string?)original.Attribute(key)))];
+ 
+             foreach (var current in mapped)
+@@ -58,8 +59,8 @@
+             }
+         }
+         var cartesianButtons = newControls.Where(element => (string?)element.Attribute("PreviewMouseLeftButtonDown") == "ArmCartesian_Down").ToArray();
+-        Check(cartesianButtons.Length == 10, "all ten Cartesian buttons exist");
+-        for (int mode = 1; mode <= 5; mode++)
++        Check(cartesianButtons.Length == 8, "eight Cartesian buttons remain; Z uses axis1 jog");
++        foreach (int mode in new[] { 1, 2, 4, 5 })
+         foreach (int direction in new[] { -1, 1 })
+         {
+             var button = cartesianButtons.Single(element => (string?)element.Attribute("Tag") == mode.ToString(CultureInfo.InvariantCulture) && (string?)element.Attribute("CommandParameter") == direction.ToString(CultureInfo.InvariantCulture));
+@@ -108,6 +109,33 @@
+         CheckDisplayAndMotion(interventionType, armType, output);
+     }
+ 
++    // 四项极简修改已作为本轮基线；历史控件逐项映射到合并控制和轴1点动。
++    private static void ApplyMinimalBaseline(XDocument view)
++    {
++        foreach (var element in view.Descendants())
++        {
++            if ((string?)element.Attribute("Click") == "ArmAxisEnable_Click")
++            {
++                element.SetAttributeValue(X + "Name", "ArmManualEnable");
++                element.SetAttributeValue("Click", "ArmManualEnable_Click");
++                element.SetAttributeValue("Content", "总使能");
++                element.SetAttributeValue("Tag", null);
++            }
++            if ((string?)element.Attribute("Click") == "ArmAxisReset_Click") element.SetAttributeValue("Tag", null);
++            if (((string?)element.Attribute(X + "Name")) is "Cartesian3Reverse" or "Cartesian3Forward")
++            {
++                element.SetAttributeValue("Tag", "1");
++                element.SetAttributeValue("CommandParameter", (string?)element.Attribute("Content") == "+" ? "-1" : "1");
++                element.SetAttributeValue("PreviewMouseLeftButtonDown", "ArmJogButton_Down");
++                element.SetAttributeValue("PreviewMouseLeftButtonUp", "ArmJogButton_Up");
++                element.SetAttributeValue("LostMouseCapture", "ArmJogButton_Up");
++                element.SetAttributeValue("IsEnabled", "{Binding CanOperate}");
++            }
++            if (element.Attribute("ToolTip") is XAttribute tip && tip.Value.Contains("，Z 轴", StringComparison.Ordinal))
++                tip.Value = tip.Value[..tip.Value.IndexOf("，Z 轴", StringComparison.Ordinal)];
++        }
++    }
++
+     private static string EnabledPaths(XElement element) => string.Join(" & ", element.AncestorsAndSelf().Attributes("IsEnabled").Select(attribute => attribute.Value).Order());
+     private static string ToolTip(XElement element) => (string?)element.Attribute("ToolTip") ??
+         (element.Elements().SingleOrDefault(child => child.Name.LocalName.EndsWith(".ToolTip", StringComparison.Ordinal)) is XElement toolTip
+@@ -190,6 +218,17 @@
+         {
+             string name = mode == 1 ? (direction == 1 ? "CartesianForward" : "CartesianReverse") : $"Cartesian{mode}{(direction == 1 ? "Forward" : "Reverse")}";
+             var button = (Button)arm.FindName(name)!;
++            if (mode == 3)
++            {
++                Invoke(arm, "ArmJogButton_Down", button, MouseArgs(button));
++                Check(recording.LastArmJog == (1, -direction), $"Z button {name} jogs axis1 in the accepted direction");
++                int jogs = recording.ArmJogCount;
++                Invoke(arm, "KeepaliveTimer_Tick", null!, EventArgs.Empty);
++                Check(recording.ArmJogCount == jogs + 1, $"Z button {name} retains axis1 keepalive");
++                button.RaiseEvent(new System.Windows.Input.MouseEventArgs(System.Windows.Input.Mouse.PrimaryDevice, Environment.TickCount) { RoutedEvent = System.Windows.Input.Mouse.LostMouseCaptureEvent });
++                Check(recording.LastArmJog == (1, 0), $"Z button {name} stops axis1 on lost capture");
++                continue;
++            }
+             Invoke(arm, "ArmCartesian_Down", button, MouseArgs(button));
+             Check(recording.LastArmCartesianJog == (mode, direction * (int)Math.Round(vm.GetArmCartesianJogSpeed(mode) * 1000)), $"Cartesian button {name} sends its own mode and direction");
+             int requests = recording.ArmCartesianJogCount;
+@@ -207,7 +246,7 @@
+         for (int mode = 1; mode <= 5; mode++)
+         {
+             double speed = vm.GetArmCartesianJogSpeed(mode);
+-            string expected = mode is 4 or 5 ? $"{speed:0.##}°/s" : $"{speed:0.##} mm/s";
++            string expected = mode == 3 ? "轴1点动" : mode is 4 or 5 ? $"{speed:0.##}°/s" : $"{speed:0.##} mm/s";
+             Check(((TextBlock)arm.FindName("ArmCartesianRate" + mode)!).Text == expected, $"speed row {mode} refreshes from GetArmCartesianJogSpeed with the original units");
+         }
+         Invoke(arm, "ArmCartesian_Up", yaw, new RoutedEventArgs(UIElement.PreviewMouseLeftButtonUpEvent));
+diff --git "a/介入机器人/A主端/工程/master/VI.Module.PositioningArm/PositioningArmPanel.xaml" "b/介入机器人/A主端/工程/master/VI.Module.PositioningArm/PositioningArmPanel.xaml"
+--- "a/介入机器人/A主端/工程/master/VI.Module.PositioningArm/PositioningArmPanel.xaml"
++++ "b/介入机器人/A主端/工程/master/VI.Module.PositioningArm/PositioningArmPanel.xaml"
+@@ -94,7 +94,14 @@
+                 <TextBlock Text="{Binding ArmCartesianJogStatusText}" Style="{StaticResource NonEmptyError}"/>
+             </StackPanel>
+             <UniformGrid Grid.Row="5" Columns="2" Margin="{DynamicResource GapTop}">
+-                <Button x:Name="ProgramHome" Margin="{DynamicResource HalfGapRight}" Content="归零" Click="ArmProgramZero_Click" IsEnabled="{Binding CanOperate}"/>
++                <Grid Margin="{DynamicResource HalfGapRight}">
++                    <Grid.ColumnDefinitions>
++                        <ColumnDefinition Width="Auto"/>
++                        <ColumnDefinition/>
++                    </Grid.ColumnDefinitions>
++                    <Button x:Name="ProgramHome" Content="归零" Click="ArmProgramZero_Click" IsEnabled="{Binding CanOperate}"/>
++                    <TextBlock x:Name="ArmProgramZeroStatus" Grid.Column="1" Margin="{DynamicResource HalfGapLeft}" Text="{Binding ArmProgramZeroStatusText}" Style="{StaticResource Hint}" TextWrapping="Wrap"/>
++                </Grid>
+                 <Button x:Name="ArmStop" Margin="{DynamicResource HalfGapLeft}" Content="停止" Click="ArmStop_Click"/>
+             </UniformGrid>
+             <Border Grid.Row="6" BorderBrush="#E6EBF0" BorderThickness="0,1,0,0" Padding="{DynamicResource DetailsPadding}">
+diff --git "a/介入机器人/A主端/工程/master/VI.Module.PositioningArm/PositioningArmPanel.xaml.cs" "b/介入机器人/A主端/工程/master/VI.Module.PositioningArm/PositioningArmPanel.xaml.cs"
+--- "a/介入机器人/A主端/工程/master/VI.Module.PositioningArm/PositioningArmPanel.xaml.cs"
++++ "b/介入机器人/A主端/工程/master/VI.Module.PositioningArm/PositioningArmPanel.xaml.cs"
+@@ -141,7 +141,13 @@
+ 
+     private async void ArmProgramZero_Click(object sender, RoutedEventArgs e)
+     {
+-        if (!_viewModel.CanOperate || _cartesianMode != 0 || _jogAxis != 0) return;
++        if (!_viewModel.CanOperate || _cartesianMode != 0 || _jogAxis != 0)
++        {
++            ArmCartesianError.Text = !_viewModel.CanOperate
++                ? "归零失败：尚未取得控制权或状态未就绪"
++                : "归零失败：1008（请先松开点动按钮）";
++            return;
++        }
+         ArmCartesianError.Text = "";
+         int version = ++_holdVersion;
+         _programReturnActive = true;
+diff --git "a/介入机器人/A主端/工程/master/VI.Service.Robot/Services/RemoteRobotLink.cs" "b/介入机器人/A主端/工程/master/VI.Service.Robot/Services/RemoteRobotLink.cs"
+--- "a/介入机器人/A主端/工程/master/VI.Service.Robot/Services/RemoteRobotLink.cs"
++++ "b/介入机器人/A主端/工程/master/VI.Service.Robot/Services/RemoteRobotLink.cs"
+@@ -484,7 +484,8 @@
+                     HasNetDistance = f.HasNetDistance, Axis1NetDistanceMm = f.Axis1NetDistanceMm, Axis6NetDistanceMm = f.Axis6NetDistanceMm,
+                     Axis6WindowStartFromLeftMm = f.Axis6WindowStartFromLeftMm, Axis6WindowEndFromLeftMm = f.Axis6WindowEndFromLeftMm,
+                     ArmCjogState = f.ArmCjogState, ArmCjogError = f.ArmCjogError,
+-                    ArmCjogLimited = f.ArmCjogLimited, ArmCjogPathSpeed = f.ArmCjogPathSpeed
++                    ArmCjogLimited = f.ArmCjogLimited, ArmCjogPathSpeed = f.ArmCjogPathSpeed,
++                    ArmCartesianStatus = f.ArmCartesianStatus, ArmCartesianError = f.ArmCartesianError
+                 };
+                 if (f.EchoMainMonotonicMs != 0 && f.EchoMainMonotonicMs <= (ulong)now)
+                 {
+diff --git "a/介入机器人/A主端/工程/master/VI.Service.Robot/ViewModels/MainViewModel.cs" "b/介入机器人/A主端/工程/master/VI.Service.Robot/ViewModels/MainViewModel.cs"
+--- "a/介入机器人/A主端/工程/master/VI.Service.Robot/ViewModels/MainViewModel.cs"
++++ "b/介入机器人/A主端/工程/master/VI.Service.Robot/ViewModels/MainViewModel.cs"
+@@ -406,6 +406,41 @@
+             }) + $"（错误码 {_s.ArmCjogError}）"
+             : _s.ArmCjogLimited && _s.ArmCjogState is 2 or 3
+                 ? "接近奇异位形或关节限速，已自动降速" : "";
++
++        public string ArmProgramZeroStatusText => _s.ArmCartesianStatus switch
++        {
++            1 => "归零进行中",
++            2 => "归零已完成",
++            3 => "已在零位",
++            4 => "归零已停止",
++            5 => $"归零失败：{_s.ArmCartesianError}（{ArmProgramZeroErrorText(_s.ArmCartesianError)}）",
++            _ => ""
++        };
++
++        private static string ArmProgramZeroErrorText(int error) => error switch
++        {
++            1001 => "归零参数无效",
++            1002 => "当前关节位置超出允许范围",
++            1003 => "ADS 写入失败",
++            1004 => "定位臂状态或总使能未就绪",
++            1005 => "归零保活超时",
++            1006 => "轴未上电、故障、复位或单轴点动中",
++            1007 => "PLC 确认曲线超时",
++            1008 => "末端点动占用，请松开点动并等待停稳",
++            1202 => "归零规划输入无效",
++            1203 => "归零规划超出关节范围",
++            1206 => "归零轨迹采样数量超限",
++            1207 => "归零规划数值求解失败",
++            2001 => "PLC 运动所有权被占用或正在停止",
++            2002 => "PLC 拒绝曲线参数",
++            2003 => "PLC 驱动、使能、心跳或急停条件未满足",
++            2004 => "PLC 轴仍在运动",
++            2005 => "PLC 曲线速度或加速度超限",
++            2006 => "PLC 轴5姿态超出范围",
++            2007 => "PLC 外部设定点使能或到位超时",
++            2008 => "PLC 跟随偏差、速度或加速度超限",
++            _ => $"NC 错误 0x{error:X}"
++        };
+ 
+         public bool ArmSpeedFast { get => _armJogSpeedScale == 2.0; set { if (value) SetArmJogSpeedScale(2.0); } }
+         public bool ArmSpeedMedium { get => _armJogSpeedScale == 1.0; set { if (value) SetArmJogSpeedScale(1.0); } }
+@@ -531,7 +566,7 @@
+             nameof(Axis2AngleText), nameof(Axis7AngleText),
+             nameof(Axis2PointerX), nameof(Axis2PointerY), nameof(Axis7PointerX), nameof(Axis7PointerY),
+             nameof(PrepareStatusText), nameof(FfCaption), nameof(YValveCaption), nameof(Injector1Text), nameof(Injector2Text), nameof(Axis4Text),
+-            nameof(StatusFresh),
++            nameof(StatusFresh), nameof(ArmProgramZeroStatusText),
+         };
+ 
+         private static readonly string[] Axis6WindowPropertyNames =
+diff --git "a/介入机器人/A主端/工程/protocol/PROTOCOL.md" "b/介入机器人/A主端/工程/protocol/PROTOCOL.md"
+--- "a/介入机器人/A主端/工程/protocol/PROTOCOL.md"
++++ "b/介入机器人/A主端/工程/protocol/PROTOCOL.md"
+@@ -72,7 +72,7 @@
+ | 13 | byte[] | Proof |
+ | 14 | byte[] | AuthTag |
+ 
+-## StateFrame（55 项）
++## StateFrame（57 项）
+ 
+ | 索引 | 类型 | 字段 |
+ |---|---|---|
+@@ -130,9 +130,11 @@
+ | 51 | uint | ArmCjogError |
+ | 52 | bool | ArmCjogLimited |
+ | 53 | float64 | ArmCjogPathSpeed（mm/s 或 °/s） |
+-| 54 | byte[] | AuthTag |
++| 54 | int | ArmCartesianStatus（0 空闲、1 进行中、2 完成、3 已在零位、4 停止、5 失败） |
++| 55 | int | ArmCartesianError（归零错误码） |
++| 56 | byte[] | AuthTag |
+ 
+-末端点动状态沿用版本 1 的字段扩展惯例；主端和数据端须同步部署。严格解码只接受 55 项，不兼容旧长度。命令格式未改变。
++末端点动状态沿用版本 1 的字段扩展惯例；主端和数据端须同步部署。严格解码只接受 57 项，不兼容旧长度。命令格式未改变。
+ 
+ ## ForceFrame（13 项）
+ 
+diff --git "a/介入机器人/B数据端/工程/ADS项目/arm_manual_ads_service.cpp" "b/介入机器人/B数据端/工程/ADS项目/arm_manual_ads_service.cpp"
+--- "a/介入机器人/B数据端/工程/ADS项目/arm_manual_ads_service.cpp"
++++ "b/介入机器人/B数据端/工程/ADS项目/arm_manual_ads_service.cpp"
+@@ -265,7 +265,12 @@
+ void ArmManualAdsService::request_program_zero()
+ {
+ 	std::lock_guard<std::mutex> lock(mutex_);
+-	if (curve_pending_ || cjog_mode_ != 0 || snapshot_.cjog_owned || home_requested_) return;
++	if (curve_pending_ || home_requested_) return;
++	if (cjog_mode_ != 0 || snapshot_.cjog_owned) {
++		snapshot_.cartesian_status = 5;
++		snapshot_.cartesian_error = 1008;
++		return;
++	}
+ 	cartesian_blocked_ = false;
+ 	home_requested_ = true;
+ 	++snapshot_.home_request_id;
+diff --git "a/介入机器人/B数据端/工程/ADS项目/protocol/PROTOCOL.md" "b/介入机器人/B数据端/工程/ADS项目/protocol/PROTOCOL.md"
+--- "a/介入机器人/B数据端/工程/ADS项目/protocol/PROTOCOL.md"
++++ "b/介入机器人/B数据端/工程/ADS项目/protocol/PROTOCOL.md"
+@@ -72,7 +72,7 @@
+ | 13 | byte[] | Proof |
+ | 14 | byte[] | AuthTag |
+ 
+-## StateFrame（55 项）
++## StateFrame（57 项）
+ 
+ | 索引 | 类型 | 字段 |
+ |---|---|---|
+@@ -130,9 +130,11 @@
+ | 51 | uint | ArmCjogError |
+ | 52 | bool | ArmCjogLimited |
+ | 53 | float64 | ArmCjogPathSpeed（mm/s 或 °/s） |
+-| 54 | byte[] | AuthTag |
++| 54 | int | ArmCartesianStatus（0 空闲、1 进行中、2 完成、3 已在零位、4 停止、5 失败） |
++| 55 | int | ArmCartesianError（归零错误码） |
++| 56 | byte[] | AuthTag |
+ 
+-末端点动状态沿用版本 1 的字段扩展惯例；主端和数据端须同步部署。严格解码只接受 55 项，不兼容旧长度。命令格式未改变。
++末端点动状态沿用版本 1 的字段扩展惯例；主端和数据端须同步部署。严格解码只接受 57 项，不兼容旧长度。命令格式未改变。
+ 
+ ## ForceFrame（13 项）
+ 
+diff --git "a/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_protocol.h" "b/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_protocol.h"
+--- "a/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_protocol.h"
++++ "b/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_protocol.h"
+@@ -15,7 +15,7 @@
+     constexpr std::size_t kHandleFields = 26;
+     constexpr std::size_t kCommandFields = 15;
+     constexpr std::size_t kCommandResultFields = 3;
+-    constexpr std::size_t kStateFields = 55;
++    constexpr std::size_t kStateFields = 57;
+     constexpr std::size_t kForceFields = 13;
+     constexpr std::size_t kMaxResults = 32;
+ 
+@@ -102,6 +102,7 @@
+         std::uint32_t arm_cjog_state{}, arm_cjog_error{};
+         bool arm_cjog_limited{};
+         double arm_cjog_path_speed{};
++        std::int32_t arm_cartesian_status{}, arm_cartesian_error{};
+         std::vector<std::uint8_t> auth_tag;
+         MSGPACK_DEFINE(version, session_id, sequence, auth_state, nonce_server, echo_main_monotonic_ms,
+             flags, mode, phase, self_check_status, ads_state, cylinder1, cylinder2, cylinder3,
+@@ -113,7 +114,8 @@
+             axis1_net_distance_mm, axis6_net_distance_mm, prepare_task_state,
+             prepare_task_command_id, start_task_state, start_task_command_id, results,
+             event_text, axis6_window_start_from_left_mm, axis6_window_end_from_left_mm,
+-            arm_cjog_state, arm_cjog_error, arm_cjog_limited, arm_cjog_path_speed, auth_tag);
++            arm_cjog_state, arm_cjog_error, arm_cjog_limited, arm_cjog_path_speed,
++            arm_cartesian_status, arm_cartesian_error, auth_tag);
+     };
+ 
+     struct ForceFrame
+diff --git "a/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_validation.h" "b/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_validation.h"
+--- "a/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_validation.h"
++++ "b/介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_validation.h"
+@@ -89,7 +89,7 @@
+             p[46].type != msgpack::type::ARRAY || p[46].via.array.size > kMaxResults || !detail::text(p[47]) ||
+             !detail::f32(p[48]) || !detail::f32(p[49]) || !detail::uint(p[50], UINT32_MAX) ||
+             !detail::uint(p[51], UINT32_MAX) || !detail::boolean(p[52]) || !detail::f64(p[53]) ||
+-            !detail::optional_bin(p[54], 16)) return false;
++            !detail::i32(p[54]) || !detail::i32(p[55]) || !detail::optional_bin(p[56], 16)) return false;
+         for (std::uint32_t i = 0; i < p[46].via.array.size; ++i)
+             if (!validate_object(p[46].via.array.ptr[i], static_cast<const CommandResult*>(nullptr))) return false;
+         return true;
+diff --git "a/介入机器人/B数据端/工程/ADS项目/tests/zenoh/protocol_tests.cpp" "b/介入机器人/B数据端/工程/ADS项目/tests/zenoh/protocol_tests.cpp"
+--- "a/介入机器人/B数据端/工程/ADS项目/tests/zenoh/protocol_tests.cpp"
++++ "b/介入机器人/B数据端/工程/ADS项目/tests/zenoh/protocol_tests.cpp"
+@@ -107,6 +107,7 @@
+         f.results = { {39, 0, ""}, {38, 1, u8"拒绝"} }; f.event_text = "ready";
+         f.axis6_window_start_from_left_mm = 16; f.axis6_window_end_from_left_mm = 48;
+         f.arm_cjog_state = 2; f.arm_cjog_error = 0; f.arm_cjog_limited = true; f.arm_cjog_path_speed = 12.5;
++        f.arm_cartesian_status = 1; f.arm_cartesian_error = 0;
+         return f;
+     }
+     vi_protocol::ForceFrame new_force()
+diff --git "a/介入机器人/B数据端/工程/ADS项目/zenoh_service.cpp" "b/介入机器人/B数据端/工程/ADS项目/zenoh_service.cpp"
+--- "a/介入机器人/B数据端/工程/ADS项目/zenoh_service.cpp"
++++ "b/介入机器人/B数据端/工程/ADS项目/zenoh_service.cpp"
+@@ -1092,6 +1092,8 @@
+         frame.arm_cjog_error = state_.arm_cjog_error;
+         frame.arm_cjog_limited = state_.arm_cjog_limited;
+         frame.arm_cjog_path_speed = state_.arm_cjog_path_speed;
++        frame.arm_cartesian_status = state_.arm_cartesian_status;
++        frame.arm_cartesian_error = state_.arm_cartesian_error;
+         authed = authenticated_ && frame.auth_state == 2; key = session_key_;
+     }
+     if (authed)
+diff --git "a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_ads_mock.h" "b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_ads_mock.h"
+new file mode 100644
+--- /dev/null
++++ "b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_ads_mock.h"
+@@ -0,0 +1,153 @@
++#pragma once
++#include "arm_manual_ads_service.h"
++#include "ads_communication.h"
++#include <cstring>
++#include <algorithm>
++#include <iostream>
++#include <limits>
++#include <stdexcept>
++#include <utility>
++#include <vector>
++
++namespace {
++std::mutex fake_mutex;
++std::array<double, 5> actual{{100, 0, 0, 0, 0}};
++std::array<double, 5> actual_velocity{};
++std::array<double, 5> jog_velocity{{5, 5, 5, 5, 5}}, jog_acc{{50, 50, 50, 50, 50}};
++std::array<double, 5> jog_dec{{50, 50, 50, 50, 50}}, jog_jerk{{500, 500, 500, 500, 500}};
++std::array<bool, 5> jog_pos{}, jog_neg{};
++std::array<double, 5> started_velocity{};
++ArmCurve staged_curve;
++ArmCurve executing_curve;
++bool plc_owned = false;
++std::int16_t cjog_mode = 0, cjog_dir = 0;
++double cjog_speed = 0;
++std::uint32_t cjog_alive = 0;
++bool cjog_owned = false;
++std::vector<std::vector<std::string>> batches;
++std::uint32_t acknowledged = 0, plc_state = 0, plc_error = 0;
++std::vector<std::string> writes;
++std::string fail_symbol;
++bool fail_read = false;
++bool host_unhealthy = false;
++bool stage_written = false;
++bool fake_busy = false;
++void check(bool value, const char* message)
++{
++    if (!value) throw std::runtime_error(message);
++}
++template<typename F> void until(F condition)
++{
++    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
++    while (!condition()) {
++        check(std::chrono::steady_clock::now() < deadline, "Mock ADS wait timed out");
++        std::this_thread::sleep_for(std::chrono::milliseconds(5));
++    }
++}
++size_t count(const char* name)
++{
++    std::lock_guard<std::mutex> lock(fake_mutex);
++    return static_cast<size_t>(std::count(writes.begin(), writes.end(), name));
++}
++} // namespace
++
++// 仅替换测试二进制的传输实现，不链接ADS DLL，不访问网络或真实PLC。
++CADSComm::CADSComm() {}
++CADSComm::~CADSComm() {}
++AdsCommunicationService::AdsCommunicationService(CADSComm& ads) : ads_(ads) {}
++AdsCommunicationService::~AdsCommunicationService() {}
++AdsCommunicationStats AdsCommunicationService::stats() const
++{
++    AdsCommunicationStats result;
++    result.state = AdsConnectionState::Running;
++    return result;
++}
++AdsEventState AdsCommunicationService::event_state() const
++{
++    std::lock_guard<std::mutex> lock(fake_mutex);
++    AdsEventState result;
++    result.host_comm_timeout = host_unhealthy;
++    return result;
++}
++bool AdsCommunicationService::write_sum(const char* const* names, const unsigned long* sizes,
++    const void* const* values, unsigned long size, DWORD)
++{
++    std::lock_guard<std::mutex> lock(fake_mutex);
++    batches.emplace_back(names, names+size);
++    for (unsigned long i = 0; i < size; ++i) {
++        const std::string name(names[i]);
++        writes.push_back(name);
++        if (name == fail_symbol) return false;
++        if (name == "G.arm_cjog_mode") std::memcpy(&cjog_mode, values[i], sizes[i]);
++        if (name == "G.arm_cjog_dir") std::memcpy(&cjog_dir, values[i], sizes[i]);
++        if (name == "G.arm_cjog_speed") std::memcpy(&cjog_speed, values[i], sizes[i]);
++        if (name == "G.arm_cjog_alive") std::memcpy(&cjog_alive, values[i], sizes[i]);
++        if (name == "G.arm_jog_velocity") std::memcpy(jog_velocity.data(), values[i], sizes[i]);
++        if (name == "G.arm_jog_acc") std::memcpy(jog_acc.data(), values[i], sizes[i]);
++        if (name == "G.arm_jog_dec") std::memcpy(jog_dec.data(), values[i], sizes[i]);
++        if (name == "G.arm_jog_jerk") std::memcpy(jog_jerk.data(), values[i], sizes[i]);
++        if (name == "G.arm_jog_pos_req" || name == "G.arm_jog_neg_req") {
++            auto& requests = name == "G.arm_jog_pos_req" ? jog_pos : jog_neg;
++            const auto* next = static_cast<const bool*>(values[i]);
++            for (int axis = 0; axis < 5; ++axis)
++                if (next[axis] && !requests[axis]) started_velocity[axis] = jog_velocity[axis];
++            std::memcpy(requests.data(), values[i], sizes[i]);
++        }
++        if (name == "G.arm_curve_data") {
++            check(sizes[i] == sizeof(staged_curve.values), "Wrong curve packet size");
++            std::memcpy(staged_curve.values.data(), values[i], sizes[i]);
++            stage_written = true;
++        }
++        if (name == "G.arm_curve_request") {
++            check(stage_written, "Commit before curve staging");
++            executing_curve = staged_curve;
++            plc_owned = true;
++            std::memcpy(&acknowledged, values[i], sizeof(acknowledged));
++            plc_state = 1;
++            plc_error = 0;
++            stage_written = false;
++        }
++        if (name == "G.arm_curve_cancel" && *static_cast<const bool*>(values[i])) {
++            plc_state = plc_error == 0 ? 3 : 4;
++            plc_owned = false;
++            actual_velocity.fill(0);
++            fake_busy = false;
++        }
++    }
++    return true;
++}
++bool AdsCommunicationService::read_sum(const char* const* names, const unsigned long* sizes,
++    void* const* values, unsigned long size, DWORD)
++{
++    std::lock_guard<std::mutex> lock(fake_mutex);
++    if (fail_read) return false;
++    for (unsigned long i = 0; i < size; ++i) {
++        const std::string name(names[i]);
++        std::memset(values[i], 0, sizes[i]);
++        if (name == "G.arm_act_pos") std::memcpy(values[i], actual.data(), sizes[i]);
++        else if (name == "G.arm_act_vel") std::memcpy(values[i], actual_velocity.data(), sizes[i]);
++        else if (name == "G.arm_motion_busy") std::memset(values[i], fake_busy, sizes[i]);
++        else if (name == "G.arm_curve_ack") std::memcpy(values[i], &acknowledged, sizes[i]);
++        else if (name == "G.arm_curve_state") std::memcpy(values[i], &plc_state, sizes[i]);
++        else if (name == "G.arm_curve_error") std::memcpy(values[i], &plc_error, sizes[i]);
++        else if (name == "G.arm_curve_owned") std::memcpy(values[i], &plc_owned, sizes[i]);
++        else if (name == "G.arm_cjog_owned") std::memcpy(values[i], &cjog_owned, sizes[i]);
++        else if (name == "G.arm_cjog_state") *static_cast<std::uint32_t*>(values[i]) = cjog_mode ? 2 : 0;
++        else if (name == "G.arm_cjog_if_version") *static_cast<std::uint32_t*>(values[i]) = 1;
++        else if (name == "G.arm_cjog_limited") *static_cast<bool*>(values[i]) = true;
++        else if (name == "G.arm_cjog_path_speed") *static_cast<double*>(values[i]) = cjog_speed;
++        else if (name == "G.arm_manual_enable" || name == "G.arm_enable_req"
++            || (name.find("G.arm_power_output[") == 0 && name.find(".Done") != std::string::npos))
++            std::memset(values[i], 1, sizes[i]);
++        else if (name == "G.arm_jog_velocity") std::memcpy(values[i], jog_velocity.data(), sizes[i]);
++        else if (name == "G.arm_jog_acc") std::memcpy(values[i], jog_acc.data(), sizes[i]);
++        else if (name == "G.arm_jog_dec") std::memcpy(values[i], jog_dec.data(), sizes[i]);
++        else if (name == "G.arm_jog_jerk") std::memcpy(values[i], jog_jerk.data(), sizes[i]);
++        else if (name == "G.arm_cmd_dir") {
++            auto* output = static_cast<std::int8_t*>(values[i]);
++            for (int axis = 0; axis < 5; ++axis) output[axis] = jog_pos[axis] ? 1 : (jog_neg[axis] ? -1 : 0);
++        }
++    }
++    return true;
++}
++
+diff --git "a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_ads_test.cpp" "b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_ads_test.cpp"
+--- "a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_ads_test.cpp"
++++ "b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_ads_test.cpp"
+@@ -1,154 +1,4 @@
+-#include "arm_manual_ads_service.h"
+-#include "ads_communication.h"
+-#include <cstring>
+-#include <algorithm>
+-#include <iostream>
+-#include <limits>
+-#include <stdexcept>
+-#include <utility>
+-#include <vector>
+-
+-namespace {
+-std::mutex fake_mutex;
+-std::array<double, 5> actual{{100, 0, 0, 0, 0}};
+-std::array<double, 5> actual_velocity{};
+-std::array<double, 5> jog_velocity{{5, 5, 5, 5, 5}}, jog_acc{{50, 50, 50, 50, 50}};
+-std::array<double, 5> jog_dec{{50, 50, 50, 50, 50}}, jog_jerk{{500, 500, 500, 500, 500}};
+-std::array<bool, 5> jog_pos{}, jog_neg{};
+-std::array<double, 5> started_velocity{};
+-ArmCurve staged_curve;
+-ArmCurve executing_curve;
+-bool plc_owned = false;
+-std::int16_t cjog_mode = 0, cjog_dir = 0;
+-double cjog_speed = 0;
+-std::uint32_t cjog_alive = 0;
+-bool cjog_owned = false;
+-std::vector<std::vector<std::string>> batches;
+-std::uint32_t acknowledged = 0, plc_state = 0, plc_error = 0;
+-std::vector<std::string> writes;
+-std::string fail_symbol;
+-bool fail_read = false;
+-bool host_unhealthy = false;
+-bool stage_written = false;
+-bool fake_busy = false;
+-void check(bool value, const char* message)
+-{
+-    if (!value) throw std::runtime_error(message);
+-}
+-template<typename F> void until(F condition)
+-{
+-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+-    while (!condition()) {
+-        check(std::chrono::steady_clock::now() < deadline, "Mock ADS wait timed out");
+-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+-    }
+-}
+-size_t count(const char* name)
+-{
+-    std::lock_guard<std::mutex> lock(fake_mutex);
+-    return static_cast<size_t>(std::count(writes.begin(), writes.end(), name));
+-}
+-} // namespace
+-
+-// 仅替换测试二进制的传输实现，不链接ADS DLL，不访问网络或真实PLC。
+-CADSComm::CADSComm() {}
+-CADSComm::~CADSComm() {}
+-AdsCommunicationService::AdsCommunicationService(CADSComm& ads) : ads_(ads) {}
+-AdsCommunicationService::~AdsCommunicationService() {}
+-AdsCommunicationStats AdsCommunicationService::stats() const
+-{
+-    AdsCommunicationStats result;
+-    result.state = AdsConnectionState::Running;
+-    return result;
+-}
+-AdsEventState AdsCommunicationService::event_state() const
+-{
+-    std::lock_guard<std::mutex> lock(fake_mutex);
+-    AdsEventState result;
+-    result.host_comm_timeout = host_unhealthy;
+-    return result;
+-}
+-bool AdsCommunicationService::write_sum(const char* const* names, const unsigned long* sizes,
+-    const void* const* values, unsigned long size, DWORD)
+-{
+-    std::lock_guard<std::mutex> lock(fake_mutex);
+-    batches.emplace_back(names, names+size);
+-    for (unsigned long i = 0; i < size; ++i) {
+-        const std::string name(names[i]);
+-        writes.push_back(name);
+-        if (name == fail_symbol) return false;
+-        if (name == "G.arm_cjog_mode") std::memcpy(&cjog_mode, values[i], sizes[i]);
+-        if (name == "G.arm_cjog_dir") std::memcpy(&cjog_dir, values[i], sizes[i]);
+-        if (name == "G.arm_cjog_speed") std::memcpy(&cjog_speed, values[i], sizes[i]);
+-        if (name == "G.arm_cjog_alive") std::memcpy(&cjog_alive, values[i], sizes[i]);
+-        if (name == "G.arm_jog_velocity") std::memcpy(jog_velocity.data(), values[i], sizes[i]);
+-        if (name == "G.arm_jog_acc") std::memcpy(jog_acc.data(), values[i], sizes[i]);
+-        if (name == "G.arm_jog_dec") std::memcpy(jog_dec.data(), values[i], sizes[i]);
+-        if (name == "G.arm_jog_jerk") std::memcpy(jog_jerk.data(), values[i], sizes[i]);
+-        if (name == "G.arm_jog_pos_req" || name == "G.arm_jog_neg_req") {
+-            auto& requests = name == "G.arm_jog_pos_req" ? jog_pos : jog_neg;
+-            const auto* next = static_cast<const bool*>(values[i]);
+-            for (int axis = 0; axis < 5; ++axis)
+-                if (next[axis] && !requests[axis]) started_velocity[axis] = jog_velocity[axis];
+-            std::memcpy(requests.data(), values[i], sizes[i]);
+-        }
+-        if (name == "G.arm_curve_data") {
+-            check(sizes[i] == sizeof(staged_curve.values), "Wrong curve packet size");
+-            std::memcpy(staged_curve.values.data(), values[i], sizes[i]);
+-            stage_written = true;
+-        }
+-        if (name == "G.arm_curve_request") {
+-            check(stage_written, "Commit before curve staging");
+-            executing_curve = staged_curve;
+-            plc_owned = true;
+-            std::memcpy(&acknowledged, values[i], sizeof(acknowledged));
+-            plc_state = 1;
+-            plc_error = 0;
+-            stage_written = false;
+-        }
+-        if (name == "G.arm_curve_cancel" && *static_cast<const bool*>(values[i])) {
+-            plc_state = plc_error == 0 ? 3 : 4;
+-            plc_owned = false;
+-            actual_velocity.fill(0);
+-            fake_busy = false;
+-        }
+-    }
+-    return true;
+-}
+-bool AdsCommunicationService::read_sum(const char* const* names, const unsigned long* sizes,
+-    void* const* values, unsigned long size, DWORD)
+-{
+-    std::lock_guard<std::mutex> lock(fake_mutex);
+-    if (fail_read) return false;
+-    for (unsigned long i = 0; i < size; ++i) {
+-        const std::string name(names[i]);
+-        std::memset(values[i], 0, sizes[i]);
+-        if (name == "G.arm_act_pos") std::memcpy(values[i], actual.data(), sizes[i]);
+-        else if (name == "G.arm_act_vel") std::memcpy(values[i], actual_velocity.data(), sizes[i]);
+-        else if (name == "G.arm_motion_busy") std::memset(values[i], fake_busy, sizes[i]);
+-        else if (name == "G.arm_curve_ack") std::memcpy(values[i], &acknowledged, sizes[i]);
+-        else if (name == "G.arm_curve_state") std::memcpy(values[i], &plc_state, sizes[i]);
+-        else if (name == "G.arm_curve_error") std::memcpy(values[i], &plc_error, sizes[i]);
+-        else if (name == "G.arm_curve_owned") std::memcpy(values[i], &plc_owned, sizes[i]);
+-        else if (name == "G.arm_cjog_owned") std::memcpy(values[i], &cjog_owned, sizes[i]);
+-        else if (name == "G.arm_cjog_state") *static_cast<std::uint32_t*>(values[i]) = cjog_mode ? 2 : 0;
+-        else if (name == "G.arm_cjog_if_version") *static_cast<std::uint32_t*>(values[i]) = 1;
+-        else if (name == "G.arm_cjog_limited") *static_cast<bool*>(values[i]) = true;
+-        else if (name == "G.arm_cjog_path_speed") *static_cast<double*>(values[i]) = cjog_speed;
+-        else if (name == "G.arm_manual_enable" || name == "G.arm_enable_req"
+-            || (name.find("G.arm_power_output[") == 0 && name.find(".Done") != std::string::npos))
+-            std::memset(values[i], 1, sizes[i]);
+-        else if (name == "G.arm_jog_velocity") std::memcpy(values[i], jog_velocity.data(), sizes[i]);
+-        else if (name == "G.arm_jog_acc") std::memcpy(values[i], jog_acc.data(), sizes[i]);
+-        else if (name == "G.arm_jog_dec") std::memcpy(values[i], jog_dec.data(), sizes[i]);
+-        else if (name == "G.arm_jog_jerk") std::memcpy(values[i], jog_jerk.data(), sizes[i]);
+-        else if (name == "G.arm_cmd_dir") {
+-            auto* output = static_cast<std::int8_t*>(values[i]);
+-            for (int axis = 0; axis < 5; ++axis) output[axis] = jog_pos[axis] ? 1 : (jog_neg[axis] ? -1 : 0);
+-        }
+-    }
+-    return true;
+-}
++#include "arm_ads_mock.h"
+ 
+ int main()
+ {
+@@ -210,7 +60,8 @@
+         until([&] { return service.snapshot().cmd_dir[0] == 0; });
+         service.request_program_zero();
+         until([&] { return service.snapshot().cartesian_status == 3; });
+-        check(count("G.arm_curve_request") == 0, "Already-home caused movement");
++        check(count("G.arm_curve_request") == 0 && service.snapshot().cartesian_error == 0, "Already-home caused movement");
++        std::cout << "E10 already_home status=3 error=0 requests=0\n";
+ 
+         const auto cancel0 = count("G.arm_curve_cancel");
+         const auto params0 = count("G.arm_jog_velocity");
+@@ -251,6 +102,8 @@
+         service.request_program_zero();
+         std::this_thread::sleep_for(std::chrono::milliseconds(70));
+         check(count("G.arm_curve_request")==0 && service.snapshot().cmd_dir[0]==0,"Active jog allowed home or single-axis jog");
++        check(service.snapshot().cartesian_status==5 && service.snapshot().cartesian_error==1008,
++            "Pending Cartesian jog did not report home rejection 1008");
+         check(service.snapshot().cjog_state==2 && service.snapshot().cjog_limited
+             && service.snapshot().cjog_path_speed==30 && service.snapshot().cjog_if_version==1,"Jog status snapshot mapping");
+         service.stop_cartesian();
+@@ -278,10 +131,15 @@
+         service.request_program_zero();
+         std::this_thread::sleep_for(std::chrono::milliseconds(70));
+         check(count("G.arm_curve_request")==0,"Home ignored PLC jog ownership");
++        check(service.snapshot().cartesian_status==5 && service.snapshot().cartesian_error==1008,
++            "PLC jog ownership did not report home rejection 1008");
++        std::cout << "E10 occupied status=5 error=1008 requests=0 (request and PLC ownership)\n";
+         { std::lock_guard<std::mutex> lock(fake_mutex);cjog_owned=false;actual[4]=2; }
+         until([&]{return !service.snapshot().cjog_owned && service.snapshot().act_pos[4]==2;});
+         service.request_program_zero();
+         until([&]{service.keep_cartesian_alive();return count("G.arm_curve_request")==1;});
++        check(service.snapshot().cartesian_status==1 && service.snapshot().cartesian_error==0,
++            "Normal home did not report running status");
+         service.set_cartesian_jog(3,3);
+         std::this_thread::sleep_for(std::chrono::milliseconds(60));
+         check(count("G.arm_cjog_mode")==before_invalid,"Jog interrupted home");
+@@ -293,6 +151,23 @@
+         }
+         until([&]{service.keep_cartesian_alive();return service.snapshot().cartesian_status==2;});
+         check(count("G.arm_curve_request")==1,"Home repeated");
++        check(service.snapshot().cartesian_error==0,"Normal home completed with an error");
++        std::cout << "E10 normal status=1 -> 2 error=0 curve_mode=0 requests=1\n";
++        { std::lock_guard<std::mutex> lock(fake_mutex);actual[4]=61; }
++        until([&]{return service.snapshot().act_pos[4]==61;});
++        service.request_program_zero();
++        until([&]{service.keep_cartesian_alive();return service.snapshot().cartesian_status==5;});
++        check(service.snapshot().cartesian_error==1002 && count("G.arm_curve_request")==1,
++            "Planning rejection did not report 1002 or submitted motion");
++        std::cout << "E10 planning_failure status=5 error=1002 requests=1\n";
++        { std::lock_guard<std::mutex> lock(fake_mutex);actual[4]=2; }
++        until([&]{return service.snapshot().act_pos[4]==2;});
++        service.request_program_zero();
++        until([&]{service.keep_cartesian_alive();return count("G.arm_curve_request")==2;});
++        { std::lock_guard<std::mutex> lock(fake_mutex);plc_state=4;plc_error=2003;plc_owned=false; }
++        until([&]{service.keep_cartesian_alive();return service.snapshot().cartesian_status==5;});
++        check(service.snapshot().cartesian_error==2003,"PLC rejection did not preserve its error code");
++        std::cout << "E10 plc_rejection status=5 error=2003 requests=2\n";
+         service.set_cartesian_jog(3,3);
+         until([&] { std::lock_guard<std::mutex> lock(fake_mutex);return cjog_mode==3; });
+         service.set_axis_enable(1,false);
+diff --git "a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_reference.h" "b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_reference.h"
+--- "a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_reference.h"
++++ "b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_reference.h"
+@@ -12,7 +12,7 @@
+     static constexpr double TOOL_LENGTH_MM = 554.5;
+     static constexpr double T_ACC = 1.0, T_DEC = 0.5;
+     static constexpr int INITIAL_BRANCH = 1, BISECTION_COUNT = 12;
+-    static constexpr std::array<double, 5> JOINT_VCAP{{24,10,10,10,10}};
++    static constexpr std::array<double, 5> JOINT_VCAP{{24,30,30,30,30}};
+     std::array<double, 5> p{}, v{}, a{}, anchor{};
+     double path_speed = 0, target_speed = 0, path_v = 0;
+     double v0 = 0, v1 = 0, duration = T_ACC, tau = 0, sigma = 0;
+diff --git "a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/audit_cart_jog_st.py" "b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/audit_cart_jog_st.py"
+--- "a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/audit_cart_jog_st.py"
++++ "b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/audit_cart_jog_st.py"
+@@ -62,7 +62,7 @@
+       and "a[i] := (v[i]-velocity_before[i])/cycle_dt;" in gen, "feed velocity/acceleration are finite differences")
+ check("path_speed := delta_sigma/cycle_dt;" in gen and "limited := delta_sigma < delta_sigma_des;" in gen,
+       "executed path speed and limited flag")
+-check("[24,10,10,10,10]" in decl, "joint caps 24 mm/s, 10/10/10/10 deg/s")
++check("[24,30,30,30,30]" in decl, "joint caps 24 mm/s, 30/30/30/30 deg/s")
+ check("TOOL_LATERAL_OFFSET_MM : LREAL := 456.3;" in decl
+       and "TOOL_LENGTH_MM : LREAL := 554.5;" in decl, "TCP tool offsets match kinematics.h in millimetres")
+ check("IF latched_mode = 5 THEN" in gen
+@@ -102,7 +102,11 @@
+ for name in ["ArmCartJogGen.TcPOU", "ArmManual.TcPOU"]:
+     working = (plc / "POUs" / name).read_text(encoding="utf-8-sig").replace("\r\n", "\n")
+     before = subprocess.check_output(["git", "show", "713d8830aaf04cd23b1547c3f0da03528f5c5d94:介入机器人/C从端/250902/Untitled2/POUs/" + name], cwd=repo).decode("utf-8-sig").replace("\r\n", "\n")
+-    check(working == before, name + " unchanged from pre-round4 (line endings normalized)")
++    if name == "ArmCartJogGen.TcPOU":
++        # 接受极简轮零位和本轮限速两处规定改动；其余旧算法因DLS停项而保持逐字一致。
++        before = before.replace("[24,10,10,10,10]", "[24,30,30,30,30]").replace(
++            "psi0 := anchor[2]+anchor[3]+anchor[4]-90.0;", "psi0 := anchor[2]+anchor[3]+anchor[4];")
++    check(working == before, name + " matches pre-round4 after the accepted zero/cap changes (line endings normalized)")
+ check("IF G.arm_curve_owned OR G.arm_cjog_owned THEN" in manual
+       and "reset_exec[i] := TRUE;" in manual
+       and "Execute:=reset_exec[i] AND (axis_state[i] = 0)" in manual,
+diff --git "a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/kinematics_test.cpp" "b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/kinematics_test.cpp"
+--- "a/介入机器人/B数据端/工程/PositioningArmKinematics/tests/kinematics_test.cpp"
++++ "b/介入机器人/B数据端/工程/PositioningArmKinematics/tests/kinematics_test.cpp"
+@@ -123,18 +123,18 @@
+             PositioningArmKinematics arm(fixture());
+             auto q = JointVector::Zero().eval(); q[0] = 0.1;
+             auto pose = arm.forward(q);
+-            check((pose.position - Eigen::Vector3d(-0.5545, -0.4763, 0.1)).norm() < 1e-12,
++            check((pose.position - Eigen::Vector3d(0.4563, -0.5745, 0.1)).norm() < 1e-12,
+                 "Wrong mechanical-zero L geometry");
+             pose = arm.forward(home());
+-            check((pose.position - Eigen::Vector3d(-0.5545, -0.4763, 0.1)).norm() < 1e-12,
++            check((pose.position - Eigen::Vector3d(0.4563, -0.5745, 0.1)).norm() < 1e-12,
+                 "Wrong program-zero geometry");
+             check(pose.quaternion.angularDistance(
+-                Eigen::Quaterniond(Eigen::AngleAxisd(-Pi / 2, Eigen::Vector3d::UnitZ()))) < 1e-12,
++                Eigen::Quaterniond::Identity()) < 1e-12,
+                 "Mechanical-zero tool axes not aligned");
+             q = home(); q[4] = -30 * Degree;
+             pose = arm.forward(q);
+             check(std::abs(pose.position.z() - 0.37725) < 1e-12, "Negative pitch did not lift tip");
+-            check(std::abs(pose.position.x() + 0.480211086398471) < 1e-12,
++            check(std::abs(pose.position.y() + 0.500211086398471) < 1e-12,
+                 "Pitch changed lateral offset");
+             check(arm.degreesOfFreedom() == 5, "Wrong DOF");
+         }},
+diff --git "a/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJogGen.TcPOU" "b/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJogGen.TcPOU"
+--- "a/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJogGen.TcPOU"
++++ "b/介入机器人/C从端/250902/Untitled2/POUs/ArmCartJogGen.TcPOU"
+@@ -30,7 +30,7 @@
+     T_DEC : LREAL := 0.5;
+     INITIAL_BRANCH : INT := 1;
+     BISECTION_COUNT : INT := 12;
+-    JOINT_VCAP : ARRAY[1..5] OF LREAL := [24,10,10,10,10]; // 毫米/秒、度/秒
++    JOINT_VCAP : ARRAY[1..5] OF LREAL := [24,30,30,30,30]; // 毫米/秒、度/秒
+ END_VAR
+ VAR
+     anchor : ARRAY[1..5] OF LREAL;
+diff --git "a/介入机器人/docs/revision_round7_20261109/dls_candidate/ArmCartJogGen.TcPOU" "b/介入机器人/docs/revision_round7_20261109/dls_candidate/ArmCartJogGen.TcPOU"
+new file mode 100644
+--- /dev/null
++++ "b/介入机器人/docs/revision_round7_20261109/dls_candidate/ArmCartJogGen.TcPOU"
+@@ -0,0 +1,157 @@
++<?xml version="1.0" encoding="utf-8"?>
++<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
++  <POU Name="ArmCartJogGen" Id="{721fd06a-290f-4fa0-98ad-8295ece245f4}" SpecialFunc="None">
++    <Declaration><![CDATA[FUNCTION_BLOCK ArmCartJogGen
++VAR_INPUT
++    start : BOOL;
++    held : BOOL;
++    mode : INT;
++    dir : INT;
++    speed : LREAL;
++    seed : ARRAY[1..5] OF LREAL;
++    cycle_dt : LREAL;
++END_VAR
++VAR_OUTPUT
++    p : ARRAY[1..5] OF LREAL;
++    v : ARRAY[1..5] OF LREAL;
++    a : ARRAY[1..5] OF LREAL;
++    path_speed : LREAL;
++    target_speed : LREAL;
++    limited : BOOL;
++END_VAR
++VAR CONSTANT
++    PI : LREAL := 3.14159265358979323846;
++    RAD : LREAL := PI / 180.0;
++    L1 : LREAL := 200.0; // 毫米，取自kinematics.h
++    L2 : LREAL := 180.0;
++    TOOL_LATERAL_OFFSET_MM : LREAL := 456.3;
++    TOOL_LENGTH_MM : LREAL := 554.5;
++    T_ACC : LREAL := 1.0; // 秒
++    T_DEC : LREAL := 0.5;
++    JOINT_VCAP : ARRAY[1..5] OF LREAL := [24,30,30,30,30]; // 毫米/秒、度/秒
++    DLS_PSI_WEIGHT : LREAL := 200.0; // 毫米/弧度
++    DLS_S0 : LREAL := 0.5;
++    DLS_LAMBDA_MAX : LREAL := 30.0; // 毫米
++END_VAR
++VAR
++    anchor : ARRAY[1..5] OF LREAL;
++    position_before, velocity_before, qdot : ARRAY[1..5] OF LREAL;
++    path_v, path_v_previous, v0, v1, tau, sigma : LREAL;
++    duration : LREAL := T_ACC;
++    latched_mode, latched_dir : INT;
++    reanchor : BOOL;
++    i, j : INT;
++    u, delta_sigma_des, delta_sigma, signed_path : LREAL;
++    q2, q3, q4, psi, tool_y, s, lambda, ratio, scale : LREAL;
++    j11, j12, j13, j21, j22, j23 : LREAL;
++    m11, m12, m13, m22, m23, m33 : LREAL;
++    c11, c12, c13, c22, c23, c33, det : LREAL;
++    task_x, task_y, task_psi, z1, z2, z3 : LREAL;
++END_VAR]]></Declaration>
++    <Implementation>
++      <ST><![CDATA[// 输入速度采用平滑曲线，路径增量用相邻周期速度的梯形积分。
++reanchor := start;
++IF start THEN
++    p := seed;
++    FOR i := 1 TO 5 DO v[i] := 0; a[i] := 0; END_FOR
++    path_v := 0; v0 := 0; v1 := 0; tau := 0; duration := T_ACC;
++    latched_mode := mode; latched_dir := dir;
++END_IF
++position_before := p; velocity_before := v; path_v_previous := path_v;
++target_speed := 0;
++IF held AND (mode = latched_mode) AND (dir = latched_dir) THEN target_speed := speed; END_IF
++IF target_speed <> v1 THEN
++    v0 := path_v; v1 := target_speed;
++    IF v1 > v0 THEN duration := T_ACC; ELSE duration := T_DEC; END_IF
++    tau := 0;
++END_IF
++IF NOT start THEN tau := tau + cycle_dt; END_IF
++u := MIN(1.0, tau / duration);
++path_v := v0 + (v1-v0)*(3.0*u*u-2.0*u*u*u);
++// 模式或方向变化在曲线零速点重新锚定。
++IF (path_v = 0) AND (v1 = 0) AND held
++    AND ((mode <> latched_mode) OR (dir <> latched_dir)) THEN reanchor := TRUE; END_IF
++IF reanchor THEN
++    anchor := p; latched_mode := mode; latched_dir := dir; sigma := 0;
++END_IF
++limited := FALSE;
++IF start THEN path_speed := 0; target_speed := 0; RETURN; END_IF
++IF (latched_mode = 3) OR (latched_mode = 4) THEN
++    // Z和俯仰保留原单轴梯形积分。
++    delta_sigma_des := 0.5*(path_v_previous+path_v)*cycle_dt;
++    IF latched_mode = 3 THEN j := 1; ELSE j := 5; END_IF
++    delta_sigma := MIN(delta_sigma_des, JOINT_VCAP[j]*cycle_dt);
++    signed_path := latched_dir*(sigma+delta_sigma);
++    p := anchor;
++    p[j] := anchor[j]-signed_path;
++    sigma := sigma+delta_sigma;
++    path_speed := delta_sigma/cycle_dt;
++ELSE
++    // 对新零位正解解析求导；第三行加权偏航的三个元素均为DLS_PSI_WEIGHT。
++    q2 := p[2]*RAD; q3 := p[3]*RAD; q4 := p[4]*RAD;
++    psi := q2+q3+q4;
++    tool_y := TOOL_LENGTH_MM*COS(anchor[5]*RAD);
++    j13 := -TOOL_LATERAL_OFFSET_MM*SIN(psi)+tool_y*COS(psi);
++    j23 := TOOL_LATERAL_OFFSET_MM*COS(psi)+tool_y*SIN(psi);
++    j12 := L2*COS(q2+q3+PI)+j13;
++    j22 := L2*SIN(q2+q3+PI)+j23;
++    j11 := L1*COS(q2)+j12;
++    j21 := L1*SIN(q2)+j22;
++    s := ABS(SIN(q3));
++    lambda := 0;
++    IF s < DLS_S0 THEN
++        ratio := s/DLS_S0;
++        lambda := DLS_LAMBDA_MAX*SQRT(1.0-ratio*ratio);
++    END_IF
++    m11 := j11*j11+j12*j12+j13*j13+lambda*lambda;
++    m12 := j11*j21+j12*j22+j13*j23;
++    m13 := DLS_PSI_WEIGHT*(j11+j12+j13);
++    m22 := j21*j21+j22*j22+j23*j23+lambda*lambda;
++    m23 := DLS_PSI_WEIGHT*(j21+j22+j23);
++    m33 := 3.0*DLS_PSI_WEIGHT*DLS_PSI_WEIGHT+lambda*lambda;
++    // 对称3×3矩阵的伴随矩阵和行列式。
++    c11 := m22*m33-m23*m23;
++    c12 := m13*m23-m12*m33;
++    c13 := m12*m23-m13*m22;
++    c22 := m11*m33-m13*m13;
++    c23 := m12*m13-m11*m23;
++    c33 := m11*m22-m12*m12;
++    det := m11*c11+m12*c12+m13*c13;
++    task_x := 0; task_y := 0; task_psi := 0;
++    IF latched_mode = 1 THEN task_x := latched_dir*path_v;
++    ELSIF latched_mode = 2 THEN task_y := latched_dir*path_v;
++    ELSE task_psi := DLS_PSI_WEIGHT*latched_dir*path_v*RAD; END_IF
++    z1 := (c11*task_x+c12*task_y+c13*task_psi)/det;
++    z2 := (c12*task_x+c22*task_y+c23*task_psi)/det;
++    z3 := (c13*task_x+c23*task_y+c33*task_psi)/det;
++    qdot[2] := j11*z1+j21*z2+DLS_PSI_WEIGHT*z3;
++    qdot[3] := j12*z1+j22*z2+DLS_PSI_WEIGHT*z3;
++    qdot[4] := j13*z1+j23*z2+DLS_PSI_WEIGHT*z3;
++    scale := 1.0;
++    FOR i := 2 TO 4 DO
++        IF ABS(qdot[i]) > JOINT_VCAP[i]*RAD THEN
++            scale := MIN(scale, JOINT_VCAP[i]*RAD/ABS(qdot[i]));
++        END_IF
++    END_FOR
++    p[1] := anchor[1]; p[5] := anchor[5];
++    FOR i := 2 TO 4 DO
++        qdot[i] := scale*qdot[i];
++        p[i] := p[i]+qdot[i]*cycle_dt/RAD;
++    END_FOR
++    IF latched_mode = 1 THEN
++        path_speed := latched_dir*(j11*qdot[2]+j12*qdot[3]+j13*qdot[4]);
++    ELSIF latched_mode = 2 THEN
++        path_speed := latched_dir*(j21*qdot[2]+j22*qdot[3]+j23*qdot[4]);
++    ELSE
++        path_speed := (qdot[2]+qdot[3]+qdot[4])/RAD;
++    END_IF
++    sigma := sigma+path_speed*cycle_dt;
++    limited := (lambda > 0) AND (path_v > 0);
++END_IF
++FOR i := 1 TO 5 DO
++    v[i] := (p[i]-position_before[i])/cycle_dt;
++    a[i] := (v[i]-velocity_before[i])/cycle_dt;
++END_FOR]]></ST>
++    </Implementation>
++  </POU>
++</TcPlcObject>
+diff --git "a/介入机器人/docs/revision_round7_20261109/dls_candidate/arm_cart_jog_reference.h" "b/介入机器人/docs/revision_round7_20261109/dls_candidate/arm_cart_jog_reference.h"
+new file mode 100644
+--- /dev/null
++++ "b/介入机器人/docs/revision_round7_20261109/dls_candidate/arm_cart_jog_reference.h"
+@@ -0,0 +1,130 @@
++#pragma once
++#include <array>
++#include <algorithm>
++#include <cmath>
++
++// 与ArmCartJogGen保持同一算术顺序；位置为毫米/度，内部关节速度为弧度/秒。
++struct ArmCartJogReference {
++    static constexpr double PI = 3.14159265358979323846;
++    static constexpr double RAD = PI / 180.0;
++    static constexpr double L1 = 200.0, L2 = 180.0;
++    static constexpr double TOOL_LATERAL_OFFSET_MM = 456.3;
++    static constexpr double TOOL_LENGTH_MM = 554.5;
++    static constexpr double T_ACC = 1.0, T_DEC = 0.5;
++    static constexpr std::array<double, 5> JOINT_VCAP{{24,30,30,30,30}};
++    static constexpr double DLS_PSI_WEIGHT = 200.0;
++    static constexpr double DLS_S0 = 0.5;
++    static constexpr double DLS_LAMBDA_MAX = 30.0;
++    std::array<double, 5> p{}, v{}, a{}, anchor{}, qdot{};
++    double path_speed = 0, target_speed = 0, path_v = 0, path_v_previous = 0;
++    double v0 = 0, v1 = 0, duration = T_ACC, tau = 0, sigma = 0;
++    double q2 = 0, q3 = 0, q4 = 0, psi = 0, tool_y = 0, s = 0, lambda = 0, ratio = 0, scale = 0;
++    double j11 = 0, j12 = 0, j13 = 0, j21 = 0, j22 = 0, j23 = 0;
++    double m11 = 0, m12 = 0, m13 = 0, m22 = 0, m23 = 0, m33 = 0;
++    double c11 = 0, c12 = 0, c13 = 0, c22 = 0, c23 = 0, c33 = 0, det = 0;
++    double task_x = 0, task_y = 0, task_psi = 0, z1 = 0, z2 = 0, z3 = 0;
++    int latched_mode = 0, latched_dir = 0;
++    bool limited = false;
++
++    void step(bool start, bool held, int mode, int dir, double speed,
++        const std::array<double, 5>& seed, double dt)
++    {
++        bool reanchor = start;
++        if (start) {
++            p = seed;
++            for (int i = 0; i < 5; ++i) { v[i] = 0; a[i] = 0; }
++            path_v = 0; v0 = 0; v1 = 0; tau = 0; duration = T_ACC;
++            latched_mode = mode; latched_dir = dir;
++        }
++        const auto position_before = p;
++        const auto velocity_before = v;
++        path_v_previous = path_v;
++        target_speed = 0;
++        if (held && mode == latched_mode && dir == latched_dir) target_speed = speed;
++        if (target_speed != v1) {
++            v0 = path_v; v1 = target_speed;
++            duration = v1 > v0 ? T_ACC : T_DEC;
++            tau = 0;
++        }
++        if (!start) tau = tau + dt;
++        const double u = std::min(1.0, tau / duration);
++        path_v = v0 + (v1-v0)*(3.0*u*u-2.0*u*u*u);
++        if (path_v == 0 && v1 == 0 && held
++            && (mode != latched_mode || dir != latched_dir)) reanchor = true;
++        if (reanchor) {
++            anchor = p; latched_mode = mode; latched_dir = dir; sigma = 0;
++        }
++        limited = false;
++        if (start) { path_speed = 0; target_speed = 0; return; }
++        if (latched_mode == 3 || latched_mode == 4) {
++            const double delta_sigma_des = 0.5*(path_v_previous+path_v)*dt;
++            const int j = latched_mode == 3 ? 0 : 4;
++            const double delta_sigma = std::min(delta_sigma_des, JOINT_VCAP[j]*dt);
++            const double signed_path = latched_dir*(sigma+delta_sigma);
++            p = anchor;
++            p[j] = anchor[j]-signed_path;
++            sigma = sigma+delta_sigma;
++            path_speed = delta_sigma/dt;
++        } else {
++            q2 = p[1]*RAD; q3 = p[2]*RAD; q4 = p[3]*RAD;
++            psi = q2+q3+q4;
++            tool_y = TOOL_LENGTH_MM*std::cos(anchor[4]*RAD);
++            j13 = -TOOL_LATERAL_OFFSET_MM*std::sin(psi)+tool_y*std::cos(psi);
++            j23 = TOOL_LATERAL_OFFSET_MM*std::cos(psi)+tool_y*std::sin(psi);
++            j12 = L2*std::cos(q2+q3+PI)+j13;
++            j22 = L2*std::sin(q2+q3+PI)+j23;
++            j11 = L1*std::cos(q2)+j12;
++            j21 = L1*std::sin(q2)+j22;
++            s = std::abs(std::sin(q3));
++            lambda = 0;
++            if (s < DLS_S0) {
++                ratio = s/DLS_S0;
++                lambda = DLS_LAMBDA_MAX*std::sqrt(1.0-ratio*ratio);
++            }
++            m11 = j11*j11+j12*j12+j13*j13+lambda*lambda;
++            m12 = j11*j21+j12*j22+j13*j23;
++            m13 = DLS_PSI_WEIGHT*(j11+j12+j13);
++            m22 = j21*j21+j22*j22+j23*j23+lambda*lambda;
++            m23 = DLS_PSI_WEIGHT*(j21+j22+j23);
++            m33 = 3.0*DLS_PSI_WEIGHT*DLS_PSI_WEIGHT+lambda*lambda;
++            c11 = m22*m33-m23*m23;
++            c12 = m13*m23-m12*m33;
++            c13 = m12*m23-m13*m22;
++            c22 = m11*m33-m13*m13;
++            c23 = m12*m13-m11*m23;
++            c33 = m11*m22-m12*m12;
++            det = m11*c11+m12*c12+m13*c13;
++            task_x = 0; task_y = 0; task_psi = 0;
++            if (latched_mode == 1) task_x = latched_dir*path_v;
++            else if (latched_mode == 2) task_y = latched_dir*path_v;
++            else task_psi = DLS_PSI_WEIGHT*latched_dir*path_v*RAD;
++            z1 = (c11*task_x+c12*task_y+c13*task_psi)/det;
++            z2 = (c12*task_x+c22*task_y+c23*task_psi)/det;
++            z3 = (c13*task_x+c23*task_y+c33*task_psi)/det;
++            qdot[1] = j11*z1+j21*z2+DLS_PSI_WEIGHT*z3;
++            qdot[2] = j12*z1+j22*z2+DLS_PSI_WEIGHT*z3;
++            qdot[3] = j13*z1+j23*z2+DLS_PSI_WEIGHT*z3;
++            scale = 1.0;
++            for (int i = 1; i <= 3; ++i)
++                if (std::abs(qdot[i]) > JOINT_VCAP[i]*RAD)
++                    scale = std::min(scale, JOINT_VCAP[i]*RAD/std::abs(qdot[i]));
++            p[0] = anchor[0]; p[4] = anchor[4];
++            for (int i = 1; i <= 3; ++i) {
++                qdot[i] = scale*qdot[i];
++                p[i] = p[i]+qdot[i]*dt/RAD;
++            }
++            if (latched_mode == 1)
++                path_speed = latched_dir*(j11*qdot[1]+j12*qdot[2]+j13*qdot[3]);
++            else if (latched_mode == 2)
++                path_speed = latched_dir*(j21*qdot[1]+j22*qdot[2]+j23*qdot[3]);
++            else
++                path_speed = (qdot[1]+qdot[2]+qdot[3])/RAD;
++            sigma = sigma+path_speed*dt;
++            limited = lambda > 0 && path_v > 0;
++        }
++        for (int i = 0; i < 5; ++i) {
++            v[i] = (p[i]-position_before[i])/dt;
++            a[i] = (v[i]-velocity_before[i])/dt;
++        }
++    }
++};
+diff --git "a/介入机器人/docs/revision_round7_20261109/dls_candidate/dls_acceptance.cpp" "b/介入机器人/docs/revision_round7_20261109/dls_candidate/dls_acceptance.cpp"
+new file mode 100644
+--- /dev/null
++++ "b/介入机器人/docs/revision_round7_20261109/dls_candidate/dls_acceptance.cpp"
+@@ -0,0 +1,308 @@
++#include "positioning_arm/kinematics.h"
++#include "arm_cart_jog_reference.h"
++#include "arm_cart_jog_st_generated.h"
++#include <Eigen/Cholesky>
++#include <fstream>
++#include <iomanip>
++#include <iostream>
++#include <random>
++#include <string>
++
++using Gen = ArmCartJogReference;
++using Axes = std::array<double, 5>;
++constexpr double DT = .001;
++int failures = 0;
++std::uint64_t cycles = 0;
++double st_difference = 0, velocity_difference = 0, max_velocity = 0, max_acceleration = 0;
++double independent_error = 0;
++bool finite = true, caps = true, discrete = true;
++std::string acceleration_case;
++int acceleration_axis = 0, acceleration_cycle = 0;
++
++positioning_arm::ArmKinematicConfig config()
++{
++    positioning_arm::ArmKinematicConfig c;
++    c.lower.setConstant(-std::numeric_limits<double>::infinity());
++    c.upper.setConstant(std::numeric_limits<double>::infinity());
++    c.max_velocity.setConstant(100);
++    for (int i = 0; i < 5; ++i) c.calibration[i] = {0, i == 0 ? .001 : Gen::RAD, 1};
++    return c;
++}
++positioning_arm::JointVector joints(const Axes& p)
++{
++    positioning_arm::JointVector q;
++    for (int i = 0; i < 5; ++i) q[i] = p[i]*(i == 0 ? .001 : Gen::RAD);
++    return q;
++}
++double yaw(const Axes& p) { return p[1]+p[2]+p[3]; }
++void result(const std::string& id, bool pass)
++{
++    std::cout << (pass ? "PASS " : "FAIL ") << id << '\n';
++    if (!pass) ++failures;
++}
++struct Run {
++    Gen g;
++    StCartJog st;
++    Axes seed;
++    std::array<double, 6> st_seed;
++    std::string name;
++    int n = 0;
++    double nominal = 0, integral = 0, peak_a = 0, minimum_scale = 1;
++    bool damped = false;
++    int peak_axis = 0, peak_cycle = 0;
++    double peak_s = 0, peak_lambda = 0, peak_previous_v = 0, peak_v = 0, peak_q3 = 0;
++    Run(const std::string& label, const Axes& p, int mode, int dir, double speed)
++        : seed(p), st_seed{{0,p[0],p[1],p[2],p[3],p[4]}}, name(label)
++    {
++        g.step(true, false, mode, dir, speed, seed, DT);
++        st.step(true, false, mode, dir, speed, st_seed, DT);
++    }
++    void tick(bool held, int mode, int dir, double speed)
++    {
++        const auto before = g.p;
++        const auto before_v = g.v;
++        g.step(false, held, mode, dir, speed, seed, DT);
++        st.step(false, held, mode, dir, speed, st_seed, DT);
++        ++n; ++cycles;
++        nominal += g.path_v*DT;
++        integral += g.path_speed*DT;
++        damped = damped || g.limited;
++        minimum_scale = std::min(minimum_scale, g.scale);
++        for (int i = 0; i < 5; ++i) {
++            for (const auto& pair : {std::pair<double,double>{g.p[i],st.p[i+1]},
++                {g.v[i],st.v[i+1]},{g.a[i],st.a[i+1]}})
++                st_difference = std::max(st_difference,std::abs(pair.first-pair.second));
++            velocity_difference = std::max(velocity_difference,std::abs(g.v[i]-(g.p[i]-before[i])/DT));
++            caps = caps && std::abs(g.v[i]) <= Gen::JOINT_VCAP[i]*(1+1e-9);
++            finite = finite && std::isfinite(g.p[i]) && std::isfinite(g.v[i]) && std::isfinite(g.a[i]);
++            max_velocity = std::max(max_velocity,std::abs(g.v[i]));
++            if (std::abs(g.a[i]) > peak_a) {
++                peak_a = std::abs(g.a[i]); peak_axis=i+1; peak_cycle=n;
++                peak_s=g.s; peak_lambda=g.lambda; peak_previous_v=before_v[i]; peak_v=g.v[i]; peak_q3=before[2];
++            }
++            if (std::abs(g.a[i]) > max_acceleration) {
++                max_acceleration=std::abs(g.a[i]); acceleration_case=name; acceleration_axis=i+1; acceleration_cycle=n;
++            }
++        }
++        if (mode == 1 || mode == 2 || mode == 5) {
++            Eigen::Matrix3d j;
++            j << g.j11,g.j12,g.j13,g.j21,g.j22,g.j23,
++                 Gen::DLS_PSI_WEIGHT,Gen::DLS_PSI_WEIGHT,Gen::DLS_PSI_WEIGHT;
++            const Eigen::Vector3d task(g.task_x,g.task_y,g.task_psi);
++            const Eigen::Matrix3d m=j*j.transpose()+g.lambda*g.lambda*Eigen::Matrix3d::Identity();
++            Eigen::Vector3d expected=j.transpose()*m.ldlt().solve(task);
++            double scale=1;
++            for(int axis=0;axis<3;++axis)
++                if(std::abs(expected[axis])>Gen::JOINT_VCAP[axis+1]*Gen::RAD)
++                    scale=std::min(scale,Gen::JOINT_VCAP[axis+1]*Gen::RAD/std::abs(expected[axis]));
++            expected*=scale;
++            for(int axis=0;axis<3;++axis)
++                independent_error=std::max(independent_error,std::abs(g.qdot[axis+1]-expected[axis]));
++            if (std::abs(g.a[2]) > 200 && std::abs(g.a[2]) == max_acceleration) {
++                std::cout<<"ACC_EVIDENCE case="<<name<<" cycle="<<n<<" q3_before="<<before[2]
++                    <<" q3_after="<<g.p[2]<<" seed_q2="<<seed[1]<<" seed_q3="<<seed[2]<<" seed_q4="<<seed[3]<<" seed_q5="<<seed[4]<<" s="<<g.s<<" lambda="<<g.lambda
++                    <<" previous_v3="<<before_v[2]<<" v3="<<g.v[2]<<" a3="<<g.a[2]<<'\n';
++            }
++        }
++        for (const auto& pair : {std::pair<double,double>{g.path_speed,st.path_speed},
++            {g.path_v,st.path_v},{g.target_speed,st.target_speed},{g.lambda,st.lambda},
++            {g.scale,st.scale},{g.sigma,st.sigma},{g.tau,st.tau},{g.duration,st.duration}})
++            st_difference=std::max(st_difference,std::abs(pair.first-pair.second));
++        discrete = discrete && g.limited == st.limited && g.latched_mode == st.latched_mode && g.latched_dir == st.latched_dir;
++        finite = finite && std::isfinite(g.path_speed) && std::isfinite(g.det);
++    }
++};
++
++int main(int argc, char** argv)
++{
++    std::cout << std::setprecision(17);
++    static_assert(Gen::DLS_PSI_WEIGHT == StCartJog::DLS_PSI_WEIGHT);
++    static_assert(Gen::DLS_S0 == StCartJog::DLS_S0);
++    static_assert(Gen::DLS_LAMBDA_MAX == StCartJog::DLS_LAMBDA_MAX);
++    static_assert(Gen::T_ACC == StCartJog::T_ACC && Gen::T_DEC == StCartJog::T_DEC);
++    for (int i=0;i<5;++i) if (Gen::JOINT_VCAP[i] != StCartJog::JOINT_VCAP[i+1]) return 2;
++    positioning_arm::PositioningArmKinematics truth(config());
++    std::mt19937 rng(20261109);
++    auto random = [&] { return (static_cast<double>(rng())/4294967295.0)*360-180; };
++    double jacobian_error=0;
++    for (int sample=0;sample<1000;++sample) {
++        Axes p{{100,random(),random(),random(),random()/3}};
++        Gen g; g.step(true,false,1,1,5,p,DT); g.step(false,false,1,1,5,p,DT);
++        const double j[3][3]={{g.j11,g.j12,g.j13},{g.j21,g.j22,g.j23},{1,1,1}};
++        for(int axis=0;axis<3;++axis) {
++            auto plus=joints(p), minus=plus;
++            constexpr double eps=1e-5;
++            plus[axis+1]+=eps; minus[axis+1]-=eps;
++            const auto a=truth.forward(plus), b=truth.forward(minus);
++            const auto d=(a.position-b.position)/(2*eps)*1000;
++            const Eigen::Vector3d ua=a.quaternion*Eigen::Vector3d::UnitX(), ub=b.quaternion*Eigen::Vector3d::UnitX();
++            const double dpsi=std::remainder(std::atan2(ua.y(),ua.x())-std::atan2(ub.y(),ub.x()),2*Gen::PI)/(2*eps);
++            jacobian_error=std::max({jacobian_error,std::abs(j[0][axis]-d.x()),std::abs(j[1][axis]-d.y()),std::abs(1-dpsi)});
++        }
++    }
++    std::cout<<"E1 samples=1000 max_error="<<jacobian_error<<'\n';
++    result("E1",jacobian_error<=1e-6);
++    std::ofstream csv(argc>1?argv[1]:"dls_cases.csv");
++    csv<<std::setprecision(17)<<"id,elbow,q2,q4,q5,mode,dir,speed,cycles,displacement_mm,line_mm,yaw_deg,actual_integral,nominal_integral,ratio,damped,min_scale,peak_acc\n";
++    bool e2=true,e3=true,e4=true,e5=true;
++    double max_e2_line=0,max_e2_yaw=0,max_e5_drift=0,all_e2_line=0,all_e2_yaw=0;
++    int e2_far=0,e2_entered=0;
++    for (int group=2;group<=5;++group) {
++        const auto elbows=group==2?std::vector<double>{45,90,135}:group==3?std::vector<double>{0}:group==4?std::vector<double>{175}:std::vector<double>{90,0};
++        for(double elbow:elbows) for(double q5:group==2?std::vector<double>{0,30,-30}:std::vector<double>{0})
++        for(int sample=0;sample<(group==2?16:1);++sample) for(int mode:group==5?std::vector<int>{5}:std::vector<int>{1,2})
++        for(int dir:{1,-1}) for(double speed:group==5?std::vector<double>{.8,2.4}:std::vector<double>{5,30}) {
++            // 按任务中的实际关节q3角度取姿态；q3=0为机械零位。
++            Axes p=elbow==0?Axes{{0,0,0,0,0}}:
++                Axes{{100,group==2?random():0,elbow,group==2?random():-elbow,q5}};
++            if (group==4) {
++                const double wx=Gen::L2*std::sin(elbow*Gen::RAD+Gen::PI);
++                const double wy=-Gen::L1-Gen::L2*std::cos(elbow*Gen::RAD+Gen::PI);
++                p[1]=-std::atan2(wy,wx)/Gen::RAD;
++                p[3]=-p[1]-p[2]; // 腕点径向沿+X；X+向外，Y为切向。
++            }
++            const std::string id="E"+std::to_string(group);
++            Run r(id,p,mode,dir,speed);
++            const auto initial=truth.forward(joints(p));
++            double line=0,drift=0,yaw_error=0;
++            const int steps=group==2?3500:3000;
++            for(int n=1;n<=steps;++n) {
++                r.tick(n<=3000,mode,dir,speed);
++                const auto fk=truth.forward(joints(r.g.p));
++                if(mode!=5)line=std::max(line,std::abs(fk.position[mode==1?1:0]-initial.position[mode==1?1:0])*1000);
++                drift=std::max(drift,(fk.position-initial.position).norm()*1000);
++                yaw_error=std::max(yaw_error,std::abs(yaw(r.g.p)-yaw(p)));
++            }
++            const auto end=truth.forward(joints(r.g.p));
++            const double distance=mode==5?drift:dir*(end.position[mode-1]-initial.position[mode-1])*1000;
++            const double ratio=mode==5?(yaw(r.g.p)-yaw(p))/r.integral:distance/r.integral;
++            csv<<id<<','<<elbow<<','<<p[1]<<','<<p[3]<<','<<q5<<','<<mode<<','<<dir<<','<<speed<<','<<steps<<','
++                <<distance<<','<<line<<','<<yaw(r.g.p)-yaw(p)<<','<<r.integral<<','<<r.nominal<<','<<ratio<<','
++                <<r.damped<<','<<r.minimum_scale<<','<<r.peak_a<<'\n';
++            if(group==2) {
++                all_e2_line=std::max(all_e2_line,line);all_e2_yaw=std::max(all_e2_yaw,yaw_error);
++                if (!r.damped) {
++                    ++e2_far;
++                    e2=e2&&line<=.05&&yaw_error<=.01&&std::abs(ratio-1)<=.005;
++                    max_e2_line=std::max(max_e2_line,line);max_e2_yaw=std::max(max_e2_yaw,yaw_error);
++                } else ++e2_entered;
++            }
++            if(group==3) {
++                e3=e3&&distance/r.nominal>=.7;
++                std::cout<<"E3 mode="<<mode<<" dir="<<dir<<" speed="<<speed<<" displacement_mm="<<distance
++                    <<" actual_integral="<<r.integral<<" ratio="<<ratio<<" nominal_ratio="<<distance/r.nominal
++                    <<" yaw_change_deg="<<yaw(r.g.p)-yaw(p)<<" peak_acc="<<r.peak_a<<'\n';
++            }
++            if(group==4)std::cout<<"E4 q3="<<p[2]<<" q2="<<p[1]<<" q4="<<p[3]<<" radial=X+ tangent=Y mode="<<mode<<" dir="<<dir<<" speed="<<speed<<" displacement_mm="<<distance<<'\n';
++            if(group==5) {
++                if(elbow==90) { e5=e5&&drift<=.05&&std::abs(ratio-1)<=.005;max_e5_drift=std::max(max_e5_drift,drift); }
++                std::cout<<"E5 elbow="<<elbow<<" dir="<<dir<<" speed="<<speed<<" drift_mm="<<drift
++                    <<" yaw_change_deg="<<yaw(r.g.p)-yaw(p)<<" integral_deg="<<r.integral<<'\n';
++            }
++        }
++    }
++    std::cout<<"E2 far_cases="<<e2_far<<" entered_damping_cases="<<e2_entered<<" max_line_mm="<<max_e2_line<<" max_yaw_deg="<<max_e2_yaw<<'\n';
++    result("E2",e2);result("E3",e3&&caps&&finite);result("E4",e4&&caps&&finite);result("E5",e5);
++    bool crossed=false;double boundary_acc=0;
++    for(int mode:{1,2})for(int dir:{-1,1}) {
++        Run r("E6",Axes{{100,0,40,0,0}},mode,dir,30);
++        bool outside=false,inside=false;
++        for(int n=0;n<6000;++n) {
++            r.tick(true,mode,dir,30);
++            outside=outside||r.g.s>=Gen::DLS_S0;
++            inside=inside||r.g.s<Gen::DLS_S0;
++        }
++        if(outside&&inside) {crossed=true;boundary_acc=std::max(boundary_acc,r.peak_a);}
++        std::cout<<"E6 mode="<<mode<<" dir="<<dir<<" crossed="<<(outside&&inside)<<" peak_acc="<<r.peak_a<<'\n';
++    }
++    int boundary_cases=0;
++    for(int q2=-180;q2<180;q2+=30)for(int q4=-180;q4<180;q4+=30)
++    for(int mode:{1,2})for(int dir:{-1,1}) {
++        Run r("E6_SCAN",Axes{{100,double(q2),40,double(q4),0}},mode,dir,30);
++        bool inside=false;
++        for(int n=0;n<6000;++n) {r.tick(true,mode,dir,30);inside=inside||r.g.s<Gen::DLS_S0;}
++        if(inside) {
++            ++boundary_cases;
++            if(r.peak_a>boundary_acc) {
++                boundary_acc=r.peak_a;crossed=true;
++                std::cout<<"E6_SCAN_PEAK q2="<<q2<<" q3=40 q4="<<q4<<" mode="<<mode<<" dir="<<dir
++                    <<" peak_acc="<<r.peak_a<<" axis="<<r.peak_axis<<" cycle="<<r.peak_cycle<<" q3_before="<<r.peak_q3
++                    <<" s="<<r.peak_s<<" lambda="<<r.peak_lambda<<" previous_v="<<r.peak_previous_v<<" v="<<r.peak_v<<'\n';
++            }
++        }
++    }
++    std::cout<<"E6_SCAN poses=144 runs=576 entered_damping="<<boundary_cases<<'\n';
++    std::cout<<"E6 crossed="<<crossed<<" peak_acc_deg_s2="<<boundary_acc<<'\n';
++    result("E6",crossed&&boundary_acc<=200);
++    // 复用原T3/T5/T6/T7/T8的输入时序与物理阈值；浮点速度以1e-9识别到达目标。
++    bool e7=true;
++    const Axes curve_seed{{100,0,90,-90,0}};
++    Run t3("T3",curve_seed,1,1,5);
++    double previous=0,peak=0;bool monotonic=true;int rise=0,stop=0;
++    for(int n=1;n<=2000;++n) {
++        t3.tick(true,1,1,5);
++        monotonic=monotonic&&t3.g.path_speed>=previous-1e-9;
++        peak=std::max(peak,(t3.g.path_speed-previous)/DT);previous=t3.g.path_speed;
++        if(std::abs(t3.g.path_speed-5)<1e-9&&rise==0)rise=n;
++    }
++    const double start_integral=t3.integral;
++    for(int n=1;n<=501;++n) {t3.tick(false,0,0,0);if(std::abs(t3.g.path_speed)<1e-9&&stop==0)stop=n;}
++    bool pass=monotonic&&std::abs(rise-1000)<=1&&std::abs(stop-500)<=1&&std::abs(peak-7.5)<=.075
++        &&std::abs(t3.integral-start_integral-1.25)<=1.25*.005&&!t3.damped;
++    e7=e7&&pass;result("T3",pass);
++    std::cout<<"T3 rise="<<rise<<" stop="<<stop<<" peak_mm_s2="<<peak<<" stopping_mm="<<t3.integral-start_integral<<'\n';
++    Run t5("T5",curve_seed,1,1,15);int up=0,down=0;bool positive=true;
++    for(int n=1;n<=5000;++n) {
++        const double speed=n<=2000?15:n<=4000?30:5;t5.tick(true,1,1,speed);
++        positive=positive&&t5.g.path_speed>0;
++        if(n>2000&&n<=4000&&std::abs(t5.g.path_speed-30)<1e-9&&up==0)up=n-2000;
++        if(n>4000&&std::abs(t5.g.path_speed-5)<1e-9&&down==0)down=n-4000;
++    }
++    pass=positive&&std::abs(up-1000)<=1&&std::abs(down-500)<=1&&!t5.damped;
++    e7=e7&&pass;result("T5",pass);std::cout<<"T5 up="<<up<<" down="<<down<<'\n';
++    Run t6("T6",curve_seed,1,1,15);int switched=0;bool at_zero=false;
++    for(int n=1;n<=4000;++n) {
++        t6.tick(true,n<=2000?1:2,1,15);
++        if(t6.g.latched_mode==2&&switched==0) {switched=n-2000;at_zero=t6.g.path_v==0;}
++    }
++    pass=at_zero&&std::abs(switched-500)<=1&&t6.g.path_speed>0&&!t6.damped;
++    e7=e7&&pass;result("T6",pass);std::cout<<"T6 switched="<<switched<<" speed="<<t6.g.path_speed<<'\n';
++    Run t7("T7",curve_seed,1,1,5);double minimum=5,repress=0;
++    for(int n=1;n<=4000;++n) {
++        t7.tick(n<=2000||n>2200,1,1,5);
++        if(n==2200)repress=t7.g.path_speed;
++        if(n>2000)minimum=std::min(minimum,t7.g.path_speed);
++    }
++    pass=minimum>0&&std::abs(t7.g.path_speed-5)<1e-9&&!t7.damped;
++    e7=e7&&pass;result("T7",pass);std::cout<<"T7 minimum="<<minimum<<" repress="<<repress<<" final="<<t7.g.path_speed<<'\n';
++    Run t8("T8",curve_seed,1,1,5);double age=0,timeout_integral=0;int timeout=0;
++    for(int n=1;n<=3100;++n) {
++        if(n<=2000)age=0;else age+=DT;
++        const bool held=age<.5;
++        if(!held&&timeout==0) {timeout=n-2000;timeout_integral=t8.integral;}
++        t8.tick(held,1,1,5);
++    }
++    pass=timeout==500&&t8.g.path_speed==0&&std::abs(t8.integral-timeout_integral-1.25)<=1.25*.005&&!t8.damped;
++    e7=e7&&pass;result("T8",pass);std::cout<<"T8 timeout="<<timeout<<" stopping_mm="<<t8.integral-timeout_integral<<'\n';
++    result("E7",e7);
++    // Z/俯仰原T10/T12的积分、方向和其它轴保持。
++    bool t10=true;
++    for(int mode:{3,4}) {
++        const double speed=mode==3?3:1.2;
++        const Axes p{{100,20,-90,70,0}};Run r("T10",p,mode,1,speed);
++        for(int n=0;n<2000;++n)r.tick(true,mode,1,speed);
++        const int axis=mode==3?0:4;
++        for(int i=0;i<5;++i)if(i!=axis)t10=t10&&r.g.p[i]==p[i];
++        t10=t10&&std::abs(p[axis]-r.g.p[axis]-1.5*speed)<=1e-4;
++    }
++    result("T10/T12",t10);
++    std::cout<<"E8 cycles="<<cycles<<" finite="<<finite<<" caps="<<caps<<" max_velocity="<<max_velocity
++        <<" difference="<<velocity_difference<<" max_acc="<<max_acceleration<<" at="<<acceleration_case
++        <<" axis="<<acceleration_axis<<" cycle="<<acceleration_cycle<<'\n';
++    result("E8",finite&&caps&&velocity_difference<=1e-9&&max_acceleration<=300);
++    std::cout<<"E9 cycles="<<cycles<<" max_difference="<<st_difference<<" discrete_equal="<<discrete<<'\n';
++    result("E9",st_difference==0&&discrete);
++    std::cout<<"INDEPENDENT LDLT max_qdot_difference_rad_s="<<independent_error<<'\n';
++    result("INDEPENDENT",independent_error<=1e-9);
++    return failures?1:0;
++}
+diff --git "a/介入机器人/tools/revision_round7/audit_scope.py" "b/介入机器人/tools/revision_round7/audit_scope.py"
+new file mode 100644
+--- /dev/null
++++ "b/介入机器人/tools/revision_round7/audit_scope.py"
+@@ -0,0 +1,58 @@
++"""核对极简基线、停项边界、未改路径以及NC配置中的显式速度参数。"""
++from pathlib import Path
++from xml.etree import ElementTree as ET
++import hashlib
++import json
++
++repo = Path(__file__).resolve().parents[2]
++out = repo / "docs/revision_round7_20261109"
++baseline = out / "baseline"
++results = {}
++
++
++def check(label, condition):
++    assert condition, label
++    results[label] = True
++    print("PASS", label)
++
++
++def text(path):
++    return path.read_text(encoding="utf-8-sig")
++
++
++gen = "C从端/250902/Untitled2/POUs/ArmCartJogGen.TcPOU"
++reference = "B数据端/工程/PositioningArmKinematics/tests/arm_cart_jog_reference.h"
++check("PLC生产算法仅修改JOINT_VCAP", text(repo / gen).replace("[24,30,30,30,30]", "[24,10,10,10,10]") == text(baseline / gen))
++check("C++生产参考仅修改JOINT_VCAP", text(repo / reference).replace("{{24,30,30,30,30}}", "{{24,10,10,10,10}}") == text(baseline / reference))
++for name in ["ArmCartJog", "ArmCartesian"]:
++    file = "C从端/250902/Untitled2/POUs/" + name + ".TcPOU"
++    check(name + "与本轮前逐字节相同", (repo / file).read_bytes() == (baseline / file).read_bytes())
++file = "B数据端/工程/PositioningArmKinematics/src/kinematics.cpp"
++check("运动学与本轮前逐字节相同", (repo / file).read_bytes() == (baseline / file).read_bytes())
++check("极简零位已在修改前源码中", "const double tool_yaw = joints[1] + joints[2] + joints[3];" in text(baseline / file))
++panel = ET.parse(baseline / "A主端/工程/master/VI.Module.PositioningArm/PositioningArmPanel.xaml")
++named = {e.get("{http://schemas.microsoft.com/winfx/2006/xaml}Name"): e for e in panel.iter()}
++for name, direction in [("Cartesian3Forward", "-1"), ("Cartesian3Reverse", "1")]:
++    e = named[name]
++    check("极简Z轴基线 " + name, e.get("Tag") == "1" and e.get("CommandParameter") == direction and e.get("PreviewMouseLeftButtonDown") == "ArmJogButton_Down")
++code = text(baseline / "A主端/工程/master/VI.Module.PositioningArm/PositioningArmPanel.xaml.cs")
++check("极简总使能及五轴复位基线", "if (enabled) await _viewModel.SetArmManualEnableAsync(true);" in code
++    and "await _viewModel.SetArmAxisEnableAsync(axis, enabled);" in code
++    and "if (!enabled) await _viewModel.SetArmManualEnableAsync(false);" in code
++    and "await _viewModel.ResetArmAxisAsync(axis);" in code)
++for tier in ["Small", "Medium", "Large"]:
++    check("极简辅助列定宽基线 " + tier, "AuxStatusWidth" in text(baseline / ("A主端/工程/master/VI.Control/Themes/Sizes" + tier + ".xaml")))
++
++tree = ET.parse(repo / "C从端/250902/250902.tsproj")
++parents = {child: parent for parent in tree.iter() for child in parent}
++nc = {}
++for axis in tree.iter("Axis"):
++    number = int(axis.get("Id"))
++    if number in range(1, 6):
++        velocity = next(axis.iter("Velo"), None)
++        nc[number] = dict(velocity.attrib) if velocity is not None else {}
++links = [dict(owner=parents[e].get("Name"), **e.attrib) for e in tree.iter("Link") if "arm_axis[" in str(e.attrib)]
++results["nc_velocity_parameters"] = nc
++results["nc_links"] = links
++results["source_hashes"] = {file: hashlib.sha256((repo / file).read_bytes()).hexdigest() for file in [gen, reference]}
++(out / "static_audit.json").write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
+diff --git "a/介入机器人/tools/revision_round7/home_chain_simulator.cpp" "b/介入机器人/tools/revision_round7/home_chain_simulator.cpp"
+new file mode 100644
+--- /dev/null
++++ "b/介入机器人/tools/revision_round7/home_chain_simulator.cpp"
+@@ -0,0 +1,93 @@
++#include "arm_ads_mock.h"
++#include "zenoh_service.h"
++#include <atomic>
++#include <filesystem>
++
++int wmain(int, wchar_t** argv)
++{
++    ZenohServiceConfig config;
++    config.endpoint = "tcp/127.0.0.1:17448";
++    config.token_path = std::filesystem::path(argv[1]).u8string();
++    config.router_path = std::filesystem::path(argv[2]).u8string();
++    CADSComm transport;
++    AdsCommunicationService ads(transport);
++    ArmManualAdsService arm(ads);
++    for (int i=1;i<=5;++i) arm.set_axis_enable(i,true);
++    arm.start();
++    ZenohService zenoh;
++    if (!zenoh.start(config)) return 1;
++    std::atomic<bool> stopped{false};
++    std::atomic<int> next_case{-1};
++    std::thread control([&] {
++        VisState state{};
++        state.ads_state=2; state.ads_actual_hz=100;
++        state.arm_snapshot_valid=true; state.self_check_done=true;
++        state.startup_completed=true; state.control_active=true;
++        RemoteExtraState extra; extra.initial_sync_done=true;
++        int scenario=-1;
++        bool announced=false;
++        auto configured=std::chrono::steady_clock::now(), moving=configured;
++        std::uint32_t moving_sequence=0;
++        while (!stopped) {
++            const auto now=std::chrono::steady_clock::now();
++            const int requested=next_case.exchange(-1);
++            if (requested>=0) {
++                arm.stop_cartesian();
++                std::lock_guard<std::mutex> lock(fake_mutex);
++                scenario=requested; announced=false; configured=now;
++                actual.fill(0); actual[0]=100;
++                actual[4]=scenario==1?0:scenario==2?61:2;
++                plc_owned=false; plc_state=0; plc_error=0; cjog_owned=scenario==4;
++            }
++            VisCommand command;
++            while (zenoh.poll_command(command)) {
++                switch (command.type) {
++                case VisCommandType::ReturnArmProgramZero:
++                    arm.request_program_zero();
++                    std::cout<<"HOME_DISPATCH case="<<scenario<<'\n'<<std::flush;
++                    break;
++                case VisCommandType::KeepArmCartesianAlive: arm.keep_cartesian_alive(); break;
++                case VisCommandType::StopArmCartesian: arm.stop_cartesian(); break;
++                default: break;
++                }
++                zenoh.command_processed();
++            }
++            {
++                std::lock_guard<std::mutex> lock(fake_mutex);
++                if (plc_owned && acknowledged!=moving_sequence) {
++                    moving_sequence=acknowledged; moving=now;
++                    std::cout<<"HOME_COMMIT case="<<scenario<<" format="<<executing_curve.values[16]
++                        <<" target="<<executing_curve.values[5]<<','<<executing_curve.values[6]<<','
++                        <<executing_curve.values[7]<<','<<executing_curve.values[8]<<','<<executing_curve.values[9]
++                        <<'\n'<<std::flush;
++                }
++                if (plc_owned && now-moving>std::chrono::milliseconds(300)) {
++                    // 仅模拟PLC的完成/拒绝反馈；曲线由生产规划器生成并通过真实ADS服务提交。
++                    plc_owned=false;
++                    if (scenario==3) {plc_state=4;plc_error=2003;}
++                    else {
++                        for(int i=0;i<5;++i)actual[i]=executing_curve.values[5+i];
++                        plc_state=2;
++                    }
++                }
++            }
++            const auto snapshot=arm.snapshot();
++            if (scenario>=0 && !announced && snapshot.valid && now-configured>std::chrono::milliseconds(200)) {
++                announced=true;
++                std::cout<<"CASE_READY "<<scenario<<'\n'<<std::flush;
++            }
++            state.arm_cartesian_status=snapshot.cartesian_status;
++            state.arm_cartesian_error=snapshot.cartesian_error;
++            zenoh.publish_state(state,extra);
++            Sleep(10);
++        }
++    });
++    std::cout<<"HOME_SIM_READY\n"<<std::flush;
++    std::string input;
++    while (std::getline(std::cin,input)) {
++        if (input=="quit") break;
++        next_case=std::stoi(input);
++    }
++    stopped=true; control.join(); arm.stop(); zenoh.stop();
++    return 0;
++}
+diff --git "a/介入机器人/tools/revision_round7/make_delivery.py" "b/介入机器人/tools/revision_round7/make_delivery.py"
+new file mode 100644
+--- /dev/null
++++ "b/介入机器人/tools/revision_round7/make_delivery.py"
+@@ -0,0 +1,325 @@
++"""从开工快照生成本轮完整源码diff和交付说明；不修改生产源码或Git索引。"""
++from pathlib import Path
++import csv
++import difflib
++import hashlib
++import json
++import re
++
++repo = Path(__file__).resolve().parents[2]
++out = repo / "docs/revision_round7_20261109"
++baseline = out / "baseline"
++package = repo.parent
++
++
++def link(label, path, line=None):
++    target = path.as_posix() + (":" + str(line) if line else "")
++    return "[" + label + "](<" + target + ">)"
++
++
++files = {}
++for old in baseline.rglob("*"):
++    if not old.is_file() or old.name == "git-status.txt":
++        continue
++    relative = old.relative_to(baseline)
++    current = (package / "protocol/fixtures/zenoh-v1" / relative.name
++        if relative.parts[0] == "protocol-fixtures" else repo / relative)
++    if current.exists() and old.read_bytes() != current.read_bytes():
++        files[current] = old.read_bytes()
++for current in [
++    repo / "A主端/工程/master/VI.Control.Tests/HomeChainChecks.cs",
++    repo / "B数据端/工程/PositioningArmKinematics/tests/arm_ads_mock.h",
++    *sorted((repo / "tools/revision_round7").glob("*.py")),
++    *sorted((repo / "tools/revision_round7").glob("*.cpp")),
++    *sorted((out / "dls_candidate").glob("*")),
++]:
++    if current.is_file():
++        files[current] = b""
++
++patch = []
++manifest = []
++file_table = ["| 文件（链接定位首个改动） | 本轮修改行号 |", "|---|---|"]
++for current, before in sorted(files.items(), key=lambda pair: pair[0].as_posix()):
++    relative = current.relative_to(package).as_posix()
++    left = before.decode("utf-8").splitlines(keepends=True)
++    right = current.read_bytes().decode("utf-8").splitlines(keepends=True)
++    a = json.dumps("a/" + relative, ensure_ascii=False)
++    b = json.dumps("b/" + relative, ensure_ascii=False)
++    diff = list(difflib.unified_diff(left, right, fromfile=a if before else "/dev/null", tofile=b))
++    if not diff:
++        continue
++    patch.append("diff --git " + a + " " + b + "\n")
++    if not before:
++        patch.append("new file mode 100644\n")
++    patch.extend(diff)
++    lines = [int(re.search(r"\+(\d+)", row).group(1)) for row in diff if row.startswith("@@")]
++    manifest.append(dict(path=relative, added=not bool(before), hunk_lines=lines,
++        sha256=hashlib.sha256(current.read_bytes()).hexdigest()))
++    file_table.append("| " + link(relative, current, lines[0]) + " | " + ", ".join(map(str, lines)) + " |")
++(out / "round7_full.diff").write_bytes("".join(patch).encode("utf-8"))
++(out / "change_manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
++
++rows = list(csv.DictReader((out / "dls_cases.csv").open(encoding="utf-8")))
++zero_rows = [row for row in rows if row["id"] == "E3"]
++zero_table = ["| 方向 | 档位速度 mm/s | 沿指令位移 mm | 位移/名义速度积分 | 偏航变化 ° |", "|---|---:|---:|---:|---:|"]
++for row in zero_rows:
++    direction = ("X" if row["mode"] == "1" else "Y") + ("+" if row["dir"] == "1" else "−")
++    ratio = float(row["displacement_mm"]) / float(row["nominal_integral"])
++    zero_table.append(f'| {direction} | {float(row["speed"]):g} | {float(row["displacement_mm"]):.6f} | {ratio:.6%} | {float(row["yaw_deg"]):+.6f} |')
++e2 = [row for row in rows if row["id"] == "E2"]
++far = [row for row in e2 if row["damped"] == "0"]
++worst = max(e2, key=lambda row: float(row["peak_acc"]))
++summary = dict(e2_cases=len(e2), e2_far=len(far), e2_entered_damping=len(e2)-len(far),
++    e2_far_max_line_mm=max(float(row["line_mm"]) for row in far),
++    e2_far_max_yaw_deg=max(abs(float(row["yaw_deg"])) for row in far),
++    e2_far_max_integral_relative_error=max(abs(float(row["ratio"])-1) for row in far),
++    e2_scaled=sum(float(row["min_scale"]) < 1 for row in e2),
++    e2_minimum_scale=min(float(row["min_scale"]) for row in e2), worst_acceleration_case=worst)
++(out / "acceptance_summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
++
++report = r'''# 第七轮交付与停项报告（2026-11-09）
++
++## 1. 结论与实际交付范围
++
++**本轮未达到完整验收，不能按“DLS 已完成”部署。** 四项极简修改在开工快照中全部存在，已通过静态核对。
++
++- 已修改运行代码：定位臂 `JOINT_VCAP=[24,30,30,30,30]`，以及归零拒绝提示、归零状态/错误码的协议传递和界面显示。
++- **DLS 停止合入**：严格按指定公式实现的候选，在合法 E2 姿态进入阻尼区时，轴3加速度达到 **357.43785821296115°/s²**，超过 E8 的 300°/s²。按“规格冲突即停止该项”的要求，没有加入加速度限幅、改变阻尼参数或其他替代控制。
++- 运行中的 X/Y/偏航仍为原闭式逆解和二分算法；DLS 的删除旧逻辑、`limited` 新含义和新提示文字均随该项停止，没有加入切换开关。候选只在 `docs/revision_round7_20261109/dls_candidate/`，不被 PLC 工程或运行程序引用。
++- 主端、数据端、手柄宿主和测试项目均构建成功，0 警告、0 错误。PLC **未构建、未下载、未激活**。
++- 本体、单轴点动、Z（轴1）、俯仰（轴5）、定位臂所有权/停机状态机未修改。`ArmCartJog`、`ArmCartesian` 与本轮前快照逐字节相同；`ArmCartJogGen` 和 C++ 运行参考仅限速数组一处改变。
++
++证据：@STATIC@；@DLSLOG@；@SCOPE@。完整源码 diff：@DIFF@，逐文件/行号清单：@MANIFEST@。diff 基于本轮开工快照，不包含其他并行工作对影像传输等目录的修改；日志、基线快照和构建二进制独立保留。
++
++## 2. DLS 冲突的可复现实例
++
++初始 PLC 单位关节位置：`[100, -94.127305679518571, 135, -104.89215442093372, 0]`（mm、°），X−、快档 30 mm/s，`dt=0.001 s`，按住3秒，随后松开0.5秒。
++
++第1094周期：
++
++| 量 | 实测值 |
++|---|---:|
++| 周期前 q3 | 150.19246756468937° |
++| 周期后 q3 | 150.22199034536837° |
++| s | 0.49708803820938091 |
++| λ | 3.2330382257153532 mm |
++| 上周期轴3速度 | 29.880218537215342°/s |
++| 本周期轴3速度 | 29.522780679002381°/s |
++| `(v−v_prev)/dt` | −357.43785821296115°/s² |
++
++速度本身未超30°/s，位置和前馈速度一致，无 NaN/Inf。全套候选验收的独立 Eigen LDLT 解与闭式伴随矩阵解的关节速度最大差为 `1.730171561575844e−12 rad/s`，ST 转译/C++ 为0。因此这不是转译或闭式求逆数值误差。指定速度解和直接积分没有同时提供 E8 的加速度约束。
++
++早期探索曾沿用旧验收的“两连杆内角”定义，得到过258.223°/s²的 E6 结果；该 E6 结论已撤回。**最终验收按实际 q3 角度取值**：q3=40° 的 E6 扫描通过，停项依据是上表实际 q3=135° 出发的 E8 反例。最终日志和 CSV 均来自修正定义后的重跑。
++
++## 3. 解析雅可比及来源
++
++由 @FK@ 的正运动学解析求导。取 mm/rad，定义：
++
++```text
++θ = q2
++β = q2 + q3 + π             （肘部常量保持不变）
++ψ = q2 + q3 + q4             （已合入的新轴4零位）
++a = 456.3 mm
++b = 554.5 cos(q5) mm
++
++x = L1 sinθ + L2 sinβ + a cosψ + b sinψ + base_x
++y = −L1 cosθ − L2 cosβ + a sinψ − b cosψ + base_y
++c = −a sinψ + b cosψ
++d =  a cosψ + b sinψ
++
++J = [ L1 cosθ + L2 cosβ + c,   L2 cosβ + c,   c
++      L1 sinθ + L2 sinβ + d,   L2 sinβ + d,   d
++      1,                       1,             1 ]
++
++det(J) = L1 L2 sin(q3+π) = −L1 L2 sin(q3)
++Jw = diag(1,1,200) J
++```
++
++正运动学的两连杆、工具姿态分别位于 `kinematics.cpp:86、91、95`；原 `computeFrameJacobian:106` 的叉积表达式提供同一几何真值。候选 ST 的闭式 J 从第94行开始，求逆在第106–119行，DLS 速度解在第127行，积分在第139行，前馈加速度在第153行：@CANDIDATE@。
++
++q1、q5保持锚点。候选没有环带、闭式逆解、cos夹紧、分支选择、二分搜索、TCP0/d0偏航锚定或关节角范围限制。X/Y 的 `path_speed` 是指令方向速度分量；偏航为带符号的实际角速度。以上仅描述未合入候选。
++
++## 4. 归零无响应：根因、核对与修复
++
++| 层级 | 源码证据与结论 |
++|---|---|
++| 界面按钮 | @BUTTON@：原 `CanOperate` 启用条件保留。@CLICK@ 原先在无控制权、末端点动或单轴点动占用时静默返回；现在显示明确拒绝原因，原门控保留。 |
++| MainViewModel / RemoteRobotLink | @VMRETURN@、@LINKRETURN@：命令路由原本存在；5000ms命令应答只表示数据端已分发，不等于运动成功。 |
++| Zenoh / main 分发 | @DISPATCHZ@、@DISPATCHM@：确实调用 `request_program_zero()`，这两层原逻辑无需改变。 |
++| 数据端占用门控 | @REQUEST@：原先 `cjog_mode_!=0` 或 `snapshot_.cjog_owned` 时直接返回；现在保持拒绝、记录 `status=5,error=1008`，不抢占点动、不丢弃已有停机条件。重复的在途归零请求仍保留已有状态。 |
++| 归零规划与 already_home | @UPDATE@：既有规划错误进入 status5；already_home进入status3且不提交曲线；PLC完成进入status2。原先这些结果未到界面，是“无动作也无提示”的主要观测缺口。目标、`plan_arm_curve(mode0)`、`planProgramZeroReturn`、曲线插补不改。 |
++| 保活 | @ALIVE@：原代码本来就在 await 应答前置 `_programReturnActive=true`；100ms保活→RemoteRobotLink→Zenoh→main→`keep_cartesian_alive` 链路完整。原500ms租约及规则保留，全链路 mock 已走通。保活不是本轮修复根因。 |
++| PLC拒绝 | `ArmCartesian.TcPOU:91–126` 的2001–2006，以及后续2007/2008和NC FB ErrorID均保留。`update_cartesian:358` 保留PLC错误码，由新增状态字段回传中文原因。 |
++
++状态帧从55项同步变为57项：索引54 `ArmCartesianStatus:int32`、55 `ArmCartesianError:int32`、56 `AuthTag`。沿仓库既有字段扩展惯例，版本号和topic仍为v1；严格长度校验同步修改，没有兼容分支。主端和数据端必须成套部署。三份协议文档、C#/C++序列化与校验、黄金样本生成器和共享样本已同步。
++
++归零按钮旁新状态文字：进行中、已完成、已在零位、已停止、失败（错误码+中文原因）。覆盖1001–1008、1202/1203/1206/1207、PLC2001–2008和NC错误。1008表示末端点动占用；本地按钮占用另在原错误提示行立即显示。源位置：@STATUS@、@STATUSUI@、@STATEPUB@、@STATEMAP@。
++
++## 5. E1–E11 结果
++
++真值为仓库 `PositioningArmKinematics`，新偏航零位，dt=0.001s；随机种子20261109。DLS结果均为候选数学验收，不能解释为已部署。
++
++| 编号 | 实测结果 | 判定 |
++|---|---|---|
++| E1 | 1000姿态，解析J/中心差分最大差 `5.0560743147798348e−8`；差分步长1e−5rad。 | 通过 |
++| E2 | 1152场景，q3=45/90/135°，每种q5=0/±30°、16组随机q2/q4，X±/Y±、5/30mm/s、按住3s松开0.5s。全程远离阻尼区1027条：最大直线偏差0.011079mm、最大偏航变化2.1885e−12°、位移/实际速度积分最大相对误差0.010431%。125条途中进入阻尼区，允许让步，纳入E8而不宣称其全程直线。全部1152条中35条发生限速缩放，最小k=0.856301631。 | 远离奇异条件通过；转入阻尼的场景单独披露 |
++| E3 | 零位8条场景，位移/名义速度积分80.8136%–97.2194%；各方向见下表。 | 通过 |
++| E4 | 实际q3=175°，腕点径向对准+X，X+向外、Y为切向。5/30mm/s：向外位移10.868863/62.754061mm，Y+位移12.359540/74.189101mm；也覆盖反向。最大加速度7.161845°/s²，无超速和非有限值。 | 通过 |
++| E5 | q3=90°，±0.8/±2.4°/s，最大TCP漂移0.007624311mm；偏航变化与积分相符。零位TCP漂移2.475095、7.422021、2.479204、7.460299mm，均无NaN。 | 通过 |
++| E6 | q3=40°；额外144组q2/q4网格、4方向，共576条，每条6000周期，144条进入阻尼区。最大关节加速度26.331124°/s²（每周期速度变化≤0.026332°/s）。 | 通过 |
++| E7 | 复用原T3/T5/T6/T7/T8输入时序和物理阈值：加速1000拍、减速500拍，T3峰值7.49999mm/s²、停止位移1.2475mm（原阈值1.25±0.5%）；换档1000/500拍；换模式500拍且先降到0；重按不归零；保活丢失500拍触发正常减速。 | 通过 |
++| E8 | 7,606,601周期，速度上限满足 `cap·(1+1e−9)`，最大30.000000000001137°/s；前馈速度与Δq/dt最大差0；无NaN/Inf。最大加速度357.437858°/s²。 | **失败，DLS停项** |
++| E9 | E2–E8全部逐周期：ST转译/C++位置、速度、加速度及路径状态最大差0，离散状态相同；常量编译期核对通过。 | 通过 |
++| E10 | 五种情况：正常、已在零位、规划失败1002、PLC拒绝2003、末端点动占用1008；服务mock、界面mock、实际WPF→Zenoh→生产ADS服务/规划器→内存PLC接口替身→WPF均通过。正常提交`format=0,target=[100,0,0,0,0]`，界面先进行中后完成。 | 通过；未执行真实Tc2_MC2 |
++| E11 | WPF、Zenoh、ADS和本体通过；原定位臂T1、T2、T10(Z/俯仰)、T12通过。历史黄金文件和旧算法诊断仍失败，详见下一节。 | **未全通过** |
++
++E2完整精度、各场景限速系数和最大加速度见 @ACCEPTANCE@、@CSV@；E10见 @HOMECHAIN@。
++
++### E3：四方向与两档实测
++
++@ZEROTABLE@
++
++比例分母使用名义平滑速度的逐周期积分：慢档12.5025mm、快档75.015mm。`path_speed`已是让步后的实际指令分量，若用其积分作分母会掩盖DLS让步，因此70%判定使用更严格的名义积分。
++
++### 旧用例的取代关系
++
++| 原用例 | DLS候选对应验收 |
++|---|---|
++| T9、T13（环带边界、零位脱离） | E3、E4、E6 |
++| S1、S2（奇异裕量/边界往返） | E3、E4、E6 |
++| S4（关节加速度） | E6、E8 |
++| Y3、Y4、Y5（偏航二分、环带、零位） | E5、E6、E8 |
++
++因为DLS停止合入，**运行参考的原用例没有删除或跳过**，原验收程序仍全部运行并保留失败；上表仅说明候选替换算法的覆盖关系。原T1/T2、Z/俯仰T10和T12继续作为回归。
++
++## 6. 基线、构建与回归明细
++
++开工快照及初次日志在 `baseline/`、`baseline_results/`。原托管runner在WPF首次失败后退出；另外用当时保留的 `UV3Release` 基线二进制、55字段基线夹具补跑协议与SDK替身，结果另存 `baseline_saved_results.json`，没有用修改后程序冒充基线。
++
++| 项目 | 基线→最终 | 说明/日志 |
++|---|---|---|
++| 主端MasterConsole、WPF测试、协议测试、VI.HandleHost | 均构建成功→均成功，0警告0错误 | `final_results/master_build.log`、`wpf_build.log`、`protocol_build.log`、`handlehost_build.log` |
++| 数据端ADS.sln Release/x64 Rebuild | 0警告0错误→0警告0错误 | `final_results/ads_build.log` |
++| PLC | 未构建 | 无本机TwinCAT XAE编译；XML、ST块配对、调用/所有权/停机接口静态检查及ST转译完成，不能代替XAE编译。 |
++| WPF | 原夹具在极简轮旧速度Tooltip处失败→11621断言通过 | 只更新极简轮已确认的Z→轴1、上电/复位合并、速度说明预期。历史夹具保留，逐项映射到现控制；Z的方向、保活、松开停止继续执行。新增归零显示/门控/保活断言。 |
++| C++ Zenoh黄金/边界 | 84通过→84通过，服务边界通过 | `final_results/zenoh.log` |
++| C# 协议+真实Zenoh网络 | 181通过→182通过 | 增加1条归零状态映射断言。非网络142通过，SDK替身模式160通过；基线为141、159。 |
++| ADS/本体原生 | 全通过→全通过 | 11个原生程序：ads_diagnostics、cylinder_manual、dual_control、handle_velocity、homing_record_events、homing_restore_ack、main_recovery、recording_feedback、remote_handle、return_recovery、round5_main_recovery；另跑handle_net_distance及第五轮recovery/ST。 |
++| 第五轮PLC完整模型回归 | 11049周期差0→11049周期差0 | SelfCheck从开始至self_check_done为TRUE共5686周期、普通err435周期、四轴回退108周期，完整脚本总11049周期；本轮没有改这些POU。 |
++| 定位臂ADS mock | 通过→通过 | 原点动/租约/互斥/停机全部保留并新增归零5场景。 |
++| 运动学 | 19/20→20/20 | 唯一基线失败是极简轮新零位对应的旧坐标/姿态期望。更新为新零位和相同俯仰几何，没有改变运动学生产代码。 |
++| 本轮前归零二进制→最终归零 | 100组、1700个double，差0 | 使用保存的基线程序生成独立本轮黄金，再与最终程序逐位比较；原历史home_baseline.txt保留。 |
++| 原定位臂ST/C++ | 765402周期差0→765311周期差0 | 限速提升会改变部分按停止条件结束的循环长度；最终T/Y用例内305946周期也差0。包装状态机另3232周期逐位一致。 |
++| 原T1/T2/T10/T12 | 均通过→均通过 | `final_results/arm/round4/arm_cart_jog_tests.log` |
++
++### 保留的失败，没有把它们记作通过
++
++- 历史 `home_baseline.txt`：基线和最终均274个值不一致，来源为极简轮新零位；本轮独立100组逐位比较为0差。旧黄金SHA256保留在结果JSON中。
++- 第二轮/第三轮/第四轮二进制黄金：基线已与新零位不符；最终再叠加规定的30°/s限速，仍失败。没有重写旧黄金来制造通过。
++- 原 `arm_cart_jog_tests`：基线和最终均 Y1、S4 两项失败。最终旧算法S4最大加速度约25583.45°/s²；此前10°/s上限下已有约8775.06°/s²，30°/s上限并未使旧算法满足新的加速度验收。
++- 旧round4诊断：基线S1/S2/S4失败；最终另有B见证失败（总4项）。B是针对10°/s限速的固定二分非单调见证，改变为30°/s后该固定见证不再成立；未把该诊断删除或换成另一见证。S1/S2/S4为仍保留的旧算法边界问题。
++- 旧静态检查的10°/s常量和“与第三轮原文件完全相同”预期已按本轮限速、极简轮零位同步，只接受这两处规定变化，其他源码仍严格比较；原安全接口/状态机断言保留。
++
++因此 E11 的“全部通过”没有满足；当前运行代码保留的旧边界问题和DLS候选E8超限均在交付中明确保留，不建议把当前成果视为完整第七轮现场版本。
++
++## 7. 常量与NC参数
++
++| 常量/规则 | 值 | 状态 |
++|---|---|---|
++| JOINT_VCAP | `[24,30,30,30,30]`，mm/s、°/s | 运行ST与C++参考同值；轴1不变 |
++| DLS_PSI_WEIGHT | 200 mm/rad | 仅候选ST/C++同值 |
++| DLS_S0 | 0.5 | 仅候选 |
++| DLS_LAMBDA_MAX | 30 mm | 仅候选 |
++| λ | s≥0.5为0；否则30√(1−(s/0.5)²) | 仅候选，无额外限幅 |
++| L1 / L2 | 200 / 180 mm | 既有值不变 |
++| TOOL_LATERAL_OFFSET_MM / TOOL_LENGTH_MM | 456.3 / 554.5 mm | 既有值不变 |
++| T_ACC / T_DEC | 1.0 / 0.5 s | 曲线及换档、换模式、重按规则不变 |
++| PLC任务/离线dt | 1000μs / 0.001s | 不变 |
++| PI / RAD | 3.14159265358979323846 / PI÷180 | ST/C++一致 |
++| 主端归零保活 / 数据端租约 | 100 / 500ms | 既有值不变 |
++| 归零命令应答等待 / PLC曲线确认等待 | 5000ms / 2s | 既有值不变 |
++| 归零占用错误 | 1008 | 新增明确结果，不改变占用条件 |
++| StateFrame长度/版本 | 57 / 1 | 两端和夹具同步 |
++
++`250902.tsproj` 链接明确把 `G.arm_axis[1..5]` 分别映射到 NC Axis1–5。显式 `<Velo>`：
++
++| NC轴 | SlowManual | FastManual | Maximum |
++|---|---:|---:|---|
++| Axis1 | 10 | 50 | 30 mm/s |
++| Axis2 | 1 | 5 | 未显式保存 |
++| Axis3 | 3 | 10 | 未显式保存 |
++| Axis4 | 3 | 10 | 未显式保存 |
++| Axis5 | 3 | 10 | 未显式保存 |
++
++Axis2–5单位为°。**FastManual不是Maximum，源码无法确认NC是否允许30°/s**；没有假定TwinCAT默认值，也没有修改NC配置。工程机需读取轴2–5实际NC最大速度参数确认。原始链接和参数见 `static_audit.json`。
++
++## 8. 可复现命令
++
++在仓库根目录（`@ROOT@`）执行，仅连接本机回环模拟器，不接触PLC/手柄硬件：
++
++```powershell
++& 'D:/Study_software/Anaconda/python.exe' -X utf8 tools/revision_round7/audit_scope.py
++& 'D:/Study_software/Anaconda/python.exe' -X utf8 tools/revision_round7/run_dls.py
++& 'D:/Study_software/Anaconda/python.exe' -X utf8 tools/revision_round7/run_home_chain.py
++& 'D:/Study_software/Anaconda/python.exe' -X utf8 tools/revision_round7/run_managed.py
++& 'D:/Study_software/Anaconda/python.exe' -X utf8 tools/revision_round7/run_regressions.py
++& 'D:/Study_software/Anaconda/python.exe' -X utf8 tools/revision_round7/run_saved_baseline.py
++& 'docs/revision_round7_20261109/final_results/arm_build/home_regression.exe' --verify docs/revision_round7_20261109/home_round7_baseline.txt
++```
++
++预期退出码：audit_scope、home_chain、managed、saved_baseline和本轮归零compare为0；DLS因E8为1；regressions因上述旧定位臂失败为1。构建在脚本中使用Release/x64及警告视为错误；主端脚本使用本地 `Get-ViDotnet.ps1` SDK，目标仍.NET8；数据端用VS2022/MSVC14.29。原始命令、完整输出和逐项返回码保留在 `baseline_results/`、`final_results/`、`dls_results.json`、`home_chain_results.json` 中。
++
++`run_saved_baseline.py` 依赖开工时保存于 `A主端/工程/build/UV3Release` 的基线二进制；这一步是补跑，不会回写生产源码。`home_round7_baseline.txt`由该轮修改前已编译的原生归零程序生成，旧历史黄金文件未覆盖。
++
++## 9. 部署与现场验证
++
++当前可审阅的是限速与归零反馈修复；DLS候选不能下载运行。PLC限速修改仍需工程机编译、下载、激活；主端、手柄宿主、数据端和PLC成套部署，尤其主/数据两端57字段状态帧必须一致。本机没有执行任何硬件运动。
++
++现场步骤：
++
++1. 先读取NC Axis2–5的Maximum，确认允许30°/s；不把手动快档速度当作最大速度。
++2. 验证归零：非零姿态点击，观察进行中→完成；已在零位时显示“已在零位”；末端点动尚未释放所有权时显示1008；驱动未就绪/PLC拒绝时显示错误码和中文原因。核对轴1保持、轴2–5目标仍为0，轨迹格式仍为mode0。
++3. DLS停项解决并经新的完整验收后，再现场验证：零位直接X±/Y±，记录位移与偏航让步；肘角90°附近X/Y直线与偏航保持；偏航点动时TCP保持；靠近伸直时流畅运动而非卡住或急停。**这些DLS现场项目当前均未执行，不能由候选离线结果替代。**
++4. 回归Z±轴1方向、俯仰轴5、五轴单轴点动、总使能/复位、松开/保活丢失/急停；与本轮前操作规则比较。
++
++## 10. 修改文件与全部改动位置
++
++下表是相对于本轮开工快照的统一diff块起始行号；每块的完整内容见 `round7_full.diff`。新增测试文件中复用的ADS传输替身从原测试移到 `arm_ads_mock.h`，原断言未删除，供五场景联通测试共用。候选代码的路径明确位于docs目录。
++
++@FILETABLE@
++'''
++
++replacements = {
++    "@ROOT@": repo.as_posix(),
++    "@STATIC@": link("static_audit.log", out / "static_audit.log"),
++    "@DLSLOG@": link("dls_acceptance.log", out / "dls_acceptance.log"),
++    "@SCOPE@": link("static_audit.json", out / "static_audit.json"),
++    "@DIFF@": link("round7_full.diff", out / "round7_full.diff"),
++    "@MANIFEST@": link("change_manifest.json", out / "change_manifest.json"),
++    "@FK@": link("kinematics.cpp:86", repo / "B数据端/工程/PositioningArmKinematics/src/kinematics.cpp", 86),
++    "@CANDIDATE@": link("候选 ArmCartJogGen:94", out / "dls_candidate/ArmCartJogGen.TcPOU", 94),
++    "@BUTTON@": link("PositioningArmPanel.xaml:102", repo / "A主端/工程/master/VI.Module.PositioningArm/PositioningArmPanel.xaml", 102),
++    "@CLICK@": link("PositioningArmPanel.xaml.cs:142", repo / "A主端/工程/master/VI.Module.PositioningArm/PositioningArmPanel.xaml.cs", 142),
++    "@VMRETURN@": link("MainViewModel:489", repo / "A主端/工程/master/VI.Service.Robot/ViewModels/MainViewModel.cs", 489),
++    "@LINKRETURN@": link("RemoteRobotLink:254", repo / "A主端/工程/master/VI.Service.Robot/Services/RemoteRobotLink.cs", 254),
++    "@DISPATCHZ@": link("zenoh_service:943", repo / "B数据端/工程/ADS项目/zenoh_service.cpp", 943),
++    "@DISPATCHM@": link("main:5119", repo / "B数据端/工程/ADS项目/main.cpp", 5119),
++    "@REQUEST@": link("arm_manual_ads_service:265", repo / "B数据端/工程/ADS项目/arm_manual_ads_service.cpp", 265),
++    "@UPDATE@": link("arm_manual_ads_service:304", repo / "B数据端/工程/ADS项目/arm_manual_ads_service.cpp", 304),
++    "@ALIVE@": link("PositioningArmPanel.xaml.cs:153", repo / "A主端/工程/master/VI.Module.PositioningArm/PositioningArmPanel.xaml.cs", 153),
++    "@STATUS@": link("MainViewModel:410", repo / "A主端/工程/master/VI.Service.Robot/ViewModels/MainViewModel.cs", 410),
++    "@STATUSUI@": link("PositioningArmPanel.xaml:103", repo / "A主端/工程/master/VI.Module.PositioningArm/PositioningArmPanel.xaml", 103),
++    "@STATEPUB@": link("zenoh_service:1095", repo / "B数据端/工程/ADS项目/zenoh_service.cpp", 1095),
++    "@STATEMAP@": link("RemoteRobotLink:488", repo / "A主端/工程/master/VI.Service.Robot/Services/RemoteRobotLink.cs", 488),
++    "@ACCEPTANCE@": link("acceptance_summary.json", out / "acceptance_summary.json"),
++    "@CSV@": link("dls_cases.csv", out / "dls_cases.csv"),
++    "@HOMECHAIN@": link("home_chain.log", out / "home_chain.log"),
++    "@ZEROTABLE@": "\n".join(zero_table),
++    "@FILETABLE@": "\n".join(file_table),
++}
++for placeholder, value in replacements.items():
++    report = report.replace(placeholder, value)
++assert not re.search(r"@[A-Z_]+@", report)
++(out / "REPORT.md").write_text(report, encoding="utf-8")
++print("files=" + str(len(manifest)), "diff_bytes=" + str((out / "round7_full.diff").stat().st_size))
++print(out / "REPORT.md")
+diff --git "a/介入机器人/tools/revision_round7/run_dls.py" "b/介入机器人/tools/revision_round7/run_dls.py"
+new file mode 100644
+--- /dev/null
++++ "b/介入机器人/tools/revision_round7/run_dls.py"
+@@ -0,0 +1,46 @@
++"""第七轮离线DLS验收；只运行数学模型，不连接PLC。"""
++from pathlib import Path
++import json
++import os
++import shutil
++import subprocess
++import sys
++
++repo = Path(__file__).resolve().parents[2]
++kin = repo / "B数据端/工程/PositioningArmKinematics"
++tests = kin / "tests"
++out = repo / "docs/revision_round7_20261109"
++build = out / "dls_build"
++build.mkdir(parents=True, exist_ok=True)
++vs = Path("D:/Work_software/VS2022")
++vcvars = vs / "VC/Auxiliary/Build/vcvarsall.bat"
++environment = subprocess.check_output(
++    f'cmd /d /s /c ""{vcvars}" x64 -vcvars_ver=14.29 >nul && chcp 65001 >nul && set"',
++    text=True, encoding="utf-8")
++env = dict(line.split("=", 1) for line in environment.splitlines() if "=" in line and not line.startswith("="))
++env["PATH"] = env.pop("Path", env.get("PATH", ""))
++env.update(VSLANG="1033", PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
++cl = shutil.which("cl.exe", path=env["PATH"])
++results = {}
++
++
++def run(name, command):
++    process = subprocess.run([str(x) for x in command], cwd=build, env=env,
++                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
++    (out / (name + ".log")).write_bytes(process.stdout)
++    print(name, "exit=" + str(process.returncode), flush=True)
++    print(process.stdout.decode("utf-8", errors="replace"), end="", flush=True)
++    results[name] = process.returncode
++    return process.returncode
++
++
++run("translate", [sys.executable, tests / "translate_cart_jog_st.py",
++    out / "dls_candidate/ArmCartJogGen.TcPOU", build / "arm_cart_jog_st_generated.h"])
++flags = ["/nologo", "/O2", "/std:c++17", "/EHsc", "/utf-8", "/DNOMINMAX", "/MD", "/W3", "/bigobj",
++    "/I" + str(kin / "include"), "/I" + str(kin / ".deps/Library/include/eigen3"), "/I" + str(build)]
++exe = build / "dls_acceptance.exe"
++if run("dls_build", [cl, *flags, out / "dls_candidate/dls_acceptance.cpp", kin / "src/kinematics.cpp",
++                    kin / "src/program_zero.cpp", "/Fe:" + str(exe)]) == 0:
++    run("dls_acceptance", [exe, out / "dls_cases.csv"])
++(out / "dls_results.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
++sys.exit(1 if any(results.values()) else 0)
+diff --git "a/介入机器人/tools/revision_round7/run_home_chain.py" "b/介入机器人/tools/revision_round7/run_home_chain.py"
+new file mode 100644
+--- /dev/null
++++ "b/介入机器人/tools/revision_round7/run_home_chain.py"
+@@ -0,0 +1,37 @@
++"""归零五场景：真实WPF、Zenoh、数据端服务/规划器与内存PLC替身。"""
++from pathlib import Path
++import html
++import shutil
++import tempfile
++
++repo = Path(__file__).resolve().parents[2]
++setup = (repo / "tools/revision_round7/run_dls.py").read_text(encoding="utf-8").split('run("translate"')[0]
++setup = setup.replace('build = out / "dls_build"', 'build = out / "home_chain_build"')
++exec(compile(setup, "run_dls_setup", "exec"))
++ads = repo / "B数据端/工程/ADS项目"
++sdk = repo.parent / "zenoh/sdk/zenoh-c-1.10.1-msvc"
++flags = ["/nologo", "/O2", "/std:c++17", "/EHsc", "/utf-8", "/DNOMINMAX", "/MD", "/W3", "/bigobj",
++    "/DMSGPACK_NO_BOOST", "/I" + str(kin / "include"), "/I" + str(kin / ".deps/Library/include/eigen3"),
++    "/I" + str(tests), "/I" + str(ads), "/I" + str(ads / "ADS/Include"),
++    "/I" + str(sdk / "include"), "/I" + str(repo.parent / "zenoh/sdk/msgpack-cxx-9.0.0/include")]
++simulator = build / "home_chain_simulator.exe"
++if run("home_chain_native_build", [cl, *flags, repo / "tools/revision_round7/home_chain_simulator.cpp",
++    ads / "arm_manual_ads_service.cpp", ads / "zenoh_service.cpp", kin / "src/kinematics.cpp", kin / "src/program_zero.cpp",
++    "/Fe:" + str(simulator), "/link", "/LIBPATH:" + str(sdk / "lib"), "zenohc.dll.lib", "bcrypt.lib", "ws2_32.lib"]):
++    raise SystemExit(1)
++shutil.copy2(sdk / "bin/zenohc.dll", build)
++master = repo / "A主端/工程"
++managed_build = master / "build/Round7Release/bin"
++props = Path(tempfile.mkdtemp(prefix="vi-home-chain-")) / "isolated.props"
++props.write_text('<Project><Import Project="' + html.escape(str(master / "Directory.Build.props"), quote=True)
++    + '"/><PropertyGroup><OutputPath>' + html.escape(str(managed_build), quote=True)
++    + '/$(MSBuildProjectName)/</OutputPath></PropertyGroup></Project>', encoding="utf-8")
++dotnet = subprocess.check_output(["powershell.exe", "-NoProfile", "-File",
++    str(master / "tools/Get-ViDotnet.ps1")], text=True).strip()
++if run("home_chain_wpf_build", [dotnet, "build", master / "master/VI.Control.Tests.slnx", "-c", "Release",
++    "-p:Platform=x64", "-p:DirectoryBuildPropsPath=" + str(props), "-warnaserror", "-m:2", "-v:minimal"]):
++    raise SystemExit(1)
++run("home_chain", [managed_build / "VI.Control.Tests/VI.Control.Tests.exe", "--home-chain", simulator,
++    repo.parent / "zenoh/zenohd.exe"])
++(out / "home_chain_results.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
++raise SystemExit(1 if any(results.values()) else 0)
+diff --git "a/介入机器人/tools/revision_round7/run_managed.py" "b/介入机器人/tools/revision_round7/run_managed.py"
+new file mode 100644
+--- /dev/null
++++ "b/介入机器人/tools/revision_round7/run_managed.py"
+@@ -0,0 +1,10 @@
++"""第七轮主端/宿主构建与全部既有托管测试；保留每项失败结果。"""
++from pathlib import Path
++repo = Path(__file__).resolve().parents[2]
++script = repo / "tools/revision_u_v3/run_managed.py"
++source = script.read_text(encoding="utf-8").replace("docs/revision_u_v3_20261109", "docs/revision_round7_20261109/final_results")
++source = source.replace("build/UV3Release/bin", "build/Round7Release/bin")
++source = source.replace("    assert result.returncode == 0, str(out / (name + \".log\"))", "    if result.returncode: print(str(out / (name + \".log\")), flush=True)")
++scope = {"__file__": str(script)}
++exec(compile(source, str(script), "exec"), scope)
++raise SystemExit(1 if any(scope["results"].values()) else 0)
+diff --git "a/介入机器人/tools/revision_round7/run_regressions.py" "b/介入机器人/tools/revision_round7/run_regressions.py"
+new file mode 100644
+--- /dev/null
++++ "b/介入机器人/tools/revision_round7/run_regressions.py"
+@@ -0,0 +1,7 @@
++"""第七轮ADS、Zenoh、本体、定位臂既有回归；原有黄金文件保持不变。"""
++from pathlib import Path
++repo = Path(__file__).resolve().parents[2]
++script = repo / "tools/revision_u_v3/run_regressions.py"
++source = script.read_text(encoding="utf-8").replace("docs/revision_u_v3_20261109", "docs/revision_round7_20261109/final_results")
++(repo / "docs/revision_round7_20261109/final_results").mkdir(parents=True, exist_ok=True)
++exec(compile(source, str(script), "exec"), {"__file__": str(script)})
+diff --git "a/介入机器人/tools/revision_round7/run_saved_baseline.py" "b/介入机器人/tools/revision_round7/run_saved_baseline.py"
+new file mode 100644
+--- /dev/null
++++ "b/介入机器人/tools/revision_round7/run_saved_baseline.py"
+@@ -0,0 +1,19 @@
++"""补跑开工时已构建并保留的基线二进制，使用其55字段协议夹具。"""
++from pathlib import Path
++import json
++import os
++import subprocess
++
++repo = Path(__file__).resolve().parents[2]
++out = repo / "docs/revision_round7_20261109"
++exe = repo / "A主端/工程/build/UV3Release/bin/MasterConsole.Protocol.Tests/MasterConsole.Protocol.Tests.exe"
++fixtures = out / "baseline/protocol-fixtures"
++results = {}
++for name, extra in [("managed_tests", {}), ("host_sdk_results", {
++    "VI_TEST_FAKE_SDK": str(out / "final_results/host_sdk/FakeFLCatheter.dll")})]:
++    with (out / "baseline_results" / (name + ".log")).open("wb") as log:
++        process = subprocess.run([str(exe), str(fixtures)], env=dict(os.environ, **extra), stdout=log, stderr=subprocess.STDOUT)
++    results[name] = process.returncode
++    print(name, process.returncode, flush=True)
++(out / "baseline_saved_results.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
++raise SystemExit(1 if any(results.values()) else 0)

@@ -4,7 +4,7 @@
 
 - handle.hex：顶层 26 字段，两个手柄各 8 字段完全扁平化，另带两只手柄各自的 ulong 设备会话号。
 - command.hex：15 字段，UTF-8 文本和 float64 参数。
-- state.hex：55 字段、float32 状态和轴6窗口边界、float64 净距离及末端点动速度、末端点动状态/错误/降速标志、两个任务与两项回执。
+- state.hex：57 字段、float32 状态和轴6窗口边界、float64 净距离及末端点动速度、末端点动状态/错误/降速标志、归零状态/错误码、两个任务与两项回执。
 - force.hex：13 字段、float32 力/扭矩。
 - hello.hex、authenticate.hex、challenge.hex：认证握手。
 - invalid_*.hex：数组长度、类型、浮点宽度、非有限值、认证长度和字段范围错误。

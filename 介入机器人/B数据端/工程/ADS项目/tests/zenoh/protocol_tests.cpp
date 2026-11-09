@@ -107,6 +107,7 @@ namespace
         f.results = { {39, 0, ""}, {38, 1, u8"拒绝"} }; f.event_text = "ready";
         f.axis6_window_start_from_left_mm = 16; f.axis6_window_end_from_left_mm = 48;
         f.arm_cjog_state = 2; f.arm_cjog_error = 0; f.arm_cjog_limited = true; f.arm_cjog_path_speed = 12.5;
+        f.arm_cartesian_status = 1; f.arm_cartesian_error = 0;
         return f;
     }
     vi_protocol::ForceFrame new_force()

@@ -25,7 +25,7 @@ namespace ScreenCut
         public int WebRtcPort, MediaPort, RtspPort, ApiPort, VideoWidth, VideoHeight, VideoFps, BitrateKbps;
         public readonly CameraSettings[] Cameras = new CameraSettings[2];
 
-        public static StreamingSettings Load(NameValueCollection values = null, string cameraIniPath = null)
+        public static StreamingSettings Load(NameValueCollection values = null, string cameraIniPath = null, bool includeCameras = true)
         {
             bool readCameraIni = values == null || cameraIniPath != null;
             values = values ?? ConfigurationManager.AppSettings;
@@ -43,17 +43,17 @@ namespace ScreenCut
                 MediaPort = Number("WebRtcMediaPort", 8189, 1024, 65535),
                 RtspPort = Number("LocalRtspPort", 8554, 1024, 65535),
                 ApiPort = Number("LocalApiPort", 9997, 1024, 65535),
-                VideoWidth = Number("VideoWidth", 960, 320, 1920),
-                VideoHeight = Number("VideoHeight", 540, 180, 1080),
+                VideoWidth = Number("VideoWidth", 1920, 320, 1920),
+                VideoHeight = Number("VideoHeight", 1080, 180, 1080),
                 VideoFps = Number("VideoFps", 25, 10, 30),
-                BitrateKbps = Number("VideoBitrateKbps", 512, 128, 3000)
+                BitrateKbps = Number("VideoBitrateKbps", 6000, 128, 20000)
             };
-            if ((s.VideoWidth & 1) != 0 || (s.VideoHeight & 1) != 0)
-                throw new ConfigurationErrorsException("H.264 视频宽高必须为偶数。");
+            s.SetVideo(s.VideoWidth, s.VideoHeight, s.VideoFps, s.BitrateKbps);
             if (new System.Collections.Generic.HashSet<int> { s.WebRtcPort, s.MediaPort, s.RtspPort, s.ApiPort }.Count != 4)
                 throw new ConfigurationErrorsException("四个 TCP 服务端口不可相同。");
             for (int i = 0; i < 2; i++)
             {
+                if (!includeCameras) { s.Cameras[i] = new CameraSettings(); continue; }
                 string p = "Camera" + (i + 1);
                 if (!bool.TryParse(Get(p + "Enabled", "true"), out bool enabled))
                     throw new ConfigurationErrorsException(p + "Enabled 必须是 true/false。");
@@ -68,6 +68,17 @@ namespace ScreenCut
                 if (readCameraIni) ReadCameraCredentials(s.Cameras[i], i + 1, cameraIniPath);
             }
             return s;
+        }
+
+        public void SetVideo(int width, int height, int fps, int bitrateKbps)
+        {
+            if (width < 320 || width > 1920 || height < 180 || height > 1080 ||
+                (width & 1) != 0 || (height & 1) != 0)
+                throw new ConfigurationErrorsException("输出宽度须为 320–1920、高度须为 180–1080，且均为偶数。");
+            if (fps < 10 || fps > 30) throw new ConfigurationErrorsException("帧率须为 10–30 fps。");
+            if (bitrateKbps < 128 || bitrateKbps > 20000)
+                throw new ConfigurationErrorsException("码率须为 128–20000 kbps。");
+            VideoWidth = width; VideoHeight = height; VideoFps = fps; BitrateKbps = bitrateKbps;
         }
 
         private static void ReadCameraCredentials(CameraSettings camera, int index, string path)
@@ -107,7 +118,7 @@ namespace ScreenCut
         }
 
         private static string Yaml(string text) => "'" + text.Replace("'", "''") + "'";
-        public string MediaMtxConfig(int[] cameraPorts)
+        public string MediaMtxConfig(int[] cameraPorts, bool shared = false)
         {
             // 只有 WebRTC 信令/媒体对外；RTSP 发布、相机接入、管理 API 均限定本机。
             var y = new StringBuilder();
@@ -123,7 +134,9 @@ namespace ScreenCut
             y.AppendLine("webrtcLocalTCPAddress: " + ListenIp + ":" + MediaPort + "\nwebrtcIPsFromInterfaces: false\nwebrtcAdditionalHosts: [" + ListenIp + "]\nwebrtcICEServers2: []");
             y.AppendLine("paths:\n  stream_dsa:\n    source: publisher");
             for (int i = 0; i < 2; i++)
-                if (Cameras[i].Enabled)
+                if (shared)
+                    y.AppendLine("  stream_cam" + (i + 1) + ":\n    source: publisher");
+                else if (Cameras[i].Enabled)
                     y.AppendLine("  stream_cam" + (i + 1) + ":\n    source: " + Yaml(Cameras[i].SourceUrl(cameraPorts[i])) +
                         "\n    rtspTransport: tcp\n    sourceOnDemand: false");
             return y.ToString();

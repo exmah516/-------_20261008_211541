@@ -42,8 +42,8 @@ if ($SelfTest) {
 }
 
 if (!$ConfigPath) {
-    $ConfigPath = Join-Path $PSScriptRoot 'ScreenCut.exe.config'
-    if (!(Test-Path -LiteralPath $ConfigPath)) { $ConfigPath = Join-Path $PSScriptRoot 'ScreenCut/ScreenCut.exe.config' }
+    $ConfigPath = Join-Path $PSScriptRoot 'CameraMonitor.exe.config'
+    if (!(Test-Path -LiteralPath $ConfigPath)) { $ConfigPath = Join-Path $PSScriptRoot '监控端/CameraMonitor.exe.config' }
 }
 $settings = [xml][IO.File]::ReadAllText($ConfigPath, [Text.Encoding]::UTF8)
 function Read-Setting([string]$Key, [string]$Fallback) {

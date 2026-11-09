@@ -63,6 +63,8 @@ internal static partial class Program
             ["MasterIp"] = "127.0.0.1", ["RelayListenIp"] = "127.0.0.1",
             ["WebRtcPort"] = "38889", ["WebRtcMediaPort"] = "38189", ["LocalRtspPort"] = "38554", ["LocalApiPort"] = "39997"
         };
+        values["VideoWidth"] = "960"; values["VideoHeight"] = "540";
+        values["VideoFps"] = "25"; values["VideoBitrateKbps"] = "512";
         if (_legacyBandwidth) {
             values["VideoWidth"] = "1280"; values["VideoHeight"] = "720";
             values["VideoFps"] = "30"; values["VideoBitrateKbps"] = "2500";
@@ -77,11 +79,18 @@ internal static partial class Program
         }
         return StreamingSettings.Load(values);
     }
-    private static StreamEndpoint[] Endpoints() => new[] {
+    private static StreamEndpoint[] Endpoints(bool split = false) => new[] {
         new StreamEndpoint { key = "dsa", caption = "DSA", url = "http://127.0.0.1:38889/stream_dsa/whep" },
-        new StreamEndpoint { key = "camera1", caption = "监控 1", url = "http://127.0.0.1:38889/stream_cam1/whep" },
-        new StreamEndpoint { key = "camera2", caption = "监控 2", url = "http://127.0.0.1:38889/stream_cam2/whep" }
+        new StreamEndpoint { key = "camera1", caption = "监控 1", url = (split ? "http://127.0.0.4:38890" : "http://127.0.0.1:38889") + "/stream_cam1/whep" },
+        new StreamEndpoint { key = "camera2", caption = "监控 2", url = (split ? "http://127.0.0.4:38890" : "http://127.0.0.1:38889") + "/stream_cam2/whep" }
     };
+    private static StreamingSettings MonitorSettings()
+    {
+        var settings = TestSettings();
+        settings.ListenIp = "127.0.0.4"; settings.WebRtcPort = 38890; settings.MediaPort = 38190;
+        settings.RtspPort = 38556; settings.ApiPort = 39998;
+        return settings;
+    }
     private static Process Spawn(string name, string arguments)
     {
         var p = new Process { StartInfo = new ProcessStartInfo(StreamingSettings.FindRuntime(name), arguments) {
@@ -110,11 +119,15 @@ internal static partial class Program
         if (_cameraCheckOnly) { await CameraWarningCheckAsync(); return; }
         var settings = TestSettings();
         Reject(() => StreamingSettings.Load(new NameValueCollection { ["MasterIp"] = "0.0.0.0" }), "invalid IP rejected");
-        Reject(() => StreamingSettings.Load(new NameValueCollection { ["VideoBitrateKbps"] = "9999" }), "bitrate outside 128–3000 kbps rejected");
+        Reject(() => StreamingSettings.Load(new NameValueCollection { ["VideoBitrateKbps"] = "20001" }), "bitrate outside 128–20000 kbps rejected");
         Reject(() => StreamingSettings.Load(new NameValueCollection { ["VideoWidth"] = "961" }), "odd H.264 size rejected");
         Reject(() => StreamingSettings.Load(new NameValueCollection { ["VideoFps"] = "0" }), "invalid frame rate rejected");
         var defaults = StreamingSettings.Load(new NameValueCollection());
-        Check(defaults.VideoWidth == 960 && defaults.VideoHeight == 540 && defaults.VideoFps == 25 && defaults.BitrateKbps == 512, "default DSA fits shared 2 Mbps budget");
+        Check(defaults.VideoWidth == 1920 && defaults.VideoHeight == 1080 && defaults.VideoFps == 25 && defaults.BitrateKbps == 6000, "wired DSA defaults to 1080p25 at 6000 kbps");
+        defaults.SetVideo(1920, 1080, 30, 20000);
+        Check(defaults.FfmpegArguments(Rectangle.Empty).Contains("-b:v 20000k"), "wired 20 Mbps ceiling is supported");
+        Reject(() => defaults.SetVideo(1921,1080,25,6000), "live quality rejects invalid output size");
+        defaults.SetVideo(1920, 1080, 25, 6000);
         Check(defaults.Cameras[0].LocalIp == "192.168.1.97" && defaults.Cameras[1].LocalIp == "192.168.1.96", "camera default source addresses match the verified physical wiring");
         Reject(() => StreamingSettings.Load(new NameValueCollection { ["WebRtcMediaPort"] = "8889" }), "ICE TCP and signaling port conflict rejected");
         Reject(() => StreamingSettings.ValidateRegion(int.MaxValue, 0, int.MaxValue, 10, new Rectangle(0, 0, 1920, 1080)), "overflowing crop rejected");
@@ -131,6 +144,9 @@ internal static partial class Program
         File.WriteAllText(Path.Combine(Work, "dsa_screencut.ini"), "screenCutIp=127.0.0.1\nlistenPort0=36661\nwebrtcPort=38889\n", Encoding.UTF8);
         File.WriteAllText(Path.Combine(Work, "hik_cameras.ini"), "[camera1]\nip=127.0.0.1\nport=18000\nusername=ignored\npassword=a=b\n[camera2]\nip=127.0.0.1\n", Encoding.UTF8);
         Check(StreamSettings.Load(Work)[1].url == "http://127.0.0.1:38889/stream_cam1/whep", "legacy INI IP mapping retained; old SDK port ignored");
+        File.WriteAllText(Path.Combine(Work, "hik_cameras.ini"), "[camera1]\nip=127.0.0.4\nwebrtcPort=38890\n[camera2]\nip=127.0.0.4\nwebrtcPort=38890\n", Encoding.UTF8);
+        Check(StreamSettings.Load(Work).Select(endpoint => endpoint.url).SequenceEqual(Endpoints(true).Select(endpoint => endpoint.url)),
+            "unchanged master loads independent screenshot and monitor IPs/ports");
         File.AppendAllText(Path.Combine(Work, "dsa_screencut.ini"), "streamPath=../invalid\n", Encoding.UTF8);
         Reject(() => StreamSettings.Load(Work), "unsafe stream path rejected");
         await BoundSocketCheckAsync();
@@ -170,18 +186,41 @@ paths:
         var cam1 = Spawn("ffmpeg.exe", cameraArgs.Replace("127.0.0.1:38554/stream_dsa", "127.0.0.1:38555/Streaming/Channels/101"));
         var cam2 = Spawn("ffmpeg.exe", cameraArgs.Replace("127.0.0.1:38554/stream_dsa", "127.0.0.1:38555/Streaming/Channels/201"));
         if (_bandwidthOnly) { await BandwidthAsync(view, settings); return; }
-        using (var host = new StreamingHost(settings))
+        using (var monitor = new StreamingHost(MonitorSettings()))
+        using (var host = new StreamingHost(settings, monitor: false))
         using (var player = new WebRtcPlayer(view))
         {
+            monitor.Status += line => { if (line.Contains("ERR")) Console.WriteLine(line); };
             host.Status += line => { if (line.Contains("ERR")) Console.WriteLine(line); };
+            await monitor.StartAsync();
+            await player.InitializeAsync(Endpoints(true), Path.Combine(Work, "WebView2"));
+            await UntilAsync(async () => {
+                var streams = Streams(await Snapshot(player));
+                return N(streams[0], "framesDecoded") == 0 && streams.Skip(1).All(s => N(s, "framesDecoded") > 20);
+            }, "monitor alone delivers both cameras without starting DSA");
             await host.StartAsync(); host.StartDsa(new Rectangle(), true);
-            await player.InitializeAsync(Endpoints(), Path.Combine(Work, "WebView2"));
             await UntilAsync(async () => Streams(await Snapshot(player)).All(s => N(s, "framesDecoded") > 20 && !(bool)s["stale"]), "three H.264 WebRTC streams decoded (camera RTSP authentication + source binding)");
             var before = Streams(await Snapshot(player));
             Check(N(before[0], "width") == 960 && N(before[0], "height") == 540 &&
                 before.Skip(1).All(s => N(s, "width") == 640 && N(s, "height") == 360) &&
                 before.All(s => (string)s["objectFit"] == "contain"), "all video preserves aspect ratio");
             Check(before.All(s => (string)s["codec"] == "video/H264"), "all negotiated video codecs H.264");
+            var cameraQualityBefore = before.Skip(1).ToArray();
+            host.StartDsa(Rectangle.Empty, true, video: defaults);
+            await UntilAsync(async () => {
+                var streams = Streams(await Snapshot(player));
+                return N(streams[0],"width") == 1920 && N(streams[0],"height") == 1080 &&
+                    N(streams[0],"framesDecoded") > 20 && !(bool)streams[0]["stale"];
+            }, "live DSA quality switch decodes real 1080p25 H.264 at 6000 kbps");
+            var cameraQualityAfter = Streams(await Snapshot(player)).Skip(1).ToArray();
+            Check(cameraQualityBefore.Zip(cameraQualityAfter, (a,b) => N(a,"generation") == N(b,"generation") &&
+                N(b,"framesDecoded") > N(a,"framesDecoded")).All(x=>x), "screenshot quality change preserves remote camera sessions");
+            host.StartDsa(Rectangle.Empty, true, video: TestSettings());
+            await UntilAsync(async () => {
+                var stream = Streams(await Snapshot(player))[0];
+                return N(stream,"width") == 960 && N(stream,"height") == 540 && !(bool)stream["stale"];
+            }, "DSA can return to low-bandwidth quality without restarting either app");
+            before = Streams(await Snapshot(player));
             await player.SelectAsync("camera1"); await Task.Delay(1200);
             await player.SelectAsync("camera2"); await Task.Delay(1200);
             var after = Streams(await Snapshot(player));
@@ -213,8 +252,27 @@ paths:
             host.StartDsa(new Rectangle(bounds.Left,bounds.Top,Math.Min(640,bounds.Width),Math.Min(480,bounds.Height)));
             await UntilAsync(async () => !(bool)Streams(await Snapshot(player))[0]["stale"], "real GDI desktop H.264 capture recovers without restarting master");
             await ProbeAsync(settings);
+            var dsaBefore = Streams(await Snapshot(player))[0];
+            monitor.Dispose();
+            await UntilAsync(async () => {
+                var streams = Streams(await Snapshot(player));
+                return streams.Skip(1).All(s => (bool)s["stale"]) && !(bool)streams[0]["stale"] &&
+                    N(streams[0], "generation") == N(dsaBefore, "generation") && N(streams[0], "framesDecoded") > N(dsaBefore, "framesDecoded");
+            }, "closing monitor removes its cameras while DSA keeps the same WebRTC session");
+            using (var reopened = new StreamingHost(MonitorSettings()))
+            {
+                await reopened.StartAsync();
+                await UntilAsync(async () => !(bool)Streams(await Snapshot(player))[1]["stale"], "monitor reconnects while DSA keeps running");
+                var cameraBefore = Streams(await Snapshot(player))[1];
+                host.Dispose();
+                await UntilAsync(async () => {
+                    var streams = Streams(await Snapshot(player));
+                    return (bool)streams[0]["stale"] && !(bool)streams[1]["stale"] &&
+                        N(streams[1], "generation") == N(cameraBefore, "generation") && N(streams[1], "framesDecoded") > N(cameraBefore, "framesDecoded");
+                }, "closing screenshot stops DSA while the camera keeps the same WebRTC session");
+            }
             // 结束正常管线，再用同一配置生成器做真实 WebRTC UDP 弱网回环。
-            host.Dispose(); Stop(cam1); Stop(cam2); Stop(cameras);
+            Stop(cam1); Stop(cam2); Stop(cameras);
             settings.Cameras[0].Enabled = settings.Cameras[1].Enabled = false;
             string weakConfig = Path.Combine(Work, "weak-network.yml");
             File.WriteAllText(weakConfig, settings.MediaMtxConfig(new int[2])

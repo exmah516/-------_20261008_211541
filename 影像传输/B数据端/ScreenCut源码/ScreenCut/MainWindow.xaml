@@ -1,23 +1,38 @@
 <Window x:Class="ScreenCut.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="影像传输 · 数据端" Width="860" Height="550" MinWidth="680" MinHeight="380">
+    Title="影像传输 · DSA 截图" Width="960" Height="600" MinWidth="760" MinHeight="420">
   <Grid Margin="12">
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+    <StackPanel>
     <WrapPanel VerticalAlignment="Top">
       <TextBlock Text="左" VerticalAlignment="Center"/><TextBox x:Name="txtLeft" Width="54" Margin="4"/>
       <TextBlock Text="上" VerticalAlignment="Center"/><TextBox x:Name="txtTop" Width="54" Margin="4"/>
       <TextBlock Text="宽" VerticalAlignment="Center"/><TextBox x:Name="txtWidth" Width="54" Margin="4"/>
       <TextBlock Text="高" VerticalAlignment="Center"/><TextBox x:Name="txtHeight" Width="54" Margin="4"/>
       <Button Content="预览区域" Click="Preview_Click" Padding="8,3" Margin="4"/>
-      <TextBlock Text="主端 IP" VerticalAlignment="Center"/><TextBox x:Name="txtIP" Width="116" Margin="4"/>
-      <Button x:Name="StartButton" Content="开始传图" Click="Start_Click" Padding="8,3" Margin="4"/>
+      <Button x:Name="StartButton" Content="开始传图 / 应用画质" Click="Start_Click" Padding="8,3" Margin="4"/>
       <Button Content="停止传图" Click="Stop_Click" Padding="8,3" Margin="4"/>
     </WrapPanel>
+    <WrapPanel Margin="0,4,0,0">
+      <TextBlock Text="画质档位" VerticalAlignment="Center"/>
+      <ComboBox x:Name="qualityPreset" Width="150" Margin="4" SelectionChanged="Quality_Changed">
+        <ComboBoxItem Content="低带宽 540p" Tag="960,540,25,512"/>
+        <ComboBoxItem Content="清晰 720p" Tag="1280,720,25,2500"/>
+        <ComboBoxItem Content="高清 1080p（推荐）" Tag="1920,1080,25,6000"/>
+        <ComboBoxItem Content="精细 1080p" Tag="1920,1080,30,10000"/>
+      </ComboBox>
+      <TextBlock Text="输出宽" VerticalAlignment="Center"/><TextBox x:Name="txtVideoWidth" Width="54" Margin="4"/>
+      <TextBlock Text="高" VerticalAlignment="Center"/><TextBox x:Name="txtVideoHeight" Width="54" Margin="4"/>
+      <TextBlock Text="帧率" VerticalAlignment="Center"/><TextBox x:Name="txtVideoFps" Width="42" Margin="4"/>
+      <TextBlock Text="码率 kbps" VerticalAlignment="Center"/><TextBox x:Name="txtBitrate" Width="64" Margin="4"/>
+    </WrapPanel>
+    <TextBlock Text="上排是截取区域，下排是输出画质；更改后点“开始传图 / 应用画质”，保存并重新启动本路编码。"
+               Foreground="#586576" TextWrapping="Wrap" Margin="4"/>
+    </StackPanel>
     <StackPanel Grid.Row="1" Margin="0,6,0,8">
       <TextBlock x:Name="sendStatus" Text="媒体服务启动中…" TextWrapping="Wrap"/>
-      <TextBlock x:Name="cameraWarning" TextWrapping="Wrap" Foreground="#B14627" FontWeight="SemiBold" Margin="0,4,0,0" Visibility="Collapsed"/>
-      <TextBlock x:Name="cameraStatus" TextWrapping="Wrap" Foreground="#586576" Margin="0,4,0,0"/>
+      <TextBlock x:Name="encoderStatus" TextWrapping="Wrap" Foreground="#586576" Margin="0,4,0,0"/>
     </StackPanel>
     <Border Grid.Row="2" Background="#111821" CornerRadius="4"><Image x:Name="pictureBox" Stretch="Uniform"/></Border>
   </Grid>

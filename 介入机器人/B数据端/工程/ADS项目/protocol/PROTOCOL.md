@@ -72,7 +72,7 @@
 | 13 | byte[] | Proof |
 | 14 | byte[] | AuthTag |
 
-## StateFrame（55 项）
+## StateFrame（57 项）
 
 | 索引 | 类型 | 字段 |
 |---|---|---|
@@ -130,9 +130,11 @@
 | 51 | uint | ArmCjogError |
 | 52 | bool | ArmCjogLimited |
 | 53 | float64 | ArmCjogPathSpeed（mm/s 或 °/s） |
-| 54 | byte[] | AuthTag |
+| 54 | int | ArmCartesianStatus（0 空闲、1 进行中、2 完成、3 已在零位、4 停止、5 失败） |
+| 55 | int | ArmCartesianError（归零错误码） |
+| 56 | byte[] | AuthTag |
 
-末端点动状态沿用版本 1 的字段扩展惯例；主端和数据端须同步部署。严格解码只接受 55 项，不兼容旧长度。命令格式未改变。
+末端点动状态沿用版本 1 的字段扩展惯例；主端和数据端须同步部署。严格解码只接受 57 项，不兼容旧长度。命令格式未改变。
 
 ## ForceFrame（13 项）
 

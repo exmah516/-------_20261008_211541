@@ -19,12 +19,13 @@ internal static partial class Program
         for (int i = 0; i < files.Length; i++)
         {
             var before = XDocument.Load(Path.Combine(fixtures, "V3Baseline." + files[i] + ".xml"));
+            if (i == 2) ApplyMinimalBaseline(before);
             foreach (var original in before.Descendants().Where(element => element.Name.LocalName is "Button" or "ToggleButton" or "RadioButton" or "TextBox"))
             {
                 string? name = (string?)original.Attribute(X + "Name");
                 var current = name is not null
                     ? currentViews[i].Descendants().Single(element => (string?)element.Attribute(X + "Name") == name)
-                    : currentViews[i].Descendants().Single(element => element.Name == original.Name && behavior.All(key => (string?)element.Attribute(key) == (string?)original.Attribute(key)));
+                    : currentViews[i].Descendants().Single(element => (string?)element.Attribute(X + "Name") is not ("Cartesian3Reverse" or "Cartesian3Forward") && element.Name == original.Name && behavior.All(key => (string?)element.Attribute(key) == (string?)original.Attribute(key)));
                 string label = name ?? (string?)original.Attribute("Content") ?? original.Name.LocalName;
                 Check(behavior.All(key => (string?)current.Attribute(key) == (string?)original.Attribute(key)) && EnabledPaths(current) == EnabledPaths(original),
                     "v3 retains every command, event, parameter, binding and enabled path: " + label);

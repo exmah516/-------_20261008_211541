@@ -30,7 +30,7 @@ VAR CONSTANT
     T_DEC : LREAL := 0.5;
     INITIAL_BRANCH : INT := 1;
     BISECTION_COUNT : INT := 12;
-    JOINT_VCAP : ARRAY[1..5] OF LREAL := [24,10,10,10,10]; // 毫米/秒、度/秒
+    JOINT_VCAP : ARRAY[1..5] OF LREAL := [24,30,30,30,30]; // 毫米/秒、度/秒
 END_VAR
 VAR
     anchor : ARRAY[1..5] OF LREAL;

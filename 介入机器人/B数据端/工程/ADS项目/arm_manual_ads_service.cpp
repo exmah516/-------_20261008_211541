@@ -265,7 +265,12 @@ void ArmManualAdsService::clear_cjog_locked()
 void ArmManualAdsService::request_program_zero()
 {
 	std::lock_guard<std::mutex> lock(mutex_);
-	if (curve_pending_ || cjog_mode_ != 0 || snapshot_.cjog_owned || home_requested_) return;
+	if (curve_pending_ || home_requested_) return;
+	if (cjog_mode_ != 0 || snapshot_.cjog_owned) {
+		snapshot_.cartesian_status = 5;
+		snapshot_.cartesian_error = 1008;
+		return;
+	}
 	cartesian_blocked_ = false;
 	home_requested_ = true;
 	++snapshot_.home_request_id;

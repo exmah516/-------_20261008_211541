@@ -1,0 +1,61 @@
+--- original_candidate/ArmCartJogGen.TcPOU
++++ smooth_candidate/ArmCartJogGen.TcPOU
+@@ -100,8 +100,8 @@
+     s := ABS(SIN(q3));
+     lambda := 0;
+     IF s < DLS_S0 THEN
+-        ratio := s/DLS_S0;
+-        lambda := DLS_LAMBDA_MAX*SQRT(1.0-ratio*ratio);
++        ratio := 1.0-s/DLS_S0;
++        lambda := DLS_LAMBDA_MAX*ratio*ratio*(3.0-2.0*ratio);
+     END_IF
+     m11 := j11*j11+j12*j12+j13*j13+lambda*lambda;
+     m12 := j11*j21+j12*j22+j13*j23;
+--- original_candidate/arm_cart_jog_reference.h
++++ smooth_candidate/arm_cart_jog_reference.h
+@@ -78,8 +78,8 @@
+             s = std::abs(std::sin(q3));
+             lambda = 0;
+             if (s < DLS_S0) {
+-                ratio = s/DLS_S0;
+-                lambda = DLS_LAMBDA_MAX*std::sqrt(1.0-ratio*ratio);
++                ratio = 1.0-s/DLS_S0;
++                lambda = DLS_LAMBDA_MAX*ratio*ratio*(3.0-2.0*ratio);
+             }
+             m11 = j11*j11+j12*j12+j13*j13+lambda*lambda;
+             m12 = j11*j21+j12*j22+j13*j23;
+--- original_candidate/dls_acceptance.cpp
++++ smooth_candidate/dls_acceptance.cpp
+@@ -18,6 +18,9 @@
+ bool finite = true, caps = true, discrete = true;
+ std::string acceleration_case;
+ int acceleration_axis = 0, acceleration_cycle = 0;
++Axes acceleration_seed{}, acceleration_before{}, acceleration_after{}, acceleration_previous_v{}, acceleration_v{};
++int acceleration_mode = 0, acceleration_dir = 0;
++double acceleration_speed = 0, acceleration_s = 0, acceleration_lambda = 0;
+ 
+ positioning_arm::ArmKinematicConfig config()
+ {
+@@ -82,6 +85,10 @@
+             }
+             if (std::abs(g.a[i]) > max_acceleration) {
+                 max_acceleration=std::abs(g.a[i]); acceleration_case=name; acceleration_axis=i+1; acceleration_cycle=n;
++                acceleration_seed=seed; acceleration_before=before; acceleration_after=g.p;
++                acceleration_previous_v=before_v; acceleration_v=g.v;
++                acceleration_mode=mode; acceleration_dir=dir; acceleration_speed=speed;
++                acceleration_s=g.s; acceleration_lambda=g.lambda;
+             }
+         }
+         if (mode == 1 || mode == 2 || mode == 5) {
+@@ -300,6 +307,11 @@
+         <<" difference="<<velocity_difference<<" max_acc="<<max_acceleration<<" at="<<acceleration_case
+         <<" axis="<<acceleration_axis<<" cycle="<<acceleration_cycle<<'\n';
+     result("E8",finite&&caps&&velocity_difference<=1e-9&&max_acceleration<=300);
++    std::cout<<"E8_WITNESS mode="<<acceleration_mode<<" dir="<<acceleration_dir<<" speed="<<acceleration_speed
++        <<" time_s="<<acceleration_cycle*DT<<" s="<<acceleration_s<<" lambda="<<acceleration_lambda;
++    for(int i=0;i<5;++i)std::cout<<" seed"<<i+1<<'='<<acceleration_seed[i]<<" before"<<i+1<<'='<<acceleration_before[i]
++        <<" after"<<i+1<<'='<<acceleration_after[i]<<" previous_v"<<i+1<<'='<<acceleration_previous_v[i]<<" v"<<i+1<<'='<<acceleration_v[i];
++    std::cout<<'\n';
+     std::cout<<"E9 cycles="<<cycles<<" max_difference="<<st_difference<<" discrete_equal="<<discrete<<'\n';
+     result("E9",st_difference==0&&discrete);
+     std::cout<<"INDEPENDENT LDLT max_qdot_difference_rad_s="<<independent_error<<'\n';

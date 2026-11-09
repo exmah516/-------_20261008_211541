@@ -15,7 +15,7 @@ namespace vi_protocol
     constexpr std::size_t kHandleFields = 26;
     constexpr std::size_t kCommandFields = 15;
     constexpr std::size_t kCommandResultFields = 3;
-    constexpr std::size_t kStateFields = 55;
+    constexpr std::size_t kStateFields = 57;
     constexpr std::size_t kForceFields = 13;
     constexpr std::size_t kMaxResults = 32;
 
@@ -102,6 +102,7 @@ namespace vi_protocol
         std::uint32_t arm_cjog_state{}, arm_cjog_error{};
         bool arm_cjog_limited{};
         double arm_cjog_path_speed{};
+        std::int32_t arm_cartesian_status{}, arm_cartesian_error{};
         std::vector<std::uint8_t> auth_tag;
         MSGPACK_DEFINE(version, session_id, sequence, auth_state, nonce_server, echo_main_monotonic_ms,
             flags, mode, phase, self_check_status, ads_state, cylinder1, cylinder2, cylinder3,
@@ -113,7 +114,8 @@ namespace vi_protocol
             axis1_net_distance_mm, axis6_net_distance_mm, prepare_task_state,
             prepare_task_command_id, start_task_state, start_task_command_id, results,
             event_text, axis6_window_start_from_left_mm, axis6_window_end_from_left_mm,
-            arm_cjog_state, arm_cjog_error, arm_cjog_limited, arm_cjog_path_speed, auth_tag);
+            arm_cjog_state, arm_cjog_error, arm_cjog_limited, arm_cjog_path_speed,
+            arm_cartesian_status, arm_cartesian_error, auth_tag);
     };
 
     struct ForceFrame

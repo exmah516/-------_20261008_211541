@@ -94,7 +94,14 @@
                 <TextBlock Text="{Binding ArmCartesianJogStatusText}" Style="{StaticResource NonEmptyError}"/>
             </StackPanel>
             <UniformGrid Grid.Row="5" Columns="2" Margin="{DynamicResource GapTop}">
-                <Button x:Name="ProgramHome" Margin="{DynamicResource HalfGapRight}" Content="归零" Click="ArmProgramZero_Click" IsEnabled="{Binding CanOperate}"/>
+                <Grid Margin="{DynamicResource HalfGapRight}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="ProgramHome" Content="归零" Click="ArmProgramZero_Click" IsEnabled="{Binding CanOperate}"/>
+                    <TextBlock x:Name="ArmProgramZeroStatus" Grid.Column="1" Margin="{DynamicResource HalfGapLeft}" Text="{Binding ArmProgramZeroStatusText}" Style="{StaticResource Hint}" TextWrapping="Wrap"/>
+                </Grid>
                 <Button x:Name="ArmStop" Margin="{DynamicResource HalfGapLeft}" Content="停止" Click="ArmStop_Click"/>
             </UniformGrid>
             <Border Grid.Row="6" BorderBrush="#E6EBF0" BorderThickness="0,1,0,0" Padding="{DynamicResource DetailsPadding}">

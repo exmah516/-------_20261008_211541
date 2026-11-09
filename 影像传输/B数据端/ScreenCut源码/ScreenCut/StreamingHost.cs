@@ -1,14 +1,12 @@
+using Microsoft.Win32.SafeHandles;
 using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Net;
-using System.Net.Http;
 using System.Net.Sockets;
 using System.Collections.Generic;
-using System.Security.AccessControl;
 using System.Security.Principal;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -21,54 +19,83 @@ namespace ScreenCut
         private readonly object _gate = new object();
         private readonly CancellationTokenSource _stop = new CancellationTokenSource();
         private readonly BoundRtspSource[] _sources = new BoundRtspSource[2];
-        private readonly string _work;
-        private Process _media, _encoder;
+        private readonly bool[] _registered = new bool[2];
+        private readonly bool _monitor;
+        private readonly Mutex _instance;
+        private readonly SharedRelay _relay;
+        private SafeFileHandle _encoderJob;
+        private Process _encoder;
+        private uint _relayGeneration;
+        private string _lastCameraState;
         private Rectangle? _region;
         private bool _testPattern, _started, _disposed;
         private readonly string[] _cameraWarnings = new string[2];
         public event Action<string> Status;
         public event Action<string> CameraWarning;
+        public event Action<string> CameraState;
         public string LogPath => StreamingLog.LogPath;
 
-        public StreamingHost(StreamingSettings settings)
+        public StreamingHost(StreamingSettings settings, bool monitor = true)
         {
             _settings = settings;
-            string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VI.Imaging");
-            _work = Path.Combine(root, "run-" + Guid.NewGuid().ToString("N"));
-            var acl = new DirectorySecurity();
-            acl.SetAccessRuleProtection(true, false);
-            acl.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User, FileSystemRights.FullControl,
-                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
-            Directory.CreateDirectory(_work, acl);
+            _monitor = monitor;
+            bool created;
+            using (var identity = WindowsIdentity.GetCurrent())
+                _instance = new Mutex(false, @"Local\VI.Imaging." + identity.User.Value + "." + settings.ApiPort +
+                    (monitor ? ".monitor" : ".capture"), out created);
+            if (!created)
+            {
+                _instance.Dispose();
+                throw new InvalidOperationException(monitor ? "监控软件已启动。" : "截图软件已启动。");
+            }
+            try { _relay = new SharedRelay(settings); }
+            catch { _instance.Dispose(); throw; }
         }
 
         public async Task StartAsync()
         {
-            lock (_gate)
-            {
-                if (_disposed) throw new ObjectDisposedException(nameof(StreamingHost));
-                if (_started) return;
-                _started = true;
-                var ports = new int[2];
-                for (int i = 0; i < 2; i++)
-                    if (_settings.Cameras[i].Enabled)
-                    {
-                        var camera = _settings.Cameras[i];
-                        Log("监控 " + (i + 1) + " 输入：" + camera.LocalIp + " → " + camera.Ip + ":" + camera.RtspPort + "，RTSP 通道 " + camera.Channel);
-                        _sources[i] = new BoundRtspSource(camera, Log);
-                        ports[i] = _sources[i].Port;
-                    }
-                File.WriteAllText(Path.Combine(_work, "mediamtx.yml"), _settings.MediaMtxConfig(ports), new UTF8Encoding(false));
-                _media = StartChild("mediamtx.exe", "\"" + Path.Combine(_work, "mediamtx.yml") + "\"");
-            }
             try
             {
-                await WaitReadyAsync().ConfigureAwait(false);
-                Log("媒体服务已启动；主端 " + _settings.MasterIp + "，信令 TCP " + _settings.WebRtcPort + "，视频 UDP/TCP " + _settings.MediaPort);
-                _ = CheckCameraConnectivityAsync();
-                _ = WatchAsync();
+                await Task.Run(() => {
+                    lock (_gate)
+                    {
+                        if (_disposed) throw new ObjectDisposedException(nameof(StreamingHost));
+                        if (_started) return;
+                        if (_monitor)
+                            for (int i = 0; i < _sources.Length; i++)
+                            {
+                                var camera = _settings.Cameras[i];
+                                if (!camera.Enabled) continue;
+                                Log("监控 " + (i + 1) + " 输入：" + camera.LocalIp + " → " + camera.Ip + ":" + camera.RtspPort + "，RTSP 通道 " + camera.Channel);
+                                _sources[i] = new BoundRtspSource(camera, Log);
+                            }
+                        EnsureRelay();
+                        _started = true;
+                        Log("媒体服务已启动；主端 " + _settings.MasterIp + "，信令 TCP " + _settings.WebRtcPort + "，视频 UDP/TCP " + _settings.MediaPort);
+                        if (_monitor) _ = CheckCameraConnectivityAsync();
+                        _ = WatchAsync();
+                    }
+                }).ConfigureAwait(false);
             }
             catch { Dispose(); throw; }
+        }
+
+        private void EnsureRelay()
+        {
+            uint generation = _relay.Ensure(_stop.Token);
+            if (generation == _relayGeneration) return;
+            if (_monitor)
+                for (int i = 0; i < _sources.Length; i++)
+                {
+                    _relay.SetCamera(i + 1, _sources[i] == null ? null : _settings.Cameras[i].SourceUrl(_sources[i].Port), _stop.Token);
+                    _registered[i] = _sources[i] != null;
+                }
+            if (_relayGeneration != 0)
+            {
+                StopChild(ref _encoder);
+                Log("媒体服务已重新启动。");
+            }
+            _relayGeneration = generation;
         }
 
         private async Task CheckCameraConnectivityAsync()
@@ -102,7 +129,7 @@ namespace ScreenCut
                         }
                     if (alternate != null)
                         _cameraWarnings[i] = "监控 " + (i + 1) + " 网口可能接反：" + camera.Ip + " 从 " + camera.LocalIp +
-                            " 连接失败，改用 " + alternate + " 可达。请在 ScreenCut.exe.config 中设置 Camera" + (i + 1) + "LocalIp=" + alternate + "，然后重启。";
+                            " 连接失败，改用 " + alternate + " 可达。请在 CameraMonitor.exe.config 中设置 Camera" + (i + 1) + "LocalIp=" + alternate + "，然后重启。";
                     else
                         _cameraWarnings[i] = "监控 " + (i + 1) + " 连接失败：" + camera.LocalIp + " → " + camera.Ip + ":" + camera.RtspPort +
                             "。请检查相机 RTSP、网口和端口设置。";
@@ -135,35 +162,16 @@ namespace ScreenCut
             }
         }
 
-        private async Task WaitReadyAsync()
-        {
-            using (var http = new HttpClient(new HttpClientHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(1) })
-            {
-                for (int i = 0; i < 40; i++)
-                {
-                    _stop.Token.ThrowIfCancellationRequested();
-                    lock (_gate) if (_media == null || _media.HasExited) throw new IOException("MediaMTX 启动失败，请查看 " + LogPath);
-                    try
-                    {
-                        using (var reply = await http.GetAsync("http://127.0.0.1:" + _settings.ApiPort + "/v3/paths/list", _stop.Token).ConfigureAwait(false))
-                            if (reply.IsSuccessStatusCode) return;
-                    }
-                    catch (HttpRequestException) { }
-                    catch (TaskCanceledException) when (!_stop.IsCancellationRequested) { }
-                    await Task.Delay(250, _stop.Token).ConfigureAwait(false);
-                }
-            }
-            throw new TimeoutException("媒体服务未就绪；检查端口占用和数据端本地 IP。日志：" + LogPath);
-        }
-
-        public void StartDsa(Rectangle region, bool testPattern = false)
+        public void StartDsa(Rectangle region, bool testPattern = false, StreamingSettings video = null)
         {
             lock (_gate)
             {
                 if (!_started || _disposed) throw new InvalidOperationException("媒体服务尚未启动。");
+                if (video != null) _settings.SetVideo(video.VideoWidth, video.VideoHeight, video.VideoFps, video.BitrateKbps);
                 StopChild(ref _encoder);
+                _region = null;
+                _encoder = StartEncoder(region, testPattern);
                 _region = region; _testPattern = testPattern;
-                _encoder = StartChild("ffmpeg.exe", _settings.FfmpegArguments(region, testPattern));
             }
             Log("DSA H.264 已启动：" + _settings.VideoWidth + "×" + _settings.VideoHeight + "，" + _settings.VideoFps + "fps，" + _settings.BitrateKbps + "kbps");
         }
@@ -176,45 +184,48 @@ namespace ScreenCut
                 try
                 {
                     await Task.Delay(3000, _stop.Token).ConfigureAwait(false);
-                    bool restarted = false;
                     lock (_gate)
                     {
                         if (_disposed) return;
-                        if (_media == null || _media.HasExited)
+                        EnsureRelay();
+                        if (_monitor && CameraState != null)
                         {
-                            StopChild(ref _encoder); StopChild(ref _media);
-                            _media = StartChild("mediamtx.exe", "\"" + Path.Combine(_work, "mediamtx.yml") + "\"");
-                            restarted = true;
+                            string State(int i) => "监控 " + (i + 1) + "：" + (!_settings.Cameras[i].Enabled ? "已禁用" :
+                                _relay.CameraReady(i + 1, _stop.Token) ? "正在转发" : "等待画面，请检查 RTSP、凭据和码流设置");
+                            string text = State(0) + Environment.NewLine + State(1);
+                            if (text != _lastCameraState) { _lastCameraState = text; CameraState.Invoke(StreamingLog.Write(text)); }
                         }
-                    }
-                    if (restarted) { await WaitReadyAsync().ConfigureAwait(false); Log("媒体服务已重新启动。"); }
-                    lock (_gate)
-                    {
-                        if (_disposed) return;
                         if (_region.HasValue && (_encoder == null || _encoder.HasExited))
                         {
                             StopChild(ref _encoder);
-                            _encoder = StartChild("ffmpeg.exe", _settings.FfmpegArguments(_region.Value, _testPattern));
+                            _encoder = StartEncoder(_region.Value, _testPattern);
                             Log("DSA 编码器重新连接中。");
                         }
                     }
                 }
-                catch (OperationCanceledException) { return; }
+                catch (OperationCanceledException) when (_stop.IsCancellationRequested) { return; }
                 catch (Exception ex) { Log("媒体管线：" + ex.Message); }
             }
         }
 
-        private Process StartChild(string filename, string arguments)
+        private Process StartEncoder(Rectangle region, bool testPattern)
         {
-            var p = new Process { StartInfo = new ProcessStartInfo(StreamingSettings.FindRuntime(filename), arguments) {
-                UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = _work,
+            _encoderJob = _encoderJob ?? SharedRelay.CreateKillOnCloseJob();
+            const string filename = "ffmpeg.exe";
+            var p = new Process { StartInfo = new ProcessStartInfo(StreamingSettings.FindRuntime(filename), _settings.FfmpegArguments(region, testPattern)) {
+                UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = _relay.WorkDirectory,
                 RedirectStandardError = true, RedirectStandardOutput = true
             } };
             p.ErrorDataReceived += (s, e) => { if (e.Data != null) Log("[" + filename + "] " + e.Data); };
             p.OutputDataReceived += (s, e) => { if (e.Data != null) Log("[" + filename + "] " + e.Data); };
-            if (!p.Start()) throw new IOException("无法启动 " + filename);
-            p.BeginErrorReadLine(); p.BeginOutputReadLine();
-            return p;
+            try
+            {
+                if (!p.Start()) throw new IOException("无法启动 " + filename);
+                SharedRelay.Attach(_encoderJob, p);
+                p.BeginErrorReadLine(); p.BeginOutputReadLine();
+                return p;
+            }
+            catch { StopChild(ref p); throw; }
         }
         public static string Redact(string line) => Regex.Replace(line, @"rtsp://[^\s/]*@", "rtsp://***@", RegexOptions.IgnoreCase);
         private void Log(string text)
@@ -232,13 +243,20 @@ namespace ScreenCut
         }
         public void Dispose()
         {
+            _stop.Cancel();
             lock (_gate)
             {
                 if (_disposed) return;
-                _disposed = true; _stop.Cancel(); _region = null;
-                StopChild(ref _encoder); StopChild(ref _media);
+                _disposed = true; _region = null;
+                StopChild(ref _encoder);
+                _encoderJob?.Dispose();
                 foreach (var source in _sources) source?.Dispose();
-                try { Directory.Delete(_work, true); } catch (IOException) { }
+                for (int i = 0; i < _registered.Length; i++)
+                    if (_registered[i])
+                        try { _relay.SetCamera(i + 1, null, CancellationToken.None); }
+                        catch (Exception ex) { Log("关闭监控 " + (i + 1) + "：" + ex.Message); }
+                _relay.Dispose();
+                _instance.Dispose();
             }
         }
     }

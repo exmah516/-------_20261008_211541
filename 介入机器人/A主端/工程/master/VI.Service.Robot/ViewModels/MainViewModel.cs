@@ -407,6 +407,41 @@ namespace MasterConsole.ViewModels
             : _s.ArmCjogLimited && _s.ArmCjogState is 2 or 3
                 ? "接近奇异位形或关节限速，已自动降速" : "";
 
+        public string ArmProgramZeroStatusText => _s.ArmCartesianStatus switch
+        {
+            1 => "归零进行中",
+            2 => "归零已完成",
+            3 => "已在零位",
+            4 => "归零已停止",
+            5 => $"归零失败：{_s.ArmCartesianError}（{ArmProgramZeroErrorText(_s.ArmCartesianError)}）",
+            _ => ""
+        };
+
+        private static string ArmProgramZeroErrorText(int error) => error switch
+        {
+            1001 => "归零参数无效",
+            1002 => "当前关节位置超出允许范围",
+            1003 => "ADS 写入失败",
+            1004 => "定位臂状态或总使能未就绪",
+            1005 => "归零保活超时",
+            1006 => "轴未上电、故障、复位或单轴点动中",
+            1007 => "PLC 确认曲线超时",
+            1008 => "末端点动占用，请松开点动并等待停稳",
+            1202 => "归零规划输入无效",
+            1203 => "归零规划超出关节范围",
+            1206 => "归零轨迹采样数量超限",
+            1207 => "归零规划数值求解失败",
+            2001 => "PLC 运动所有权被占用或正在停止",
+            2002 => "PLC 拒绝曲线参数",
+            2003 => "PLC 驱动、使能、心跳或急停条件未满足",
+            2004 => "PLC 轴仍在运动",
+            2005 => "PLC 曲线速度或加速度超限",
+            2006 => "PLC 轴5姿态超出范围",
+            2007 => "PLC 外部设定点使能或到位超时",
+            2008 => "PLC 跟随偏差、速度或加速度超限",
+            _ => $"NC 错误 0x{error:X}"
+        };
+
         public bool ArmSpeedFast { get => _armJogSpeedScale == 2.0; set { if (value) SetArmJogSpeedScale(2.0); } }
         public bool ArmSpeedMedium { get => _armJogSpeedScale == 1.0; set { if (value) SetArmJogSpeedScale(1.0); } }
         public bool ArmSpeedSlow { get => _armJogSpeedScale == 0.5; set { if (value) SetArmJogSpeedScale(0.5); } }
@@ -531,7 +566,7 @@ namespace MasterConsole.ViewModels
             nameof(Axis2AngleText), nameof(Axis7AngleText),
             nameof(Axis2PointerX), nameof(Axis2PointerY), nameof(Axis7PointerX), nameof(Axis7PointerY),
             nameof(PrepareStatusText), nameof(FfCaption), nameof(YValveCaption), nameof(Injector1Text), nameof(Injector2Text), nameof(Axis4Text),
-            nameof(StatusFresh),
+            nameof(StatusFresh), nameof(ArmProgramZeroStatusText),
         };
 
         private static readonly string[] Axis6WindowPropertyNames =

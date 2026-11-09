@@ -13,9 +13,7 @@ namespace ScreenCut
     public partial class MainWindow : Window
     {
         private StreamingHost _host;
-        private string _activeMaster;
         private string _pendingStatus;
-        private string _pendingCameraWarning;
         private readonly DispatcherTimer _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         private bool _closed;
         public MainWindow()
@@ -23,23 +21,21 @@ namespace ScreenCut
             InitializeComponent();
             _statusTimer.Tick += (s, e) => {
                 string text = Interlocked.Exchange(ref _pendingStatus, null);
-                if (text != null) cameraStatus.Text = text;
-                string warning = Interlocked.Exchange(ref _pendingCameraWarning, null);
-                if (warning != null) {
-                    cameraWarning.Text = warning;
-                    cameraWarning.Visibility = string.IsNullOrEmpty(warning) ? Visibility.Collapsed : Visibility.Visible;
-                }
+                if (text != null) encoderStatus.Text = text;
             };
             _statusTimer.Start();
             SetSendStatus("媒体服务启动中…");
             StartButton.IsEnabled = false;
-            txtIP.Text = ConfigurationManager.AppSettings["MasterIp"] ?? "192.168.50.1";
             var b = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
             int Read(string key, int fallback) => int.TryParse(ConfigurationManager.AppSettings[key], out int n) ? n : fallback;
             txtLeft.Text = Read("CaptureLeft", b.Left).ToString();
             txtTop.Text = Read("CaptureTop", b.Top).ToString();
             txtWidth.Text = Read("CaptureWidth", b.Width).ToString();
             txtHeight.Text = Read("CaptureHeight", b.Height).ToString();
+            txtVideoWidth.Text = Read("VideoWidth", 1920).ToString();
+            txtVideoHeight.Text = Read("VideoHeight", 1080).ToString();
+            txtVideoFps.Text = Read("VideoFps", 25).ToString();
+            txtBitrate.Text = Read("VideoBitrateKbps", 6000).ToString();
             Loaded += async (s, e) => {
                 try { await EnsureHostAsync(); }
                 catch (Exception ex) { if (!_closed) SetSendStatus(ex.Message); }
@@ -51,24 +47,24 @@ namespace ScreenCut
             };
         }
         private void SetSendStatus(string text) => sendStatus.Text = StreamingLog.Write(text);
+        private void Quality_Changed(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (!(qualityPreset.SelectedItem is System.Windows.Controls.ComboBoxItem item)) return;
+            var values = ((string)item.Tag).Split(',');
+            txtVideoWidth.Text = values[0]; txtVideoHeight.Text = values[1];
+            txtVideoFps.Text = values[2]; txtBitrate.Text = values[3];
+        }
         private async Task EnsureHostAsync()
         {
-            string master = StreamingSettings.Ipv4(txtIP.Text.Trim());
-            if (_host != null && _activeMaster == master) return;
-            _host?.Dispose(); _host = null;
-            var settings = StreamingSettings.Load();
-            settings.MasterIp = master;
-            var host = new StreamingHost(settings);
-            _host = host; _activeMaster = master;
-            Interlocked.Exchange(ref _pendingCameraWarning, "");
-            host.CameraWarning += warning => {
-                if (!_closed && ReferenceEquals(_host, host)) Interlocked.Exchange(ref _pendingCameraWarning, warning);
-            };
+            if (_host != null) return;
+            var settings = StreamingSettings.Load(includeCameras: false);
+            var host = new StreamingHost(settings, monitor: false);
+            _host = host;
             // 完整提示已经落盘，界面仅保留最新一条，避免高频日志堆积 Dispatcher 队列。
             host.Status += text => Interlocked.Exchange(ref _pendingStatus, text);
             try { await host.StartAsync(); }
             catch { host.Dispose(); if (_host == host) _host = null; throw; }
-            if (!_closed) SetSendStatus("媒体服务就绪；预览区域后点击“开始传图”。摄像头自动接入。");
+            if (!_closed) SetSendStatus("媒体服务就绪，主端 " + settings.MasterIp + "。预览区域后点击“开始传图”。");
         }
         private Rectangle Region()
         {
@@ -101,6 +97,11 @@ namespace ScreenCut
             try
             {
                 var r = Region();
+                if (!int.TryParse(txtVideoWidth.Text, out int width) || !int.TryParse(txtVideoHeight.Text, out int height) ||
+                    !int.TryParse(txtVideoFps.Text, out int fps) || !int.TryParse(txtBitrate.Text, out int bitrate))
+                    throw new ArgumentException("输出分辨率、帧率和码率必须是整数。");
+                var video = new StreamingSettings();
+                video.SetVideo(width, height, fps, bitrate);
                 await EnsureHostAsync();
                 if (_closed) return;
                 var config = ConfigurationManager.OpenExeConfiguration(ConfigurationUserLevel.None);
@@ -109,18 +110,20 @@ namespace ScreenCut
                     if (config.AppSettings.Settings[key] == null) config.AppSettings.Settings.Add(key, value);
                     else config.AppSettings.Settings[key].Value = value;
                 }
-                Set("MasterIp", _activeMaster); Set("CaptureLeft", r.X.ToString()); Set("CaptureTop", r.Y.ToString());
+                Set("CaptureLeft", r.X.ToString()); Set("CaptureTop", r.Y.ToString());
                 Set("CaptureWidth", r.Width.ToString()); Set("CaptureHeight", r.Height.ToString());
+                Set("VideoWidth", width.ToString()); Set("VideoHeight", height.ToString());
+                Set("VideoFps", fps.ToString()); Set("VideoBitrateKbps", bitrate.ToString());
                 config.Save(ConfigurationSaveMode.Modified); ConfigurationManager.RefreshSection("appSettings");
-                _host.StartDsa(r);
-                SetSendStatus("DSA 正在传输 H.264；停止传图不影响两路监控。");
+                _host.StartDsa(r, video: video);
+                SetSendStatus("DSA 正在传输 " + width + "×" + height + "，" + fps + " fps，" + bitrate + " kbps。");
             }
             catch (Exception ex) { if (!_closed) SetSendStatus("未开始传图：" + ex.Message); }
             finally { if (!_closed) StartButton.IsEnabled = true; }
         }
         private void Stop_Click(object sender, RoutedEventArgs e)
         {
-            _host?.StopDsa(); SetSendStatus("DSA 已停止；两路监控继续运行。");
+            _host?.StopDsa(); SetSendStatus("DSA 已停止。");
         }
     }
 }

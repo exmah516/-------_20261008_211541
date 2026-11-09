@@ -123,18 +123,18 @@ int main()
             PositioningArmKinematics arm(fixture());
             auto q = JointVector::Zero().eval(); q[0] = 0.1;
             auto pose = arm.forward(q);
-            check((pose.position - Eigen::Vector3d(-0.5545, -0.4763, 0.1)).norm() < 1e-12,
+            check((pose.position - Eigen::Vector3d(0.4563, -0.5745, 0.1)).norm() < 1e-12,
                 "Wrong mechanical-zero L geometry");
             pose = arm.forward(home());
-            check((pose.position - Eigen::Vector3d(-0.5545, -0.4763, 0.1)).norm() < 1e-12,
+            check((pose.position - Eigen::Vector3d(0.4563, -0.5745, 0.1)).norm() < 1e-12,
                 "Wrong program-zero geometry");
             check(pose.quaternion.angularDistance(
-                Eigen::Quaterniond(Eigen::AngleAxisd(-Pi / 2, Eigen::Vector3d::UnitZ()))) < 1e-12,
+                Eigen::Quaterniond::Identity()) < 1e-12,
                 "Mechanical-zero tool axes not aligned");
             q = home(); q[4] = -30 * Degree;
             pose = arm.forward(q);
             check(std::abs(pose.position.z() - 0.37725) < 1e-12, "Negative pitch did not lift tip");
-            check(std::abs(pose.position.x() + 0.480211086398471) < 1e-12,
+            check(std::abs(pose.position.y() + 0.500211086398471) < 1e-12,
                 "Pitch changed lateral offset");
             check(arm.degreesOfFreedom() == 5, "Wrong DOF");
         }},
