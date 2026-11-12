@@ -1,0 +1,10 @@
+{
+  "success": false,
+  "exit_code": 1,
+  "errors": null,
+  "warnings": null,
+  "log": "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage0\\logs\\plc\\build.log",
+  "workspace": "C:\\Users\\Sui\\AppData\\Local\\Temp\\plc-build-d9dfbd39c3ba489aad594f4cdb053d9c",
+  "interface": "TcXaeShell.DTE.15.0 / SolutionBuild.BuildProject",
+  "failure": "TwinCAT project did not load: XAE returned an unmodeled/unavailable project. No PLC compilation was performed."
+}

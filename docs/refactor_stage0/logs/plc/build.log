@@ -1,0 +1,3 @@
+﻿Project: 250902; Kind: {67294A52-A4F0-11D2-AA88-00C04F688DDE}; File: 
+Project: TwinCAT Measurement Project3; Kind: {67294A52-A4F0-11D2-AA88-00C04F688DDE}; File: 
+System.Management.Automation.RuntimeException: TwinCAT project did not load: XAE returned an unmodeled/unavailable project. No PLC compilation was performed.
