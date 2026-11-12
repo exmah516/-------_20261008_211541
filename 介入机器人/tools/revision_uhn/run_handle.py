@@ -31,7 +31,7 @@ for name in ("Handle.h", "remote_handle_bridge.h", "手柄.cpp"):
     "\t\tconst bool connection_hold_active").replace("else if", "if", 1), encoding="utf-8")
 (out / "main_filter.inc").write_text(between(main, "\t\tif (!handle_soft_hold_active)\n\t\t{\n\t\t\taxis1_handle_filter.update",
     "\t\tLARGE_INTEGER handle_record_qpc"), encoding="utf-8")
-(out / "main_soft_hold.inc").write_text(between(main, "\t\thandle_soft_hold_active = single_handle_mode",
+(out / "main_soft_hold.inc").write_text(between(main, "\t\thandle_soft_hold_active =",
     "\t\tconst bool handle1_rebase_requested"), encoding="utf-8")
 (out / "main_force.inc").write_text(between(main, "\t\tprocess_force_feedback(",
     "\n\t\t// 无论本拍是否进入控制分支"), encoding="utf-8")
