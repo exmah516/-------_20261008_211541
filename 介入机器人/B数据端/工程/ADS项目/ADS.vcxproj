@@ -176,6 +176,7 @@
     <ClInclude Include="handle_velocity_recorder.h" />
     <ClInclude Include="async_csv_writer.h" />
     <ClInclude Include="experiment_recorder.h" />
+    <ClInclude Include="experiment_events.h" />
     <ClInclude Include="force_calibration.h" />
     <ClInclude Include="control_messages.h" />
     <ClInclude Include="zenoh_service.h" />

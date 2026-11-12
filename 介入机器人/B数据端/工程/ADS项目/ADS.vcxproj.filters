@@ -86,6 +86,9 @@
     <ClInclude Include="async_csv_writer.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="experiment_events.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="experiment_recorder.h">
       <Filter>头文件</Filter>
     </ClInclude>

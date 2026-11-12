@@ -49,7 +49,7 @@ struct Round5 : Fixture {
     }
     void estop(bool requested) {
         estop_hold_req=requested;
-        auto clear_axis1_delivery_mapping=[](){};
+        auto clear_axis1_delivery_mapping=[](int=0){};
         auto load_pos_from_actual=[&](){std::copy(plc_act_pos,plc_act_pos+7,pos);};
         auto clear_force_output=[&](){++force_clears;};
         auto clear_planned_return_ads_command_tracking=[&](){planned_return.ads_command_purpose=PlannedReturnAdsCommandPurpose::None;};
@@ -60,7 +60,7 @@ struct Round5 : Fixture {
     bool resume() {
         const double axis1_abs=plc_act_pos[0]+plc_init_pos[0],axis5_abs=plc_act_pos[4]+plc_init_pos[4],axis6_abs=plc_act_pos[5]+plc_init_pos[5];
         auto axis6_target_exceeds_soft_limit=[&](double target) { return target-plc_leftlimit[5]>cfg.axis6_soft_limit_from_left_mm+1e-6; };
-        auto clear_axis1_delivery_mapping=[]() {};
+        auto clear_axis1_delivery_mapping=[](int=0) {};
         auto clear_cylinder_manual_overrides=[]() {};
         auto apply_planned_return_outputs=[]() {};
 #include "return_recovery_safety.inc"

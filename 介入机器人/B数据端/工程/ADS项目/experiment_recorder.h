@@ -2,6 +2,7 @@
 
 #include "ads_communication.h"
 #include "async_csv_writer.h"
+#include "experiment_events.h"
 
 #include <atomic>
 #include <cstdint>
@@ -31,16 +32,6 @@ enum class ExperimentRecordingError : int
 	OpenEventsCsvFailed = 8,
 	EventsWriterFailed = 9
 };
-
-// 低频事件只记录真实生效的状态变化，不记录每拍手柄采样。
-enum class ExperimentEventCode : int
-{
-	ModeSwitch = 1,
-	SpacingRecoveryStart = 2
-};
-
-// ModeSwitch value follows ModeSelection: 1=导管递送, 2=导管撤出,
-// 3=导丝递送, 4=导丝撤出. SpacingRecoveryStart value is 1.
 
 struct ExperimentStartInfo
 {
@@ -111,6 +102,7 @@ struct EventCsvRow
 {
 	std::uint64_t event_index = 0;
 	std::uint64_t elapsed_us = 0;
+	std::uint64_t ads_snapshot_sequence = 0;
 	int event_code = 0;
 	int value = 0;
 };
@@ -143,7 +135,7 @@ public:
 
 	bool enqueue_force(const ForceCsvRow& row);
 	bool enqueue_motion(const MotionCsvRow& row);
-	bool enqueue_event(ExperimentEventCode code, int value, std::int64_t source_qpc_ticks = 0);
+	bool enqueue_event(ExperimentEventCode code, int value, std::uint64_t ads_snapshot_sequence = 0, std::int64_t source_qpc_ticks = 0);
 
 	void update_ads_communication_stats(const AdsCommunicationStats& stats);
 

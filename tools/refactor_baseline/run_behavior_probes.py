@@ -12,6 +12,7 @@ import tempfile
 BUILD = Path(tempfile.mkdtemp(prefix='behavior-probes-'))
 BUILD.mkdir(exist_ok=True)
 manifest = []
+(BUILD/'experiment_events.h').write_bytes((ADS/'experiment_events.h').read_bytes())
 
 def extract(name, filename, start, end):
     p = ADS / filename

@@ -71,14 +71,18 @@ int main()
     bool homing_record_pending = false;
     std::uint64_t homing_record_refresh_generation = 0;
 
-	// B7 选择当前物理手柄语义，选中后对应手柄的 B6 电平决定递送或撤出。
-
 	// 长生命周期运行时对象。
 	Handle handle_axis1(serial_axis1_handle);
 	Handle handle_axis6(serial_axis6_handle);
 	CADSComm ads;
 	HandleNetDistance axis1_net_distance, axis6_net_distance;
 	ExperimentRecorder experiment_recorder;
+	std::uint64_t ads_snapshot_sequence = 0;
+	auto record_experiment_event = [&](ExperimentEventCode code, int value)
+	{
+		(void)experiment_recorder.enqueue_event(code, value, ads_snapshot_sequence,
+			experiment_recorder.clock().now_qpc());
+	};
 	HandleVelocityRecorder handle_velocity_recorder;
 	const auto handle_velocity_path = run_directory / (L"handle_velocity_" + std::to_wstring(GetTickCount64()) + L".csv");
 	if (handle_velocity_recorder.start(handle_velocity_path))
@@ -226,8 +230,9 @@ int main()
 	auto axis1_window_right_abs = [&]() -> double { return motion_sync::axis1_window_right_abs(ctx); };
 	auto sync_all = [&](int samples) -> bool { return motion_sync::sync_all(ctx, samples); };
 	auto capture_axis1_follow_baseline = [&]() { motion_sync::capture_axis1_follow_baseline(ctx); };
-	auto clear_axis1_delivery_mapping = [&]()
+	auto clear_axis1_delivery_mapping = [&](int clear_reason = static_cast<int>(ExperimentEventReason::LeadReset))
 	{
+		if (axis1_delivery_mapping_active) record_experiment_event(ExperimentEventCode::Axis1LeadCleared, clear_reason);
 		axis1_delivery_mapping_active = false;
 		axis1_delivery_mapping_progress_mm = 0.0;
 		axis1_delivery_mapping_applied_extra_mm = 0.0;
@@ -235,6 +240,7 @@ int main()
 	auto arm_axis1_delivery_mapping = [&]()
 	{
 		axis1_delivery_mapping_active = cfg.axis1_post_return_lead_mm > 1e-6;
+		if (axis1_delivery_mapping_active) record_experiment_event(ExperimentEventCode::Axis1LeadArmed, 0);
 		axis1_delivery_mapping_progress_mm = 0.0;
 		axis1_delivery_mapping_applied_extra_mm = 0.0;
 	};
@@ -315,12 +321,17 @@ int main()
 	std::string force_feedback_diag_reason;
 	std::string force_sample_diag_reason;
 	// 统一回退的完成、重试和取消均以同一份100 Hz快照序号判定“之后的新鲜帧”。
-	std::uint64_t ads_snapshot_sequence = 0;
 	auto planned_return_phase_for_axis = [&](int axis_index) -> int
 	{
 		return planned_return.compatibility_phase_for_axis(axis_index);
 	};
 
+	auto record_return_command = [&](PlannedReturnAdsCommandPurpose purpose, ExperimentCommandResult result)
+	{
+		const auto code = purpose == PlannedReturnAdsCommandPurpose::Prepare ? ExperimentEventCode::PlannedReturnPrepare :
+			purpose == PlannedReturnAdsCommandPurpose::Commit ? ExperimentEventCode::PlannedReturnCommit : ExperimentEventCode::PlannedReturnClear;
+		record_experiment_event(code, experiment_event_value(static_cast<int>(result), static_cast<int>(purpose)));
+	};
 	auto clear_planned_return_ads_command_tracking = [&]()
 	{
 		planned_return.ads_command_purpose = PlannedReturnAdsCommandPurpose::None;
@@ -346,7 +357,11 @@ int main()
 			PlannedReturnLeg& leg = planned_return.legs[leg_index];
 			const std::uint8_t axis_mask = leg.axis_index == 0 ? 0x01u :
 				(leg.axis_index == 5 ? 0x02u : 0x00u);
-			if ((mask & axis_mask) != 0) leg.possibly_started = true;
+			if ((mask & axis_mask) != 0)
+			{
+				if (!leg.possibly_started) record_experiment_event(ExperimentEventCode::PlannedReturnPossiblyStarted, leg.axis_index + 1);
+				leg.possibly_started = true;
+			}
 		}
 	};
 	auto submit_planned_return_ads_command = [&](AdsPlannedReturnOperation operation,
@@ -377,6 +392,7 @@ int main()
 		}
 
 		const std::uint64_t sequence = ads_communication.submit_planned_return_command(command);
+		record_return_command(purpose, sequence == 0 ? ExperimentCommandResult::QueueRejected : ExperimentCommandResult::Submitted);
 		if (sequence == 0) return false;
 		planned_return.ads_command_purpose = purpose;
 		planned_return.ads_command_sequence = sequence;
@@ -406,6 +422,7 @@ int main()
 				// 结果槽不可判定时，不能证明Req没有到达PLC；按全部任务腿保守锁存。
 				latch_planned_return_possibly_started(planned_return_active_axis_mask());
 			}
+			record_return_command(planned_return.ads_command_purpose, ExperimentCommandResult::Unknown);
 			return PlannedReturnAdsPoll::Failure;
 		}
 		if (!completed) return PlannedReturnAdsPoll::Pending;
@@ -414,29 +431,34 @@ int main()
 		{
 			latch_planned_return_possibly_started(possibly_started_mask);
 		}
+		record_return_command(planned_return.ads_command_purpose, success ? ExperimentCommandResult::Succeeded : ExperimentCommandResult::Failed);
 		return success ? PlannedReturnAdsPoll::Success : PlannedReturnAdsPoll::Failure;
 	};
 	auto planned_return_ads_command_timed_out = [&](ULONGLONG now_ms) -> bool
 	{
-		return planned_return.ads_command_sequence != 0 &&
+		const bool expired = planned_return.ads_command_sequence != 0 &&
 			planned_return.ads_command_submit_ms != 0 &&
 			(now_ms - planned_return.ads_command_submit_ms) >=
 			cfg.planned_return_ack_timeout_ms;
+		if (expired) record_return_command(planned_return.ads_command_purpose, ExperimentCommandResult::TimedOut);
+		return expired;
 	};
 	auto reset_planned_return = [&]()
 	{
+		if (planned_return.active()) record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::Idle));
 		planned_return.reset();
 		dual_handoff.reset();
 		axis1_fast_return = false;
 		axis6_fast_retract = false;
 	};
 	// 仅在明确接管或 PLC 故障时取消；短暂通信保持由原回退协调器继续确认和交接。
+	std::uint64_t event_cancel_clear_sequence = 0;
 	auto cancel_active_return_motion = [&](bool clear_plc_requests) -> bool
 	{
 		dual_handoff.reset();
 		const bool had_active_return = planned_return.active();
 		if (!had_active_return) return true;
-		clear_axis1_delivery_mapping();
+		clear_axis1_delivery_mapping(static_cast<int>(ExperimentEventReason::LeadReturn));
 
 		const PlannedReturnPhase interrupted_phase = planned_return.phase;
 		const bool handoff_clear_already_applied =
@@ -468,6 +490,8 @@ int main()
 				PlannedReturnAdsCommandPurpose::CancelClear,
 				true);
 		}
+		if (planned_return.active()) record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::Idle));
+		if (clear_submitted && plc_request_can_be_active) event_cancel_clear_sequence = planned_return.ads_command_sequence;
 		planned_return.reset();
 		return clear_submitted;
 	};
@@ -611,11 +635,9 @@ int main()
 		std::cout << "实验记录默认开启：records/日期/时间_auto，退出程序时保存完成。" << std::endl;
 	else
 		std::cerr << "实验记录启动失败，错误码：" << static_cast<int>(experiment_recorder.snapshot().error) << std::endl;
-	auto record_experiment_event = [&](ExperimentEventCode code, int value)
-	{
-		(void)experiment_recorder.enqueue_event(code, value, experiment_recorder.clock().now_qpc());
-	};
 
+	int event_hold_sources = 0;
+	bool event_connection_hold_active = false;
 	while (true)
 	{
 		AdsFastSnapshot ads_snapshot{};
@@ -632,6 +654,18 @@ int main()
 		ads_communication.drain_snapshots(drained_ads_snapshots);
 		const AdsCommunicationStats ads_stats = ads_communication.stats();
 		const AdsEventState ads_events = ads_communication.event_state();
+		if (event_cancel_clear_sequence != 0)
+		{
+			bool completed = false, success = false;
+			std::uint8_t mask = 0;
+			const bool known = ads_communication.planned_return_command_result(event_cancel_clear_sequence, completed, success, mask);
+			if (!known || completed)
+			{
+				record_return_command(PlannedReturnAdsCommandPurpose::CancelClear,
+					!known ? ExperimentCommandResult::Unknown : success ? ExperimentCommandResult::Succeeded : ExperimentCommandResult::Failed);
+				event_cancel_clear_sequence = 0;
+			}
+		}
 		if (pending_return_error_axis >= 0)
 		{
 			std::uint64_t error_id_sequence = 0;
@@ -708,7 +742,14 @@ int main()
 			axis6_net_distance.set_following(false);
 			ads_communication.request_coordinate_refresh();
 			ads_communication.request_watchdog_recovery();
-			if (spacing_recovery.phase != SpacingRecoveryPhase::ExitSync) spacing_recovery.reset();
+			if (spacing_recovery.phase != SpacingRecoveryPhase::ExitSync)
+			{
+				if (spacing_recovery.active() || spacing_recovery.requested)
+					record_experiment_event(ExperimentEventCode::SpacingRecoveryHoldCleared, experiment_event_value(static_cast<int>(ExperimentEventReason::RejectConnection), HoldAds));
+				if (spacing_recovery.phase != SpacingRecoveryPhase::Idle)
+					record_experiment_event(ExperimentEventCode::SpacingRecoveryPhase, static_cast<int>(SpacingRecoveryPhase::Idle));
+				spacing_recovery.reset();
+			}
 			std::cout << "ADS 重连：保留原回退任务与方向，按 PLC 当前状态继续确认和交接。" << std::endl;
 		}
 		// 运动控制只依赖位置快照；力数据质量单独由 force_valid 传给力反馈和记录器。
@@ -722,7 +763,11 @@ int main()
 			// 首个有效快照即确认自检状态，等待按键期间不得进入启动准备。
 			has_self_check_flag = true;
 			last_self_check_done = self_check_done;
-			if (!self_check_done) control_active = false;
+			if (!self_check_done)
+			{
+				if (control_active) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::SelfCheckLost), 0));
+				control_active = false;
+			}
 			startup.loading_ready_symbol_available = true;
 		}
 		const ULONGLONG loop_now_ms = GetTickCount64();
@@ -869,14 +914,37 @@ int main()
 		}
 
 		const bool connection_hold_active = !initial_sync_done || ads_soft_hold_active || handle_soft_hold_active;
+		const int hold_sources = (ads_soft_hold_active ? HoldAds : 0) |
+			(!handle1_poll_ok ? HoldHandle587 : 0) | (!handle6_poll_ok ? HoldHandle582 : 0) |
+			(handle_axis1.resume_settling() ? HoldSettling587 : 0) |
+			(handle_axis6.resume_settling() ? HoldSettling582 : 0) | (!initial_sync_done ? HoldInitialSync : 0);
+		if (connection_hold_active && !event_connection_hold_active)
+			record_experiment_event(ExperimentEventCode::ConnectionHoldEnter, hold_sources);
+		else if (!connection_hold_active && event_connection_hold_active)
+			record_experiment_event(ExperimentEventCode::ConnectionHoldExit, event_hold_sources);
+		event_connection_hold_active = connection_hold_active;
+		if (hold_sources != event_hold_sources)
+		{
+			record_experiment_event(ExperimentEventCode::ConnectionHoldSources,
+				experiment_event_value(hold_sources, event_hold_sources));
+			event_hold_sources = hold_sources;
+		}
+
 		const bool connection_hold_enter_edge = connection_hold_active && !connection_hold_active_prev;
 		const bool connection_hold_exit_edge = !connection_hold_active && connection_hold_active_prev;
 		connection_hold_active_prev = connection_hold_active;
 
 		if (connection_hold_enter_edge)
 		{
+			if ((spacing_recovery.active() || spacing_recovery.requested) && spacing_recovery.phase != SpacingRecoveryPhase::ExitSync)
+				record_experiment_event(ExperimentEventCode::SpacingRecoveryHoldCleared, experiment_event_value(static_cast<int>(ExperimentEventReason::RejectConnection), hold_sources));
 			clear_cylinder_manual_overrides();
-			if (spacing_recovery.phase != SpacingRecoveryPhase::ExitSync) spacing_recovery.reset();
+			if (spacing_recovery.phase != SpacingRecoveryPhase::ExitSync)
+			{
+				if (spacing_recovery.phase != SpacingRecoveryPhase::Idle)
+					record_experiment_event(ExperimentEventCode::SpacingRecoveryPhase, static_cast<int>(SpacingRecoveryPhase::Idle));
+				spacing_recovery.reset();
+			}
 			clear_force_output();
 			std::cout << "连接保持激活：source="
 				<< (!initial_sync_done ? "初始化;" : "")
@@ -904,6 +972,7 @@ int main()
 				if (sync_all(30))
 				{
 					initial_sync_done = true;
+					if (control_active) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::InitialSync), 0));
 					control_active = false;
 					startup.phase = StartupPhase::WaitForEnter;
 					startup.completed = false;
@@ -928,6 +997,7 @@ int main()
 
 		if (ads_stats.plc_restart_count != handled_plc_restart_count)
 		{
+            record_experiment_event(ExperimentEventCode::PlcRestart, 0);
             control_before_plc_restart = control_active;
             homing_reuse_pending = true;
             homing_restore_submitted = false;
@@ -935,8 +1005,10 @@ int main()
             plc_app_name_read = false;
 			handled_plc_restart_count = ads_stats.plc_restart_count;
 			ff.set_enabled(0, false);
+			if (spacing_recovery.phase != SpacingRecoveryPhase::Idle) record_experiment_event(ExperimentEventCode::SpacingRecoveryPhase, static_cast<int>(SpacingRecoveryPhase::Idle));
 			spacing_recovery.reset();
 			(void)cancel_active_return_motion(true);
+			if (control_active) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::PlcRestart), 0));
 			control_active = false;
 			startup.completed = false;
 			startup.phase = StartupPhase::WaitForEnter;
@@ -979,6 +1051,10 @@ int main()
                     : "NC绝对位置读取失败";
                 if (!reason.empty())
                 {
+                    record_experiment_event(ExperimentEventCode::HomingReuseResult, !absolute_read ? static_cast<int>(ExperimentEventReason::HomingReadFailed) :
+                        !homing_reuse_enabled ? static_cast<int>(ExperimentEventReason::HomingDisabled) :
+                        !homing_record.complete ? static_cast<int>(ExperimentEventReason::HomingIncomplete) :
+                        homing_record.application != plc_application_name ? static_cast<int>(ExperimentEventReason::HomingApplication) : static_cast<int>(ExperimentEventReason::HomingPosition));
                     recovery_event_text = "拒绝复用寻参：" + reason;
                     homing_reuse_pending = false;
                     std::cout << recovery_event_text << std::endl;
@@ -992,6 +1068,7 @@ int main()
                     const bool request = true;
                     homing_restore_submitted = ads_communication.write_sum(restore_symbols, restore_sizes, restore_values, 3) &&
                         ads_communication.write("G.homing_restore_req", sizeof(request), &request);
+                    record_experiment_event(ExperimentEventCode::HomingReuseResult, homing_restore_submitted ? static_cast<int>(ExperimentEventReason::HomingSubmitted) : static_cast<int>(ExperimentEventReason::HomingWriteFailed));
                     if (!homing_restore_submitted)
                     {
                         homing_reuse_pending = false;
@@ -1011,6 +1088,7 @@ int main()
             {
                 homing_restore_submitted = false;
                 homing_reuse_pending = false;
+                record_experiment_event(ExperimentEventCode::HomingReuseResult, experiment_event_value(status == 1 ? static_cast<int>(ExperimentEventReason::HomingAccepted) : static_cast<int>(ExperimentEventReason::HomingPlcRejected), reason));
                 if (status == 1)
                 {
                     recovery_event_text = "寻参已复用";
@@ -1056,6 +1134,7 @@ int main()
 		axis6_fast_retract = false; // 每周期先清零，仅在快退状态机阶段置 TRUE
 		if (return_ads_fault_hold)
 		{
+			if (control_active) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::ReturnFault), 0));
 			control_active = false;
 			clear_force_output();
 		}
@@ -1088,11 +1167,19 @@ int main()
 		bool axis6_effective_reverse_pressed = axis1_reverse_pressed;
 		if (spacing_recovery_button_press_edge)
 		{
+			record_experiment_event(ExperimentEventCode::SpacingRecoveryButtonRise, physical_587_buttons);
+			if (connection_hold_active || !control_active || estop_hold_active || return_ads_fault_hold)
+				record_experiment_event(ExperimentEventCode::SpacingRecoveryRejected,
+					experiment_event_value(connection_hold_active ? static_cast<int>(ExperimentEventReason::RejectConnection) :
+						estop_hold_active ? static_cast<int>(ExperimentEventReason::RejectEstop) :
+						return_ads_fault_hold ? static_cast<int>(ExperimentEventReason::RejectFault) : static_cast<int>(ExperimentEventReason::RejectInactive),
+						physical_587_buttons));
 			spacing_recovery.requested = true;
 			std::cout << "587 屈曲恢复按键：按下，准备进入恢复模式。" << std::endl;
 		}
 		if (spacing_recovery_button_release_edge)
 		{
+			record_experiment_event(ExperimentEventCode::SpacingRecoveryButtonFall, physical_587_buttons);
 			spacing_recovery.requested = false;
 			std::cout << "587 屈曲恢复按键：松开，准备退出恢复模式。" << std::endl;
 		}
@@ -1114,7 +1201,15 @@ int main()
 			(planned_return.active() &&
 				planned_return.contains_axis(0)))
 		{
-			clear_axis1_delivery_mapping();
+			clear_axis1_delivery_mapping(
+				axis1_reverse_pressed ? static_cast<int>(ExperimentEventReason::LeadReverse) :
+				cfg.axis1_post_return_lead_mm <= 1e-6 ? static_cast<int>(ExperimentEventReason::LeadDisabled) :
+				connection_hold_active || ads_soft_hold_active ? static_cast<int>(ExperimentEventReason::LeadHold) :
+				return_ads_fault_hold ? static_cast<int>(ExperimentEventReason::LeadFault) :
+				estop_hold_active ? static_cast<int>(ExperimentEventReason::LeadEstop) :
+				!control_active ? static_cast<int>(ExperimentEventReason::LeadInactive) :
+				spacing_recovery.active() || spacing_recovery.requested ? static_cast<int>(ExperimentEventReason::LeadRecovery) :
+				static_cast<int>(ExperimentEventReason::LeadReturn));
 		}
 		// 恢复键只登记请求，当前换手完成后才接管；不能丢弃PLC仍在执行的回退交接。
 		if ((planned_return.active() || dual_handoff.active()) &&
@@ -1189,12 +1284,15 @@ int main()
 		{
 			if (estop_hold_req)
 			{
+				record_experiment_event(ExperimentEventCode::EstopEnter, 0);
 				estop_hold_active = true;
+				if (control_active) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::Estop), 0));
 				control_active = false;
                 if (planned_return.active())
                 {
                     bool unfinished = false;
                     for (int leg = 0; leg < planned_return.leg_count; ++leg) unfinished = unfinished || !planned_return.legs[leg].done;
+                    if (!return_ads_fault_hold) record_experiment_event(ExperimentEventCode::ReturnFaultEnter, experiment_return_reason("本体急停打断回退"));
                     return_recovery.interrupted("本体急停打断回退", unfinished);
                     return_ads_fault_hold = true;
                 }
@@ -1209,6 +1307,7 @@ int main()
 			else
 			{
 				std::cout << "PLC 急停状态：解除。" << std::endl;
+				record_experiment_event(ExperimentEventCode::EstopExit, 0);
 				estop_hold_active = false;
 				axis2_hold_rel = plc_act_pos[1];
 				axis7_hold_rel = plc_act_pos[6];
@@ -1229,8 +1328,10 @@ int main()
 		if ((estop_hold_active || return_ads_fault_hold) &&
 			(spacing_recovery.active() || spacing_recovery.requested))
 		{
+			if (spacing_recovery.phase != SpacingRecoveryPhase::Idle) record_experiment_event(ExperimentEventCode::SpacingRecoveryPhase, static_cast<int>(SpacingRecoveryPhase::Idle));
 			spacing_recovery.reset();
 			clear_force_output();
+			record_experiment_event(ExperimentEventCode::SpacingRecoveryHoldCleared, estop_hold_active ? static_cast<int>(ExperimentEventReason::Estop) : static_cast<int>(ExperimentEventReason::ReturnFault));
 			std::cout << "屈曲恢复已由急停或 ADS 故障终止。" << std::endl;
 		}
 
@@ -1241,6 +1342,7 @@ int main()
 			if (last_self_check_done && !self_check_done)
 			{
 				(void)cancel_active_return_motion(true);
+				if (control_active) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::SelfCheckLost), 0));
 				control_active = false;
 				clear_force_output();
 				std::cout << (ads_stats.state == AdsConnectionState::Running
@@ -1260,6 +1362,7 @@ int main()
 					ads_communication.request_coordinate_refresh();
 					std::cout << "警告：PLC 自检完成后的坐标缓存同步失败，已排队重试；本拍不下发重同步参考。" << std::endl;
 				}
+				if (spacing_recovery.phase != SpacingRecoveryPhase::Idle) record_experiment_event(ExperimentEventCode::SpacingRecoveryPhase, static_cast<int>(SpacingRecoveryPhase::Idle));
 				spacing_recovery.reset();
 				(void)cancel_active_return_motion(true);
 				axis6_crawl.enabled = false;
@@ -1270,11 +1373,13 @@ int main()
 				if (coordinates_refreshed && !estop_hold_active &&
 					!ads_soft_hold_active && sync_all(30))
 				{
+                    if (control_active != (startup.completed && startup.phase == StartupPhase::Done)) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::SelfCheckSync), (startup.completed && startup.phase == StartupPhase::Done) ? 1 : 0));
                     control_active = startup.completed && startup.phase == StartupPhase::Done;
 					std::cout << "PLC 自检已完成，已自动进入手柄控制。" << std::endl;
 				}
 				else
 				{
+					if (control_active) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::SyncFailed), 0));
 					control_active = false;
 				}
 			}
@@ -1310,6 +1415,7 @@ int main()
 		// 正在回退时由原交接阶段重建基准，重同步请求不能取消 PLC 中的回退。
 		if (handle_reinit_req && !last_handle_reinit_req && !planned_return.active())
 		{
+			if (spacing_recovery.phase != SpacingRecoveryPhase::Idle) record_experiment_event(ExperimentEventCode::SpacingRecoveryPhase, static_cast<int>(SpacingRecoveryPhase::Idle));
 			spacing_recovery.reset();
 			const bool coordinates_refreshed = ads_communication.refresh_coordinates();
 			if (!coordinates_refreshed) ads_communication.request_coordinate_refresh();
@@ -1317,6 +1423,7 @@ int main()
 				!ads_soft_hold_active &&
 				sync_all(30))
 			{
+				if (control_active != (startup.completed && (startup.phase == StartupPhase::Done))) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::HandleReinit), (startup.completed && (startup.phase == StartupPhase::Done)) ? 1 : 0));
 				control_active = startup.completed && (startup.phase == StartupPhase::Done);
 			}
 		}
@@ -1334,7 +1441,10 @@ int main()
                 bool completed = false, success = false;
                 std::uint8_t mask = 0;
                 if (ads_communication.planned_return_command_result(return_recovery.clear_sequence(), completed, success, mask) && completed)
+                {
+                    record_experiment_event(ExperimentEventCode::PlannedReturnClear, experiment_event_value(static_cast<int>(success ? ExperimentCommandResult::Succeeded : ExperimentCommandResult::Failed), static_cast<int>(ExperimentCommandContext::FaultRecovery)));
                     return_recovery.clear_result(success, ads_snapshot.attempt_sequence);
+                }
             }
             conditions.estop = estop_hold_active || ads_snapshot.estop_hold_req;
             conditions.host_timeout = ads_snapshot.host_comm_timeout;
@@ -1350,11 +1460,15 @@ int main()
                 clear.operation = AdsPlannedReturnOperation::Clear;
                 for (int slot = 0; slot < 2; ++slot) if (return_recovery.mask() & (1 << slot))
                     clear.legs[clear.leg_count++].axis_index = slot == 0 ? 0 : 5;
-                return_recovery.clear_submitted(ads_communication.submit_planned_return_command(clear));
+                const auto clear_sequence = ads_communication.submit_planned_return_command(clear);
+                record_experiment_event(ExperimentEventCode::PlannedReturnClear, experiment_event_value(static_cast<int>(clear_sequence ? ExperimentCommandResult::Submitted : ExperimentCommandResult::QueueRejected), static_cast<int>(ExperimentCommandContext::FaultRecovery)));
+                return_recovery.clear_submitted(clear_sequence);
             }
             if (return_recovery.can_restore(conditions) && sync_all(20))
             {
+                record_experiment_event(ExperimentEventCode::ReturnFaultCleared, static_cast<int>(ExperimentEventReason::ReturnRecovered));
                 return_ads_fault_hold = false;
+                if (control_active != (startup.completed && startup.phase == StartupPhase::Done)) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::ReturnRecovered), (startup.completed && startup.phase == StartupPhase::Done) ? 1 : 0));
                 control_active = startup.completed && startup.phase == StartupPhase::Done;
                 return_recovery.restored();
                 recovery_event_text = "回退故障已恢复：" + return_recovery.reason();
@@ -1371,6 +1485,7 @@ int main()
 		{
 			if (sync_all(20))
 			{
+				if (!control_active) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::AutoSync), 1));
 				control_active = true;
 			}
 		}
@@ -1519,6 +1634,7 @@ int main()
 				// 初始化/prepare阶段的Done=FALSE属于历史初值，只有本次commit已捕获
 				// 事件基线后，才允许把后续Busy/Done/Error边沿解释为本任务状态。
 				if (!leg.active || !leg.request_armed) return;
+				const bool was_acknowledged = leg.acknowledged, was_done = leg.done;
 				const PlannedReturnEventView events = planned_return_event_view(leg.axis_index);
 				std::uint64_t first_ack_sequence = 0;
 				if (events.busy_true_sequence > leg.request_event_sequence)
@@ -1571,6 +1687,8 @@ int main()
 				{
 					leg.done = true;
 				}
+				if (!was_acknowledged && leg.acknowledged) record_experiment_event(ExperimentEventCode::PlannedReturnAck, leg.axis_index + 1);
+				if (!was_done && leg.done) record_experiment_event(ExperimentEventCode::PlannedReturnDone, leg.axis_index + 1);
 			};
 
 			auto planned_return_any_started = [&]() -> bool
@@ -1657,7 +1775,11 @@ int main()
 
 			auto rebase_planned_return = [&]() -> bool
 			{
-	return motion_sync::rebase_dual_after_return(ctx);
+				const bool rebased = motion_sync::rebase_dual_after_return(ctx);
+				record_experiment_event(ExperimentEventCode::PlannedReturnRebase,
+					experiment_event_value(static_cast<int>(planned_return.phase == PlannedReturnPhase::AwaitFreshSnapshot ?
+						ExperimentEventReason::RebaseBeforeHandoff : ExperimentEventReason::RebaseAfterHandoff), rebased ? 1 : 0));
+				return rebased;
 			};
 
 			auto fail_planned_return = [&](const char* reason,
@@ -1665,13 +1787,17 @@ int main()
 				bool attempt_request_clear)
 			{
 				(void)attempt_request_clear;
+                record_experiment_event(ExperimentEventCode::PlannedReturnFailed, experiment_return_reason(reason));
+                if (!return_ads_fault_hold) record_experiment_event(ExperimentEventCode::ReturnFaultEnter, experiment_return_reason(reason));
                 return_recovery.interrupted(reason, !planned_return_all_done());
 				return_ads_fault_hold = true;
+				if (control_active) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::ReturnFault), 0));
 				control_active = false;
 				clear_force_output();
 				std::cout << reason;
 				if (failed_leg != nullptr && failed_leg->reported_error_id != 0)
 				{
+					record_experiment_event(ExperimentEventCode::PlannedReturnPlcError, static_cast<int>(failed_leg->reported_error_id));
 					std::cout << "，错误码: " << failed_leg->reported_error_id;
 					pending_return_error_axis = -1;
 					pending_return_error_event_sequence = 0;
@@ -1704,8 +1830,9 @@ int main()
 				planned_return.mode = mode;
 				planned_return.rebase_scope = rebase_scope;
 				planned_return.phase = PlannedReturnPhase::ClampSettle;
+				record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::ClampSettle));
 				// 双手柄仅轴6换手时保留轴1先行进度，待恢复Follow继续。
-				if (axis1_active) clear_axis1_delivery_mapping();
+				if (axis1_active) clear_axis1_delivery_mapping(static_cast<int>(ExperimentEventReason::LeadReturn));
 				planned_return.phase_t0_ms = 0;
 				planned_return.hold_axis3_rel = plc_act_pos[2];
 				planned_return.hold_axis5_rel = plc_act_pos[4];
@@ -1729,6 +1856,7 @@ int main()
 				}
 				if (planned_return.leg_count <= 0 || !planned_return_targets_safe())
 				{
+					if (planned_return.active()) record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::Idle));
 					planned_return.reset();
 					return false;
 				}
@@ -1745,6 +1873,7 @@ int main()
 					1, ff.smooth_587.force, ff.smooth_587.torque);
 				if (axis6_active) ff.capture_clamp_hold(
 					2, ff.smooth_582.force, ff.smooth_582.torque);
+				record_experiment_event(ExperimentEventCode::PlannedReturnEnter, (axis1_active ? 1 : 0) | (axis6_active ? 2 : 0));
 				clear_cylinder_manual_overrides();
 				return true;
 			};
@@ -1871,9 +2000,11 @@ int main()
 				axis1_fast_return = false;
 				axis6_fast_retract = false;
 				planned_return.phase = PlannedReturnPhase::RetryClear;
+				record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::RetryClear));
 				planned_return.retry_clear_t0_ms = now_ms;
 				planned_return.retry_clear_issued = false;
 				planned_return.retry_clear_snapshot_sequence = ads_snapshot_sequence;
+				record_experiment_event(ExperimentEventCode::PlannedReturnRetry, experiment_return_reason(reason));
 				std::cout << reason << "；PLC尚未启动动作，将清除请求并安全重试一次。"
 					<< std::endl;
 			};
@@ -1889,11 +2020,13 @@ int main()
 					planned_return.ads_command_purpose == PlannedReturnAdsCommandPurpose::Commit &&
 					planned_return_all_acknowledged() && planned_return_has_error() == nullptr)
 				{
+					record_return_command(planned_return.ads_command_purpose, ExperimentCommandResult::ObservedAck);
 					// PLC 已确认各腿时不再依赖写入回执，避免 ADS 短暂丢包误取消已启动的动作。
 					clear_planned_return_ads_command_tracking();
 					planned_return.request_prepared = false;
 					planned_return.commit_guard_generation = 0;
 					planned_return.phase = PlannedReturnPhase::AwaitDone;
+					record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::AwaitDone));
 				}
 				apply_planned_return_outputs();
 
@@ -1916,6 +2049,7 @@ int main()
 						{
 							// 持有者已夹紧并稳定：下一级松开移动者，重新捕获输出代次。
 							planned_return.clamp_stage = 1;
+							record_experiment_event(ExperimentEventCode::PlannedReturnPhase, experiment_event_value(static_cast<int>(PlannedReturnPhase::ClampSettle), 1));
 							planned_return.clamp_output_generation = 0;
 							planned_return.clamp_output_applied = false;
 							apply_planned_return_outputs();
@@ -1923,6 +2057,7 @@ int main()
 						else
 						{
 							planned_return.phase = PlannedReturnPhase::SubmitRequest;
+							record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::SubmitRequest));
 						}
 					}
 				}
@@ -2007,6 +2142,7 @@ int main()
 								planned_return.commit_guard_generation = 0;
 								planned_return.request_t0_ms = now_ms;
 								planned_return.phase = PlannedReturnPhase::AwaitAccepted;
+								record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::AwaitAccepted));
 								apply_planned_return_outputs();
 							}
 							else if (planned_return_ads_command_timed_out(now_ms))
@@ -2093,6 +2229,7 @@ int main()
 					else if (planned_return_all_acknowledged())
 					{
 						planned_return.phase = PlannedReturnPhase::AwaitDone;
+						record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::AwaitDone));
 					}
 					else if ((now_ms - planned_return.request_t0_ms) >=
 						cfg.planned_return_ack_timeout_ms)
@@ -2116,6 +2253,7 @@ int main()
 						axis1_fast_return = false;
 						axis6_fast_retract = false;
 						planned_return.phase = PlannedReturnPhase::AwaitFreshSnapshot;
+						record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::AwaitFreshSnapshot));
 						apply_planned_return_outputs();
 					}
 					else if (planned_return.execution_t0_ms != 0 &&
@@ -2205,6 +2343,7 @@ int main()
 								planned_return.commit_guard_generation = 0;
 						planned_return.execution_t0_ms = 0;
 						planned_return.phase = PlannedReturnPhase::SubmitRequest;
+						record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::SubmitRequest));
 					}
 						}
 						else if ((now_ms - planned_return.retry_clear_t0_ms) >=
@@ -2224,6 +2363,7 @@ int main()
 							axis1_fast_return = false;
 							axis6_fast_retract = false;
 							planned_return.phase = PlannedReturnPhase::PublishHandoff;
+							record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::PublishHandoff));
 						}
 					}
 				}
@@ -2235,9 +2375,11 @@ int main()
 					{
 						// handoff generation对应的同一Sum Write同时携带各腿Req=FALSE，
 						// 因而该代次成功即可同时确认清Req、实际位置保持和夹爪恢复。
+						record_experiment_event(ExperimentEventCode::PlannedReturnClear, experiment_event_value(static_cast<int>(ExperimentCommandResult::Succeeded), static_cast<int>(ExperimentCommandContext::HandoffOutput)));
 						planned_return.completion_clear_confirmed = true;
 						planned_return.phase_t0_ms = now_ms;
 						planned_return.phase = PlannedReturnPhase::PostHandoffClampSettle;
+						record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::PostHandoffClampSettle));
 					}
 				}
 				else if (planned_return.phase == PlannedReturnPhase::PostHandoffClampSettle)
@@ -2249,6 +2391,7 @@ int main()
 							planned_return_settle_wait_ms(true, planned_return.restore_stage))
 						{
 							planned_return.restore_stage = 1;
+							record_experiment_event(ExperimentEventCode::PlannedReturnPhase, experiment_event_value(static_cast<int>(PlannedReturnPhase::PostHandoffClampSettle), 1));
 							planned_return.release_output_generation = 0;
 							planned_return.release_applied = false;
 							apply_planned_return_outputs();
@@ -2323,6 +2466,7 @@ int main()
 				spacing_recovery.phase != SpacingRecoveryPhase::ExitSync)
 			{
 				spacing_recovery.phase = SpacingRecoveryPhase::ExitSync;
+				record_experiment_event(ExperimentEventCode::SpacingRecoveryPhase, static_cast<int>(SpacingRecoveryPhase::ExitSync));
 				spacing_recovery.phase_t0 = now_ms;
 				spacing_recovery.pending_delta_mm = 0.0;
 				std::cout << "屈曲恢复：正在停止并重建跟随基准。" << std::endl;
@@ -2351,19 +2495,25 @@ int main()
 
 				if (!prerequisites_ok)
 				{
+					record_experiment_event(ExperimentEventCode::SpacingRecoveryRejected, !startup.completed || startup.phase != StartupPhase::Done ? static_cast<int>(ExperimentEventReason::RejectStartup) : static_cast<int>(ExperimentEventReason::RejectInactive));
 					std::cout << "屈曲恢复进入被拒绝：需处于已启动的导管递送 Follow 状态，且无回退。" << std::endl;
+					if (spacing_recovery.phase != SpacingRecoveryPhase::Idle) record_experiment_event(ExperimentEventCode::SpacingRecoveryPhase, static_cast<int>(SpacingRecoveryPhase::Idle));
 					spacing_recovery.reset();
 				}
 				else if (axis5_from_left_mm + cfg.crawl_arrive_tol_mm < axis3_from_left_mm ||
 					axis56_gap_mm < (cfg.catheter_axis6_window_min_gap_from_axis5_mm - cfg.crawl_arrive_tol_mm) ||
 					axis56_gap_mm > (axis56_max_gap_mm + cfg.crawl_arrive_tol_mm))
 				{
+					record_experiment_event(ExperimentEventCode::SpacingRecoveryRejected, static_cast<int>(ExperimentEventReason::RejectWindow));
 					std::cout << "屈曲恢复进入被拒绝：轴3/5/6当前相对位置不满足安全窗口。" << std::endl;
+					if (spacing_recovery.phase != SpacingRecoveryPhase::Idle) record_experiment_event(ExperimentEventCode::SpacingRecoveryPhase, static_cast<int>(SpacingRecoveryPhase::Idle));
 					spacing_recovery.reset();
 				}
 				else if (spacing_recovery.remaining_mm <= cfg.crawl_arrive_tol_mm)
 				{
+					record_experiment_event(ExperimentEventCode::SpacingRecoveryRejected, static_cast<int>(ExperimentEventReason::RejectNoTravel));
 					std::cout << "屈曲恢复进入被拒绝：轴3/5/6已无可用恢复行程。" << std::endl;
+					if (spacing_recovery.phase != SpacingRecoveryPhase::Idle) record_experiment_event(ExperimentEventCode::SpacingRecoveryPhase, static_cast<int>(SpacingRecoveryPhase::Idle));
 					spacing_recovery.reset();
 				}
 				else
@@ -2375,6 +2525,7 @@ int main()
 						cylinder_manual_mode[cylinder_index] = CylinderManualMode::Automatic;
 					}
 					spacing_recovery.phase = SpacingRecoveryPhase::ClampWait;
+					record_experiment_event(ExperimentEventCode::SpacingRecoveryPhase, static_cast<int>(SpacingRecoveryPhase::ClampWait));
 					record_experiment_event(ExperimentEventCode::SpacingRecoveryStart, 1);
 					spacing_recovery.phase_t0 = now_ms;
 					spacing_recovery.last_motion_tick = now_ms;
@@ -2404,6 +2555,7 @@ int main()
 					if ((now_ms - spacing_recovery.phase_t0) >= cfg.spacing_recovery_clamp_settle_ms)
 					{
 						spacing_recovery.phase = SpacingRecoveryPhase::Active;
+						record_experiment_event(ExperimentEventCode::SpacingRecoveryPhase, static_cast<int>(SpacingRecoveryPhase::Active));
 						spacing_recovery.last_motion_tick = now_ms;
 						std::cout << "屈曲恢复：已激活，582 手柄仅控制轴3/5/6向远离左限位方向移动。" << std::endl;
 					}
@@ -2482,6 +2634,7 @@ int main()
                 const bool resumed = begin_planned_return(interrupted_return_mode, interrupted_return_scope,
                     axis1_leg, target1, axis6_leg, target6);
                 resuming_return = false;
+                record_experiment_event(ExperimentEventCode::ReturnResume, experiment_event_value(return_recovery.mask(), resumed ? 1 : 0));
                 if (resumed) { apply_planned_return_outputs(); std::cout << "计划回退已从当前位置重新规划，自动续做一次。" << std::endl; }
                 else std::cout << "计划回退续做未通过原目标安全校验，已恢复当前位置控制。" << std::endl;
             }
@@ -2599,7 +2752,10 @@ int main()
 				axis1_delivery_mapping_progress_mm += mapping_progress_mm;
 				axis1_delivery_mapping_applied_extra_mm += mapping_extra_mm;
 				if (axis1_delivery_mapping_progress_mm >= cfg.axis1_post_return_mapping_span_mm - 1e-6)
+				{
+					if (axis1_delivery_mapping_active) record_experiment_event(ExperimentEventCode::Axis1LeadCompleted, 0);
 					axis1_delivery_mapping_active = false;
+				}
 				// 把先行差额吸收到镜像基准，清除映射或切换撤出时轴3/5不会补走。
 				axis3_base_rel += mapping_extra_mm;
 				axis5_base_rel += mapping_extra_mm;
@@ -2644,6 +2800,12 @@ int main()
 					dual_handoff.reverse = reverse;
 					dual_handoff.wire_reverse = wire_reverse;
 					dual_handoff.axis4_caused = dual_handoff.wire_caused && axis4_direction_active;
+					if (dual_handoff.active())
+						record_experiment_event(ExperimentEventCode::DualHandoffIntent,
+							(dual_handoff.axis1 ? 1 : 0) | (dual_handoff.axis6 ? 2 : 0) |
+							(dual_handoff.wire_caused ? 4 : 0) | (dual_handoff.gap_boundary ? 8 : 0) |
+							(merge_axis6 ? 16 : 0) | (dual_handoff.axis4_caused ? 32 : 0) |
+							(reverse ? 64 : 0) | (wire_reverse ? 128 : 0));
 				}
 				const bool want_axis1_leg = dual_handoff.axis1;
 				const bool want_axis6_leg = dual_handoff.axis6;
@@ -2729,7 +2891,9 @@ int main()
 				{
 					std::cout << "屈曲恢复退出等待超时，已按轴3/5/6当前实际位置重同步。" << std::endl;
 				}
+				if (spacing_recovery.phase != SpacingRecoveryPhase::Idle) record_experiment_event(ExperimentEventCode::SpacingRecoveryPhase, static_cast<int>(SpacingRecoveryPhase::Idle));
 				spacing_recovery.reset();
+				if (!control_active) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::SpacingExit), 1));
 				control_active = true;
 				std::cout << "屈曲恢复退出后，双手柄方向按当前B6状态生效。" << std::endl;
 				std::cout << "屈曲恢复已退出并完成重同步，本次共同移动 "
@@ -2941,8 +3105,10 @@ int main()
 			ads_output.motion_enabled && !ads_output.axis1_fast_return &&
 			!ads_output.axis6_fast_retract)
 		{
+			record_experiment_event(ExperimentEventCode::PlannedReturnClear, experiment_event_value(static_cast<int>(ExperimentCommandResult::Submitted), static_cast<int>(ExperimentCommandContext::HandoffOutput)));
 			planned_return.handoff_generation = output_generation;
 			planned_return.phase = PlannedReturnPhase::AwaitHandoffApplied;
+			record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::AwaitHandoffApplied));
 		}
 
 		process_force_feedback(
@@ -3390,6 +3556,7 @@ int main()
 							has_self_check_flag && self_check_done)
 						{
 							clear_cylinder_manual_overrides();
+							if (spacing_recovery.phase != SpacingRecoveryPhase::Idle) record_experiment_event(ExperimentEventCode::SpacingRecoveryPhase, static_cast<int>(SpacingRecoveryPhase::Idle));
 							spacing_recovery.reset();
 							if (!consume_startup_loading_ready())
 							{
@@ -3403,6 +3570,7 @@ int main()
 								}
 								startup.phase = StartupPhase::Done;
 								startup.completed = true;
+								if (!control_active) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::StartControl), 1));
 								control_active = true;
 								std::cout << "已在当前位置开始控制。" << std::endl;
 							}

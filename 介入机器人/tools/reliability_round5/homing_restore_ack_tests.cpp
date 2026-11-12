@@ -4,6 +4,8 @@
 #include <iostream>
 #include <string>
 #include <cstring>
+#include "../../B数据端/工程/ADS项目/experiment_events.h"
+static void record_experiment_event(ExperimentEventCode, int) {}
 namespace AdsSymbol { constexpr auto app_name="app"; }
 enum class StartupPhase { WaitForEnter,Done };
 struct Fixture {

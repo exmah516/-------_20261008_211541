@@ -3,6 +3,9 @@
 #include <cstdlib>
 #include <sstream>
 #include <string>
+#include "../experiment_events.h"
+static void record_experiment_event(ExperimentEventCode, int) {}
+enum class SpacingRecoveryPhase { Idle };
 enum class AdsConnectionState { Running = 2, Reconnecting = 4 };
 enum class StartupPhase { WaitForEnter, Done };
 enum class GuidewireMode { None, Independent };
@@ -48,7 +51,7 @@ struct Fixture {
     unsigned int pending_selfcheck_axes = 0;
     struct { bool enabled = false; } axis6_crawl;
     GuidewireMode guidewire_mode = GuidewireMode::Independent;
-    struct { bool active() const { return false; } void reset() {} } spacing_recovery;
+    struct { SpacingRecoveryPhase phase=SpacingRecoveryPhase::Idle; bool active() const { return false; } void reset() {} } spacing_recovery;
     struct {
         StartupPhase phase = StartupPhase::Done;
         bool completed = true, recovery_mode = false, direct_positioning = false, prompted = false;

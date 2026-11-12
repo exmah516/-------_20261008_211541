@@ -28,7 +28,7 @@ namespace
 		"axis5_from_left_mm,axis6_from_left_mm,axis7_from_left_mm,"
 		"axis1_handle_valid,axis6_handle_valid\n";
 	constexpr const char* kEventsHeader =
-		"event_index,elapsed_us,event_code,value\n";
+		"event_index,elapsed_us,ads_snapshot_sequence,event_code,value\n";
 
 	bool directory_exists(const std::wstring& path)
 	{
@@ -302,9 +302,10 @@ bool ExperimentRecorder::write_event_row(std::FILE* fp, const EventCsvRow& row)
 {
 	return std::fprintf(
 		fp,
-		"%llu,%llu,%d,%d\n",
+		"%llu,%llu,%llu,%d,%d\n",
 		static_cast<unsigned long long>(row.event_index),
 		static_cast<unsigned long long>(row.elapsed_us),
+		static_cast<unsigned long long>(row.ads_snapshot_sequence),
 		row.event_code,
 		row.value) >= 0;
 }
@@ -748,6 +749,7 @@ bool ExperimentRecorder::enqueue_motion(const MotionCsvRow& row)
 bool ExperimentRecorder::enqueue_event(
 	ExperimentEventCode code,
 	int value,
+	std::uint64_t ads_snapshot_sequence,
 	std::int64_t source_qpc_ticks)
 {
 	if (!is_recording()) return false;
@@ -762,6 +764,7 @@ bool ExperimentRecorder::enqueue_event(
 	EventCsvRow row{};
 	row.event_index = event_index_++;
 	row.elapsed_us = clock_.elapsed_us(source_qpc_ticks);
+	row.ads_snapshot_sequence = ads_snapshot_sequence;
 	row.event_code = static_cast<int>(code);
 	row.value = value;
 	return events_writer_.try_enqueue(row);
@@ -900,7 +903,7 @@ void ExperimentRecorder::write_session_json(bool final, const std::string& stop_
 		: 0;
 	std::ostringstream json;
 	json << "{\n";
-	json << "  \"schema_version\": 8,\n";
+	json << "  \"schema_version\": 9,\n";
 	json << "  \"experiment_name_raw\": \"" << json_escape(raw_name_utf8_) << "\",\n";
 	json << "  \"experiment_name_cleaned\": \"" << json_escape(wide_to_utf8(cleaned_name_)) << "\",\n";
 	json << "  \"utc_start\": \"" << format_utc_filetime(clock_.utc_start_filetime_100ns()) << "\",\n";

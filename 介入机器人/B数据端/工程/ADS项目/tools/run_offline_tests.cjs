@@ -49,7 +49,7 @@ if (selected === 'all' || selected === 'dual') {
         mode: between(source,'\tbool spacing_recovery_button_pressed_prev =','\n\tdouble pending_selfcheck_target'),
         direction: between(source,'\t\t// 换手/屈曲恢复期间冻结方向','\t\tif (spacing_recovery_button_press_edge)'),
         save: between(source,'\t\tif (spacing_recovery_button_press_edge)','\t\t// 该映射只属于'),
-        exit: between(source,'\n\t\t\t\tspacing_recovery.reset();\n\t\t\t\tcontrol_active = true;','\t\t\t\tstd::cout << "屈曲恢复退出后'),
+        exit: between(source.slice(source.indexOf('\t\tconst DWORD spacing_recovery_exit_elapsed_ms =')),'\n\t\t\t\tspacing_recovery.reset();','\t\t\t\tstd::cout << "屈曲恢复退出后'),
         switch: between(source,'\t\tif (axis1_reverse_pressed != axis1_reverse_pressed_prev)','\t\taxis1_reverse_pressed_prev ='),
         filter: between(header,'struct HandleFilterState','struct ControlConfig')
     };

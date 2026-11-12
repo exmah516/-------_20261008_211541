@@ -12,7 +12,7 @@ constexpr double Rad = 57.29577951308232;
 enum class StartupPhase { Done };
 enum class CylinderManualMode { Automatic };
 enum class ModeSelection { CatheterDelivery=1, CatheterRetraction, GuidewireDelivery, GuidewireRetraction };
-enum class ExperimentEventCode { SpacingRecoveryStart };
+#include "experiment_events.h"
 static void record_experiment_event(ExperimentEventCode, int) {}
 namespace AdsSymbol { constexpr int axis6_return = 6; }
 namespace motion_sync { static double axis6_window_size_mm(int) { return 32.0; } }
@@ -32,6 +32,10 @@ struct Fixture {
     struct { void disable_compensation() {} } tracking_controller;
     bool control_active=true, initial_sync_done=true;
     bool ads_soft_hold_active=false, handle_soft_hold_active=false, connection_hold_active_prev=false;
+    int event_hold_sources=0;
+    bool event_connection_hold_active=false;
+    bool handle1_poll_ok=true,handle6_poll_ok=true;
+    struct { bool resume_settling() const { return false; } } handle_axis1,handle_axis6;
     bool estop_hold_active=false, return_ads_fault_hold=false, startup_sequence_active=false;
     bool emergency_retract_active=false, axis6_soft_limit_hold=false, ads_motion_cycle_valid=true;
     bool single_handle_mode=false, axis1_reverse_pressed=false, axis6_effective_reverse_pressed=false;

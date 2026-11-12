@@ -75,12 +75,14 @@ void samples() {
             (scenario=="handle_gap_rebase" && tick>=30 && tick<200) ||
             (scenario=="handle_disconnect" && tick>=30 && tick<640);
         if(gap && slot==1) continue;
+        if(scenario=="event_missing582" && slot==0 && tick>=30 && tick<640) continue;
         remote_handle_bridge::Sample s;
         s.valid=true;s.device_epoch=(scenario=="device_epoch" && tick>=40)?2:1;
         s.joints[0]=static_cast<float>(joints[slot][0]);s.joints[1]=static_cast<float>(joints[slot][1]);
         if(scenario=="follow_retraction") s.buttons=0x40;
         if((scenario=="spacing" || scenario=="spacing_hold") && ((tick>=30 && tick<100)||(tick>=170 && tick<230)))
             if(slot==1) s.buttons=0x07;
+        if(scenario=="event_rejected_hold" && tick>=42 && tick<44 && slot==1) s.buttons=0x07;
         remote_handle_bridge::put_sample(slot,s);
     }
 }
@@ -128,6 +130,7 @@ void advance() {
     samples();
     memory_stats.state=((scenario=="ads_hold" && tick>=40 && tick<45) ||
         (scenario=="spacing_hold" && tick>=70 && tick<75) ||
+        (scenario=="event_rejected_hold" && tick>=40 && tick<45) ||
         (scenario=="lead_hold" && lead_hold_tick && tick>=lead_hold_tick && tick<lead_hold_tick+3))
         ?AdsConnectionState::SoftHold:AdsConnectionState::Running;
     if(scenario=="ads_hold" && tick==45) ++memory_stats.reconnect_count;
@@ -187,6 +190,16 @@ void advance() {
     if(scenario=="feedback" && tick==22) command(VisCommandType::SetForceFeedback,1);
     if(scenario=="feedback" && tick==24) command(VisCommandType::SetForceFeedbackHold,1);
 }
+}
+void baseline_record_event(ExperimentEventCode code,int value,std::uint64_t sequence) {
+    if(!event_trace.is_open()) {
+        auto path=std::filesystem::path(_wgetenv(L"BASELINE_OUTPUT"));
+        path+=L".events.csv";
+        event_trace.open(path,std::ios::binary);
+        if(!event_trace) throw std::runtime_error("event trace open failed");
+        event_trace<<"tick,ads_snapshot_sequence,event_code,value\n";
+    }
+    event_trace<<tick<<','<<sequence<<','<<int(code)<<','<<value<<'\n';
 }
 bool AdsCommunicationService::wait_for_snapshot(std::uint64_t,DWORD,AdsFastSnapshot& value) { advance();value=snapshot;return true; }
 bool AdsCommunicationService::latest_snapshot(AdsFastSnapshot& value) const { value=snapshot;return tick>0; }
@@ -281,6 +294,7 @@ int main() {
     try { control_main(); }
     catch(const Finished&) {
         trace.close();
+        event_trace.close();
         std::cout<<"COVERAGE "<<scenario<<" commits="<<commits<<" complete="<<completed_returns
                  <<" mapping="<<saw_mapping<<" hold="<<saw_hold<<" spacing_active="<<saw_spacing_active<<" fault="<<saw_fault<<" phases=";
         for(int count:phases) std::cout<<count<<',';

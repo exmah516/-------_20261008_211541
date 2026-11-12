@@ -1,7 +1,7 @@
 #include "../return_recovery.h"
 // 抽取真实取消、恢复进入/退出及完整回退推进分支；PLC 与 ADS 仅使用内存替身。
 #include <algorithm>
-enum class ExperimentEventCode { SpacingRecoveryStart };
+#include "../experiment_events.h"
 static void record_experiment_event(ExperimentEventCode, int) {}
 #include <cmath>
 #include <chrono>
@@ -61,9 +61,14 @@ struct Fixture {
     bool initial_sync_done=true, ads_soft_hold_active=false, handle_soft_hold_active=false;
     bool handle_reinit_req=false,last_handle_reinit_req=false;
     bool connection_hold_active_prev=false, handle_rebase_requested=false;
+    int event_hold_sources=0;
+    bool event_connection_hold_active=false;
+    bool handle1_poll_ok=true,handle6_poll_ok=true;
+    std::uint64_t event_cancel_clear_sequence=0;
+    void record_return_command(PlannedReturnAdsCommandPurpose,ExperimentCommandResult) {}
     bool handle1_rebase_requested=false,handle6_rebase_requested=false;
     std::string recovery_event_text;
-    struct GapHandle { int sample_gap_ms() const { return 1600; } } handle_axis1,handle_axis6;
+    struct GapHandle { int sample_gap_ms() const { return 1600; } bool resume_settling() const { return false; } } handle_axis1,handle_axis6;
     struct { unsigned int reconnect_count=0; int state=2; } ads_stats;
     unsigned int handled_reconnect_count=0;
     struct ForceFeedbackStub {
@@ -121,7 +126,7 @@ struct Fixture {
         auto GetTickCount=[&]() { return now_ms; };
         auto GetTickCount64=[&]() { return static_cast<ULONGLONG>(now_ms); };
         auto clear_force_output=[]() {};
-        auto clear_axis1_delivery_mapping=[]() {};
+        auto clear_axis1_delivery_mapping=[](int=0) {};
         auto arm_axis1_delivery_mapping=[]() {};
         auto apply_mode_selection=[](ModeSelection) {};
         auto load_pos_from_actual=[&]() { std::copy(plc_act_pos,plc_act_pos+7,pos); };
@@ -149,6 +154,7 @@ struct Fixture {
         const bool spacing_recovery_button_press_edge=pressed&&!spacing_recovery_button_pressed_prev;
         const bool spacing_recovery_button_release_edge=!pressed&&spacing_recovery_button_pressed_prev;
         const bool spacing_recovery_button_pressed=pressed;
+        const unsigned char physical_587_buttons=pressed?7:0;
 #include "return_recovery_save.inc"
 #include "return_recovery_guard.inc"
         const double axis5_abs=plc_act_pos[4], axis6_abs=plc_act_pos[5], axis3_from_left_mm=plc_act_pos[2];

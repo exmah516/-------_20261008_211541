@@ -6,6 +6,7 @@ ROOT = HERE.parents[1]
 ADS = ROOT / '介入机器人/B数据端/工程/ADS项目'
 p = argparse.ArgumentParser()
 p.add_argument('--record', action='store_true')
+p.add_argument('--events', action='store_true', help='另运行事件专用输入并验证完整事件序列')
 p.add_argument('--golden', type=Path, default=HERE/'golden')
 p.add_argument('--output', type=Path, default=ROOT/'docs/refactor_stage0/logs/baseline')
 args = p.parse_args()
@@ -84,6 +85,7 @@ r=subprocess.run(['cmd','/d','/c','build.cmd'],cwd=BUILD,stdout=subprocess.PIPE,
 if r.returncode: print(r.stdout.decode('utf-8',errors='replace'));sys.exit(r.returncode)
 scenarios=['follow_delivery','follow_retraction','lead_hold','lead_axis6','axis4','handoff_axis1','handoff_active','handoff_passive','handoff_merge','return_axis1','return_axis6','return_both','return_retry','return_possible','return_fault','return_estop','spacing','spacing_hold','ads_hold','handle_gap_short','handle_gap_rebase','handle_disconnect','device_epoch','restart','restart_accept','restart_reject','manual','feedback']
 scenarios += [kind+'_'+legs for kind in ['return_retry','return_possible','return_fault'] for legs in ['axis6','both']]
+if args.events: scenarios += ['event_rejected_hold','event_missing582']
 results=[]
 for scenario in scenarios:
     env=dict(os.environ, BASELINE_SCENARIO=scenario,BASELINE_OUTPUT=str(OUT/(scenario+'.csv')))
@@ -100,11 +102,15 @@ for scenario in scenarios:
     if args.record:
         if golden.exists(): raise RuntimeError('拒绝覆盖已有黄金文件: '+str(golden))
         golden.parent.mkdir(exist_ok=True);shutil.copy2(actual,golden)
-    if not golden.exists() or actual.read_bytes()!=golden.read_bytes():
+    if not scenario.startswith('event_') and (not golden.exists() or actual.read_bytes()!=golden.read_bytes()):
         raise RuntimeError('逐值不相等: '+scenario)
-    results.append(dict(scenario=scenario,ticks=len(actual.read_text().splitlines())-1,sha256=hashlib.sha256(actual.read_bytes()).hexdigest(),equal=True))
+    results.append(dict(scenario=scenario,ticks=len(actual.read_text().splitlines())-1,sha256=hashlib.sha256(actual.read_bytes()).hexdigest(),equal=None if scenario.startswith('event_') else True))
 (OUT/'result.json').write_text(json.dumps(dict(build=str(BUILD),sources=manifest,scenarios=results),ensure_ascii=False,indent=2),encoding='utf-8')
 import verify_coverage
 verify_coverage.verify(OUT)
-print('PASS',len(results),'scenarios;',sum(x['ticks'] for x in results),'ticks; exact CSV equality; build',BUILD)
+if args.events:
+    import verify_events
+    verify_events.verify(OUT)
+goldens=[x for x in results if x['equal']]
+print('PASS',len(goldens),'scenarios;',sum(x['ticks'] for x in goldens),'ticks; exact CSV equality; build',BUILD)
 

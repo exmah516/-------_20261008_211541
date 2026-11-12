@@ -12,7 +12,7 @@ using DWORD = unsigned long;
 using ULONGLONG = unsigned long long;
 enum class GuidewireMode { None, Independent };
 enum class ModeSelection { CatheterDelivery, CatheterRetraction, GuidewireDelivery, GuidewireRetraction };
-enum class ExperimentEventCode { ModeSwitch };
+#include "../experiment_events.h"
 static void record_experiment_event(ExperimentEventCode, int) {}
 enum class PlannedReturnMode { Dual, CatheterDelivery, CatheterRetraction };
 enum class PlannedReturnRebaseScope { Both };
@@ -337,6 +337,8 @@ static void test_direction_and_recovery() {
     auto cancel_active_return_motion=[](bool) { return true; };
 #include "mode.inc"
     auto sample=[&](unsigned char cat,unsigned char wire) {
+        const auto physical_587_buttons=cat;
+        const bool connection_hold_active=false,control_active=true,estop_hold_active=false,return_ads_fault_hold=false;
         bool catheter_b6_pressed=(cat&0x40)!=0, guidewire_b6_pressed=(wire&0x40)!=0;
         bool spacing_recovery_button_pressed=(cat&7)==7;
         bool spacing_recovery_button_press_edge=spacing_recovery_button_pressed && !spacing_recovery_button_pressed_prev;
