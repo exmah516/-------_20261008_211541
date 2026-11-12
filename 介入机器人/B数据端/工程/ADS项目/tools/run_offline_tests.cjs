@@ -71,7 +71,7 @@ if (selected === 'all' || selected === 'recovery') {
         cancel: between(source, '\tauto reset_planned_return =', '\tauto axis6_from_left_mm ='),
         guard: between(source, '\t\tif ((planned_return.active() || dual_handoff.active()) &&', '\t\t// 正式控制阶段：'),
         save: between(source, '\t\tif (spacing_recovery_button_press_edge)', '\t\t// 该映射只属于'),
-        enter: between(source, '\t\t\tauto calculate_spacing_recovery_remaining =', '\t\t\tif (emergency_retract_active)'),
+        enter: between(source, '\t\t\tauto calculate_spacing_recovery_remaining =', '\t\t\tif (axis6_soft_limit_hold && !motion_startup_active)'),
         output: between(source, '\t\t\tauto apply_planned_return_outputs =', '\t\t\tauto enter_planned_return_retry ='),
         refresh: between(source, '\t\t\tauto refresh_planned_return_leg =', '\t\t\tauto planned_return_targets_safe ='),
         failure: between(source, '\t\t\tauto fail_planned_return =', '\t\tauto begin_planned_return ='),

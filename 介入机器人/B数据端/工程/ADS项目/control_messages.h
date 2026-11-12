@@ -180,7 +180,6 @@ enum class VisCommandType : int
 	SetForceFeedbackHold = 35, // param1: 0=关闭，1=开启；换手后保持至对应轴沿当前方向运动2mm，再平滑恢复实时值
 	SetYValveOpen = 36, // param1: 0=关闭，1=打开
 	SetInjectorManualJog = 37, // param1: 注射器1..2，param2: -1=拉，0=停止，1=推
-	EmergencyRetractDevice = 38, // 极简器械撤出：固定夹爪组合，轴3/5/6退回启动准备完成位
 	SetCylinderManualPosition = 39, // param1: 电缸下标0..3，param2: 位置0..2000
 	ResetCylinderManual = 40, // param1: 电缸下标0..3，撤销覆盖并恢复当前流程位置
 	SetArmCartesianJog = 41, // param1: 1=X,2=Y,3=Z,4=俯仰,5=偏航；param2=带符号速度*1000
