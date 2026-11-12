@@ -14,7 +14,7 @@
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Web" />
     <Reference Include="System.Web.Extensions" />
-    <Compile Include="../ScreenCut/BoundRtspSource.cs;../ScreenCut/SharedRelay.cs;../ScreenCut/StreamingHost.cs;../ScreenCut/StreamingLog.cs;../ScreenCut/StreamingSettings.cs" Link="%(Filename)%(Extension)" />
+    <Compile Include="../ScreenCut/BoundRtspSource.cs;../ScreenCut/ProcessJob.cs;../ScreenCut/SharedRelay.cs;../ScreenCut/StreamingHost.cs;../ScreenCut/StreamingLog.cs;../ScreenCut/StreamingSettings.cs" Link="%(Filename)%(Extension)" />
     <Content Include="streaming.config" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

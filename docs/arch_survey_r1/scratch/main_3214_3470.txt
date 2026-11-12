@@ -1,0 +1,258 @@
+介入机器人/B数据端/工程/ADS项目/main.cpp
+3214: 
+3215: 			auto calculate_spacing_recovery_remaining = [&]() -> double
+3216: 			{
+3217: 				double remaining = cfg.spacing_recovery_axis3_max_from_left_mm -
+3218: 					((spacing_recovery.axis3_cmd_rel + plc_init_pos[2]) - plc_leftlimit[2]);
+3219: 				const double axis5_remaining = cfg.spacing_recovery_axis5_max_from_left_mm -
+3220: 					((spacing_recovery.axis5_cmd_rel + plc_init_pos[4]) - plc_leftlimit[4]);
+3221: 				const double axis6_remaining = (std::min)(cfg.spacing_recovery_axis6_max_from_left_mm,
+3222: 					cfg.axis6_soft_limit_from_left_mm) -
+3223: 					((spacing_recovery.axis6_cmd_rel + plc_init_pos[5]) - plc_leftlimit[5]);
+3224: 				if (axis5_remaining < remaining) remaining = axis5_remaining;
+3225: 				if (axis6_remaining < remaining) remaining = axis6_remaining;
+3226: 				return remaining > 0.0 ? remaining : 0.0;
+3227: 			};
+3228: 
+3229: 			if (spacing_recovery.active() && !spacing_recovery.requested &&
+3230: 				spacing_recovery.phase != SpacingRecoveryPhase::ExitSync)
+3231: 			{
+3232: 				spacing_recovery.phase = SpacingRecoveryPhase::ExitSync;
+3233: 				spacing_recovery.phase_t0 = now_ms;
+3234: 				spacing_recovery.pending_delta_mm = 0.0;
+3235: 				std::cout << "屈曲恢复：正在停止并重建跟随基准。" << std::endl;
+3236: 			}
+3237: 
+3238: 			if (spacing_recovery.requested && !spacing_recovery.active() && !planned_return.active())
+3239: 			{
+3240: 				const double axis5_from_left_mm = axis5_abs - plc_leftlimit[4];
+3241: 				const double axis6_from_left_mm = axis6_abs - plc_leftlimit[5];
+3242: 				const double axis56_gap_mm = axis6_from_left_mm - axis5_from_left_mm;
+3243: 				const double axis56_max_gap_mm =
+3244: 					cfg.catheter_axis6_window_min_gap_from_axis5_mm +
+3245: 					motion_sync::axis6_window_size_mm(ctx);
+3246: 				const bool prerequisites_ok =
+3247: 					startup.completed && startup.phase == StartupPhase::Done &&
+3248: 					control_active && !axis6_soft_limit_hold &&
+3249: 					!planned_return.active();
+3250: 
+3251: 				spacing_recovery.axis1_hold_rel = plc_act_pos[0];
+3252: 				spacing_recovery.axis2_hold_rel = plc_act_pos[1];
+3253: 				spacing_recovery.axis3_cmd_rel = plc_act_pos[2];
+3254: 				spacing_recovery.axis5_cmd_rel = plc_act_pos[4];
+3255: 				spacing_recovery.axis6_cmd_rel = plc_act_pos[5];
+3256: 				spacing_recovery.axis7_hold_rel = plc_act_pos[6];
+3257: 				spacing_recovery.remaining_mm = calculate_spacing_recovery_remaining();
+3258: 
+3259: 				if (!prerequisites_ok)
+3260: 				{
+3261: 					std::cout << "屈曲恢复进入被拒绝：需处于已启动的导管递送 Follow 状态，且无回退。" << std::endl;
+3262: 					spacing_recovery.reset();
+3263: 				}
+3264: 				else if (axis5_from_left_mm + cfg.crawl_arrive_tol_mm < axis3_from_left_mm ||
+3265: 					axis56_gap_mm < (cfg.catheter_axis6_window_min_gap_from_axis5_mm - cfg.crawl_arrive_tol_mm) ||
+3266: 					axis56_gap_mm > (axis56_max_gap_mm + cfg.crawl_arrive_tol_mm))
+3267: 				{
+3268: 					std::cout << "屈曲恢复进入被拒绝：轴3/5/6当前相对位置不满足安全窗口。" << std::endl;
+3269: 					spacing_recovery.reset();
+3270: 				}
+3271: 				else if (spacing_recovery.remaining_mm <= cfg.crawl_arrive_tol_mm)
+3272: 				{
+3273: 					std::cout << "屈曲恢复进入被拒绝：轴3/5/6已无可用恢复行程。" << std::endl;
+3274: 					spacing_recovery.reset();
+3275: 				}
+3276: 				else
+3277: 				{
+3278: 					clear_axis1_group_return_requests();
+3279: 					clear_axis_return_request(AdsSymbol::axis6_return);
+3280: 					for (int cylinder_index = 0; cylinder_index < 4; ++cylinder_index)
+3281: 					{
+3282: 						cylinder_manual_mode[cylinder_index] = CylinderManualMode::Automatic;
+3283: 					}
+3284: 					spacing_recovery.phase = SpacingRecoveryPhase::ClampWait;
+3285: 					record_experiment_event(ExperimentEventCode::SpacingRecoveryStart, 1);
+3286: 					spacing_recovery.phase_t0 = now_ms;
+3287: 					spacing_recovery.last_motion_tick = now_ms;
+3288: 					spacing_recovery.pending_delta_mm = 0.0;
+3289: 					spacing_recovery.moved_mm = 0.0;
+3290: 					spacing_recovery.limit_logged = false;
+3291: 					clear_force_output();
+3292: 					std::cout << "屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 "
+3293: 						<< cfg.spacing_recovery_speed_limit_mm_s << " mm/s。" << std::endl;
+3294: 				}
+3295: 			}
+3296: 
+3297: 			if (emergency_retract_active)
+3298: 			{
+3299: 				// 极简撤出固定执行机构组合，并锁存轴1/2/7；轴3/5/6直接返回启动准备完成位。
+3300: 				cylinder1_cmd = 1000;
+3301: 				cylinder2_cmd = 0;
+3302: 				cylinder3_cmd = 100;
+3303: 				cylinder4_cmd = 1000;
+3304: 				pos[0] = emergency_retract_axis1_hold_rel;
+3305: 				pos[1] = emergency_retract_axis2_hold_rel;
+3306: 				pos[2] = from_left_to_rel(2, startup.final_axis3_from_left_mm);
+3307: 				pos[4] = from_left_to_rel(4, startup.final_axis5_from_left_mm);
+3308: 				pos[5] = from_left_to_rel(5, startup.final_axis6_from_left_mm);
+3309: 				pos[6] = emergency_retract_axis7_hold_rel;
+3310: 				emergency_retract_targets_reached =
+3311: 					std::abs(plc_act_pos[2] - pos[2]) <= cfg.crawl_arrive_tol_mm &&
+3312: 					std::abs(plc_act_pos[4] - pos[4]) <= cfg.crawl_arrive_tol_mm &&
+3313: 					std::abs(plc_act_pos[5] - pos[5]) <= cfg.crawl_arrive_tol_mm;
+3314: 			}
+3315: 			else if (axis6_soft_limit_hold && !motion_startup_active)
+3316: 			{
+3317: 				// 实际越限时继续冻结；启动准备的安全目标允许把 axis6 拉回限制内。
+3318: 				axis4_axis6_coupling_active_prev = false;
+3319: 				axis4_axis6_coupling_last_ms = 0;
+3320: 				hold_axis6_related_axes();
+3321: 			}
+3322: 			else if (spacing_recovery.active())
+3323: 			{
+3324: 				// 固定导管侧，释放随轴3/5/6移动的夹爪；电缸4保留轻限位，防止导丝脱出。
+3325: 				cylinder1_cmd = cyl.cyl1_open;
+3326: 				cylinder2_cmd = cyl.cyl2_clamp;
+3327: 				cylinder3_cmd = cyl.cyl3_open;
+3328: 				cylinder4_cmd = cfg.spacing_recovery_cyl4_release;
+3329: 				pos[0] = spacing_recovery.axis1_hold_rel;
+3330: 				pos[1] = spacing_recovery.axis2_hold_rel;
+3331: 				pos[6] = spacing_recovery.axis7_hold_rel;
+3332: 
+3333: 				if (spacing_recovery.phase == SpacingRecoveryPhase::ClampWait)
+3334: 				{
+3335: 					spacing_recovery.pending_delta_mm = 0.0;
+3336: 					if ((now_ms - spacing_recovery.phase_t0) >= cfg.spacing_recovery_clamp_settle_ms)
+3337: 					{
+3338: 						spacing_recovery.phase = SpacingRecoveryPhase::Active;
+3339: 						spacing_recovery.last_motion_tick = now_ms;
+3340: 						std::cout << "屈曲恢复：已激活，582 手柄仅控制轴3/5/6向远离左限位方向移动。" << std::endl;
+3341: 					}
+3342: 				}
+3343: 				else if (spacing_recovery.phase == SpacingRecoveryPhase::Active)
+3344: 				{
+3345: 					DWORD elapsed_ms = now_ms - spacing_recovery.last_motion_tick;
+3346: 					spacing_recovery.last_motion_tick = now_ms;
+3347: 					if (elapsed_ms > 50) elapsed_ms = 50;
+3348: 
+3349: 					if (axis1_linear_increment_mm > 0.0)
+3350: 					{
+3351: 						spacing_recovery.pending_delta_mm += axis1_linear_increment_mm;
+3352: 					}
+3353: 					else
+3354: 					{
+3355: 						// 不累计反方向或已经停止的手柄输入，避免停止推拉后继续运动。
+3356: 						spacing_recovery.pending_delta_mm = 0.0;
+3357: 					}
+3358: 
+3359: 					spacing_recovery.remaining_mm = calculate_spacing_recovery_remaining();
+3360: 					const double max_step_mm = cfg.spacing_recovery_speed_limit_mm_s *
+3361: 						(static_cast<double>(elapsed_ms) / 1000.0);
+3362: 					double step_mm = spacing_recovery.pending_delta_mm;
+3363: 					if (step_mm > max_step_mm) step_mm = max_step_mm;
+3364: 					if (step_mm > spacing_recovery.remaining_mm) step_mm = spacing_recovery.remaining_mm;
+3365: 
+3366: 					if (step_mm > 0.0)
+3367: 					{
+3368: 						spacing_recovery.axis3_cmd_rel += step_mm;
+3369: 						spacing_recovery.axis5_cmd_rel += step_mm;
+3370: 						spacing_recovery.axis6_cmd_rel += step_mm;
+3371: 						spacing_recovery.pending_delta_mm -= step_mm;
+3372: 						spacing_recovery.moved_mm += step_mm;
+3373: 						spacing_recovery.remaining_mm = calculate_spacing_recovery_remaining();
+3374: 					}
+3375: 					if (spacing_recovery.remaining_mm <= cfg.crawl_arrive_tol_mm)
+3376: 					{
+3377: 						spacing_recovery.pending_delta_mm = 0.0;
+3378: 						if (!spacing_recovery.limit_logged)
+3379: 						{
+3380: 							std::cout << "屈曲恢复：已到达轴3/5/6共同安全行程上限。" << std::endl;
+3381: 							spacing_recovery.limit_logged = true;
+3382: 						}
+3383: 					}
+3384: 				}
+3385: 
+3386: 				pos[2] = spacing_recovery.axis3_cmd_rel;
+3387: 				pos[4] = spacing_recovery.axis5_cmd_rel;
+3388: 				pos[5] = spacing_recovery.axis6_cmd_rel;
+3389: 			}
+3390: 			else if (motion_startup_active)
+3391: 			{
+3392: 				// 合并后的开始控制只做两阶段定位，不执行旧启动准备的夹爪时序。
+3393: 				pos[0] = startup.axis1_hold_rel;
+3394: 				pos[1] = startup.direct_positioning ? 0.0 : startup.final_axis2_deg;
+3395: 				pos[2] = startup.axis3_hold_rel;
+3396: 				pos[4] = startup.axis5_hold_rel;
+3397: 				pos[5] = startup.axis6_hold_rel;
+3398: 				pos[6] = startup.direct_positioning ? 0.0 : startup.final_axis7_deg;
+3399: 
+3400: 				const double startup_axis1_ready_abs = from_left_to_abs(0, cfg.startup_axis1_ready_from_left_mm);
+3401: 				const double startup_axis5_ready_abs = from_left_to_abs(4, cfg.startup_axis5_ready_from_left_mm);
+3402: 				const double startup_axis6_ready_abs = from_left_to_abs(5, cfg.startup_axis5_ready_from_left_mm + cfg.axis56_ready_gap_mm);
+3403: 				const double startup_final_axis1_abs = from_left_to_abs(0, startup.final_axis1_from_left_mm);
+3404: 				const double startup_final_axis3_abs = from_left_to_abs(2, startup.final_axis3_from_left_mm);
+3405: 				const double startup_final_axis5_abs = from_left_to_abs(4, startup.final_axis5_from_left_mm);
+3406: 				const double startup_final_axis6_abs = from_left_to_abs(5, startup.final_axis6_from_left_mm);
+3407: 				const double axis1_abs = plc_act_pos[0] + plc_init_pos[0];
+3408: 				const double axis5_abs = plc_act_pos[4] + plc_init_pos[4];
+3409: 				const double axis6_abs_now = plc_act_pos[5] + plc_init_pos[5];
+3410: 				const double axis3_abs = plc_act_pos[2] + plc_init_pos[2];
+3411: 				const double axis2_rel = plc_act_pos[1];
+3412: 				const double axis7_rel = plc_act_pos[6];
+3413: 
+3414: 				auto apply_startup_final_targets = [&]()
+3415: 				{
+3416: 					pos[0] = from_left_to_rel(0, startup.final_axis1_from_left_mm);
+3417: 					pos[1] = startup.final_axis2_deg;
+3418: 					pos[2] = from_left_to_rel(2, startup.final_axis3_from_left_mm);
+3419: 					pos[4] = from_left_to_rel(4, startup.final_axis5_from_left_mm);
+3420: 					pos[5] = from_left_to_rel(5, startup.final_axis6_from_left_mm);
+3421: 					pos[6] = startup.final_axis7_deg;
+3422: 				};
+3423: 				auto startup_final_targets_reached = [&]() -> bool
+3424: 				{
+3425: 					return (std::abs(axis1_abs - startup_final_axis1_abs) <= cfg.crawl_arrive_tol_mm) &&
+3426: 						(std::abs(axis3_abs - startup_final_axis3_abs) <= cfg.crawl_arrive_tol_mm) &&
+3427: 						(std::abs(axis5_abs - startup_final_axis5_abs) <= cfg.crawl_arrive_tol_mm) &&
+3428: 						(std::abs(axis6_abs_now - startup_final_axis6_abs) <= cfg.crawl_arrive_tol_mm) &&
+3429: 						(std::abs(axis2_rel - startup.final_axis2_deg) <= cfg.startup_rot_arrive_tol_deg) &&
+3430: 						(std::abs(axis7_rel - startup.final_axis7_deg) <= cfg.startup_rot_arrive_tol_deg);
+3431: 				};
+3432: 				auto complete_startup_sequence = [&]()
+3433: 				{
+3434: 					if (!restore_startup_v_limit())
+3435: 					{
+3436: 						std::cout << "警告：启动准备完成后恢复启动期速度限制参数失败。" << std::endl;
+3437: 					}
+3438: 					startup.phase = StartupPhase::Done;
+3439: 					startup.completed = true;
+3440: 					if (sync_all(30))
+3441: 					{
+3442: 						control_active = true;
+3443: 						plc_restart_recovery_latched = false;
+3444: 						std::cout << (startup.recovery_mode ? "中断恢复启动已完成。" : "启动准备流程已完成。") << std::endl;
+3445: 					}
+3446: 					else
+3447: 					{
+3448: 						control_active = false;
+3449: 						std::cout << (startup.recovery_mode
+3450: 							? "中断恢复启动已完成，但重同步失败。"
+3451: 							: "启动准备流程已完成，但重同步失败。") << std::endl;
+3452: 					}
+3453: 				};
+3454: 
+3455: 				if (startup.direct_positioning)
+3456: 				{
+3457: 					const double final_axis1_abs =
+3458: 						from_left_to_abs(0, startup.final_axis1_from_left_mm);
+3459: 					const double final_axis3_abs =
+3460: 						from_left_to_abs(2, startup.final_axis3_from_left_mm);
+3461: 					const double final_axis5_abs =
+3462: 						from_left_to_abs(4, startup.final_axis5_from_left_mm);
+3463: 					const double final_axis6_abs =
+3464: 						from_left_to_abs(5, startup.final_axis6_from_left_mm);
+3465: 					const bool axis156_reached =
+3466: 						std::abs(axis1_abs - final_axis1_abs) <= cfg.crawl_arrive_tol_mm &&
+3467: 						std::abs(axis5_abs - from_left_to_abs(4, startup.direct_axis5_stage_from_left_mm)) <= cfg.crawl_arrive_tol_mm &&
+3468: 						std::abs(axis6_abs_now - from_left_to_abs(5, startup.direct_axis6_stage_from_left_mm)) <= cfg.crawl_arrive_tol_mm;
+3469: 					const bool final_targets_reached =
+3470: 						std::abs(axis1_abs - final_axis1_abs) <= cfg.crawl_arrive_tol_mm &&

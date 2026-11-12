@@ -11,7 +11,7 @@ internal static class Program
     internal const double DAMPING_MAX_N = 0.5;
     internal const double FORCE_SLEW_N_PER_S = 8;
     internal const double FORCE_MAX_N = 1.2;
-    internal const bool SHOW_FORCE_CONSOLE = true;
+    internal const bool SHOW_FORCE_CONSOLE = false;
     [DllImport("winmm.dll")] private static extern uint timeBeginPeriod(uint period);
     [DllImport("winmm.dll")] private static extern uint timeEndPeriod(uint period);
     private static readonly FlCatheterNative.ServoCallback Servo = _ => FlCatheterNative.deviceStatus(0);

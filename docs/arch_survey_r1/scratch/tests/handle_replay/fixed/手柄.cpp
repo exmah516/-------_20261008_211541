@@ -1,0 +1,153 @@
+#include "Handle.h"
+#include "remote_handle_bridge.h"
+#include <stdio.h>
+
+// 允许短暂网络抖动；真正断流超过5秒才进入既有重连流程。
+static constexpr ULONGLONG kRemoteMaxAgeMs = 5000;
+
+Handle::Handle(DWORD serial)
+	: serial_number_(serial)
+{
+	clear_cache();
+}
+
+bool Handle::init()
+{
+	return init(serial_number_);
+}
+
+bool Handle::init(DWORD serial)
+{
+	serial_number_ = serial;
+	if (iID1 >= 0)
+	{
+		return true;
+	}
+
+	// 主端送来有效采样才算接入；主循环每秒重试时不输出失败日志。
+	remote_handle_bridge::Sample sample;
+	if (!remote_handle_bridge::get_sample(remote_handle_bridge::slot_of(serial_number_), sample, kRemoteMaxAgeMs))
+	{
+		return false;
+	}
+	iID1 = 0;
+    if (opened_once_)
+    {
+        resume_settling_ = true;
+        resume_since_ms_ = 0;
+    }
+    opened_once_ = true;
+	printf(u8"已接入远程手柄（物理 SN %lu）。\n", static_cast<unsigned long>(serial_number_));
+	return true;
+}
+
+bool Handle::poll()
+{
+	if (iID1 < 0)
+	{
+		return false;
+	}
+
+	remote_handle_bridge::Sample sample;
+	if (!remote_handle_bridge::get_sample(remote_handle_bridge::slot_of(serial_number_), sample, kRemoteMaxAgeMs))
+	{
+		return false;
+	}
+	const bool new_sample = sample.rx_ms > last_sample_rx_ms_;
+    const bool epoch_changed = device_epoch_known_ && device_epoch_ != sample.device_epoch;
+    if (last_sample_rx_ms_ != 0 && new_sample && sample.rx_ms - last_sample_rx_ms_ > 1500)
+	{
+		sample_gap_ms_ = sample.rx_ms - last_sample_rx_ms_;
+        resume_settling_ = true;
+        resume_since_ms_ = sample.rx_ms;
+	}
+    if (epoch_changed)
+    {
+        resume_settling_ = true;
+        resume_since_ms_ = sample.rx_ms;
+    }
+    device_epoch_ = sample.device_epoch;
+    device_epoch_known_ = true;
+    const bool settling_this_poll = resume_settling_;
+    if (resume_settling_)
+    {
+        const ULONGLONG now = GetTickCount64();
+        if (sample.continuous_since_ms == 0 || now - sample.rx_ms > 250)
+        {
+            resume_since_ms_ = 0;
+        }
+        else if (new_sample)
+        {
+            // 计时只推进到实际新采样；重复读取缓存不能完成静置。
+            if (resume_since_ms_ == 0) resume_since_ms_ = sample.rx_ms;
+            if (sample.continuous_since_ms > resume_since_ms_) resume_since_ms_ = sample.continuous_since_ms;
+            if (sample.rx_ms - resume_since_ms_ >= kHandleResumeSettleMs)
+            {
+                resume_settling_ = false;
+                rebase_requested_ = true;
+            }
+        }
+    }
+	last_sample_rx_ms_ = sample.rx_ms;
+	for (int i = 0; i < 2; ++i)
+	{
+		fVels2[i] = settling_this_poll || GetTickCount64() - sample.rx_ms > 250
+            ? 0.0 : static_cast<double>(sample.vels[i]);
+		fJoints2[i] = static_cast<double>(sample.joints[i]);
+		encoders2[i] = static_cast<long>(sample.encoders[i]);
+	}
+	buttons2 = sample.buttons;
+	objData.buttons2 = buttons2;
+	objData.encoders2[0] = encoders2[0];
+	objData.encoders2[1] = encoders2[1];
+	return true;
+}
+
+void Handle::clear_cache()
+{
+	last_sample_rx_ms_ = 0;
+	rebase_requested_ = false;
+	sample_gap_ms_ = 0;
+    resume_settling_ = false;
+    resume_since_ms_ = 0;
+	objData.buttons2 = 0;
+	objData.encoders2[0] = 0;
+	objData.encoders2[1] = 0;
+	fVels2[0] = 0.0;
+	fVels2[1] = 0.0;
+	fJoints2[0] = 0.0;
+	fJoints2[1] = 0.0;
+	buttons2 = 0;
+	encoders2[0] = 0;
+	encoders2[1] = 0;
+}
+
+void Handle::close()
+{
+    iID1 = -1;
+    const ULONGLONG before_disconnect = last_sample_rx_ms_;
+    clear_cache();
+    last_sample_rx_ms_ = before_disconnect;
+	// 关闭时撤销经 Zenoh force Topic 回传主端的力目标，重复关闭也保持清零。
+	remote_handle_bridge::set_output(remote_handle_bridge::slot_of(serial_number_), remote_handle_bridge::Output());
+}
+
+void Handle::setforce(double F, double N)
+{
+	setforce_axis(F, 0, N);
+}
+
+void Handle::setforce_axis(double F, int axis, double N)
+{
+	if (iID1 < 0)
+	{
+		return;
+	}
+
+	remote_handle_bridge::Output out;
+	out.enable = true;
+	out.axis = axis < 0 ? 0 : (axis > 2 ? 2 : axis);
+	out.force = F;
+	out.torque = N;
+	remote_handle_bridge::set_output(remote_handle_bridge::slot_of(serial_number_), out);
+}

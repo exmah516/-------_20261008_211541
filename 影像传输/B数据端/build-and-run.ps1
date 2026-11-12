@@ -44,11 +44,7 @@ try {
         $oldIni = Join-Path $legacy 'config/hik_cameras.ini'
         if (Test-Path -LiteralPath $oldIni) { Copy-Item -LiteralPath $oldIni -Destination $cameraIni }
         else {
-            $oldIni = Join-Path $PSScriptRoot '../A主端/工程/config/hik_cameras.ini'
-            if (!(Test-Path -LiteralPath $oldIni)) { $oldIni = Join-Path $PSScriptRoot 'config/hik_cameras.ini.example' }
-            $cameraText = [IO.File]::ReadAllText($oldIni,[Text.Encoding]::UTF8)
-            $cameraText = [regex]::Replace($cameraText, '(?m)^(stream\s*=\s*)0\s*$', '${1}1')
-            [IO.File]::WriteAllText($cameraIni,$cameraText,[Text.UTF8Encoding]::new($false))
+            Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'config/hik_cameras.ini.example') -Destination $cameraIni
         }
     }
     foreach ($name in @('ffmpeg.exe','mediamtx.exe','MediaMTX-LICENSE','FFmpeg-LICENSE.txt')) {

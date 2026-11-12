@@ -1,0 +1,361 @@
+struct ControlConfig
+{
+	// 手柄运动缩放系数与符号约定。
+	double k_handle_to_mm = 500.0 * (75.0 / 50.0); // 手柄线性位移差 -> 轴位移增量(mm)
+	double axis_push_sign = -1.0; // 手柄“推/拉”到轴“正/负”方向的映射符号
+	// 旋转手柄到轴2/轴7的方向与实机机构一致，负号用于反向映射。
+	double axis_rot_scale_deg = -Rad;
+
+	// 力反馈输出配置：轴向力映射到 SDK 三轴力向量中的一个轴。
+	int axial_force_axis = 1;
+	// 按物理手柄分别缩放标定后的力和扭矩；0.5 表示该分量输出一半。
+	double force_feedback_582_force_scale = 0.3;  // 导丝582：力比例
+	double force_feedback_582_torque_scale = 0.3; // 导丝582：扭矩比例
+	double force_feedback_587_force_scale = 0.3;  // 导管587：力比例
+	double force_feedback_587_torque_scale = 0.3; // 导管587：扭矩比例
+	// 一阶轴向力低通系数；100 Hz 控制循环下 0.25 可抑制短时尖峰，1.0 表示关闭滤波。
+	double force_feedback_force_filter_alpha = 0.25;
+
+	// 按键映射来自 buttons2 位掩码。
+	unsigned char btn_b6 = 0x40;
+
+	// 递送、撤出共用实际窗口边界，不再额外外扩。
+	double axis1_window_left_from_left_mm = 5.0;
+	double axis1_window_right_from_left_mm = 30.0;
+	// axis6 相对 axis5 的间距窗口 g = axis6_from_left - axis5_from_left，范围 [gmin, gmin+size]。
+	// 双手柄与单手柄调试均使用 g = 1～33 mm。
+	double catheter_axis6_window_size_mm = 32.0;
+	double catheter_axis6_window_min_gap_from_axis5_mm = 1.0;
+	double guidewire_axis6_window_size_mm = 32.0;
+	double guidewire_axis6_window_min_gap_from_axis5_mm = 1.0;
+	// 主动换手使用固定间距目标。
+	double axis6_active_delivery_gap_mm = 28.0;
+	double axis6_active_retraction_gap_mm = 6.0;
+	// 被动目标距被动触发端为“轴1距主动端的剩余行程+3”，最多27 mm。
+	double axis6_passive_clearance_mm = 3.0;
+	double axis6_passive_distance_limit_mm = 27.0;
+	// 只允许轴1触发时合并距被动换手端不足此距离的轴6。
+	double transaction_merge_eps_mm = 5.0;
+	// 正常换手的四步夹爪时序分别使用对应电缸的稳定等待时间。
+	DWORD cyl1_release_wait_ms = 100;
+	DWORD cyl1_clamp_wait_ms = 150;
+	DWORD cyl2_release_wait_ms = 500;
+	DWORD cyl2_clamp_wait_ms = 150;
+	DWORD cyl3_release_wait_ms = 100;
+	DWORD cyl3_clamp_wait_ms = 150;
+	DWORD cyl4_release_wait_ms = 500;
+	DWORD cyl4_clamp_wait_ms = 150;
+	// 启动最终姿态下的 axis6-axis5 间距，独立于运行时换手目标。
+	double startup_g_mm = 13.0;
+	// 标准启动中间夹持阶段的轴5/6间距，与运行时窗口相互独立。
+	double axis56_ready_gap_mm = 15.0;
+	double axis3_delivery_stop_from_left_mm = 20.0;
+	double axis3_delivery_release_hysteresis_mm = 2.0;
+	double guidewire_entry_axis6_from_left_max_mm = 667.0;
+	// 单/双手柄导管正向递送中，axis1 每次计划回退后前 10 mm 名义输入额外前进 2 mm。
+	// 0 表示关闭；UI 与内部均限制在 [0, 5] mm。
+	double axis1_post_return_lead_mm = 2.0;
+	double axis1_post_return_lead_limit_mm = 5.0;
+	double axis1_post_return_mapping_span_mm = 10.0;
+	// axis6 距自身左限位的上位机内部软限位。达到预测越限条件后仅锁止上位机链路，
+	// 不改变 PLC/NC 内已有的硬限位与安全逻辑。
+	double axis6_soft_limit_from_left_mm = 660.0;
+
+	// 手动间距恢复：582 手柄仅驱动轴3/5/6向远离左限位方向等位移移动。
+	double spacing_recovery_speed_limit_mm_s = 40.0;
+	double spacing_recovery_axis3_max_from_left_mm = 650.0;
+	double spacing_recovery_axis5_max_from_left_mm = 665.0;
+	double spacing_recovery_axis6_max_from_left_mm = 665.0;
+	DWORD spacing_recovery_clamp_settle_ms = 150;
+	DWORD spacing_recovery_exit_settle_ms = 100;
+	DWORD spacing_recovery_exit_timeout_ms = 2000;
+	unsigned short spacing_recovery_cyl4_release = 100;
+	// 物理587屈曲恢复键同时置位低三位；0x07、叠加反向键的0x47均表示按住。
+	unsigned char spacing_recovery_button_mask = 0x07;
+
+	// 计划运动到位容差。
+	double crawl_arrive_tol_mm = 0.2;
+	double handoff_stop_velocity_mm_s = 0.5;
+	// 线性增量抗噪死区：仅用于抑制差分噪声，不承担方向门控。
+	double linear_increment_noise_deadband_mm = 0.02;
+	// 正反切换一次性触发保护距离（离开该距离后重新允许触发）。
+	double reverse_switch_trigger_guard_mm = 2.0;
+
+	// PLC 规划快速回退参数。
+	double axis1_return_velocity_mm_s = 110.0;
+	double axis1_return_acc_mm_s2 = 4800.0;
+	double axis1_return_dec_mm_s2 = 4800.0;
+	double axis1_return_jerk_mm_s3 = 70000.0;
+	double axis6_return_velocity_mm_s = 110.0; // 与轴1统一回退速度，便于现场对照
+	double axis6_return_acc_mm_s2 = 4800.0;
+	double axis6_return_dec_mm_s2 = 4800.0;
+	double axis6_return_jerk_mm_s3 = 70000.0;
+	// 统一计划回退握手：只允许在PLC尚未启动动作时自动重试一次。
+	DWORD planned_return_ack_timeout_ms = 250;
+	DWORD planned_return_retry_clear_timeout_ms = 500;
+	DWORD planned_return_execution_timeout_ms = 5000;
+
+	// 手柄低通滤波。
+	double linear_handle_alpha = 0.25;
+	double rotational_handle_alpha = 0.20;
+	// 开始控制时的低速定位仅使用于已完成自检的目标校正。
+	DWORD startup_clamp_settle_delay_ms = 300;
+	DWORD startup_recovery_stage_delay_ms = 2000;
+	double startup_motion_speed_scale = 0.005;
+	unsigned short startup_cyl3_open = 500;
+	unsigned short startup_cyl4_open = 5;
+	unsigned short startup_cyl3_clamp = 0;
+	unsigned short startup_cyl4_clamp = 1000;
+	// PLC 自检完成后的器械装卸等待姿态；旧 PLC 无就绪标志时也用于兼容判定。
+	double startup_loading_axis1_from_left_mm = 96.0;
+	double startup_loading_axis3_from_left_mm = 500.0;
+	double startup_loading_axis5_from_left_mm = 530.0;
+	double startup_loading_axis6_from_left_mm = 580.0;
+	double startup_loading_pose_tolerance_mm = 2.0;
+	// 标准装卸启动的中间移动目标。
+	double startup_axis1_ready_from_left_mm = 28.0;
+	double startup_axis5_ready_from_left_mm = startup_loading_axis3_from_left_mm + 10.0;
+	// 未经 UI 覆盖时采用的最终启动目标。
+	double startup_final_axis1_default_from_left_mm = 28.0;
+	double startup_final_axis3_default_from_left_mm = 610.0; 
+	double startup_final_axis5_default_from_left_mm = 615.0;
+	double startup_final_axis6_default_from_left_mm = 628.0; // = axis5(615) + startup_g_mm(13)
+	double startup_rot_arrive_tol_deg = 0.2;
+};
+
+struct CylinderPreset
+{
+	// 命名遵循当前接线方式：
+	// cyl1/cyl2 属于导管侧夹爪对，
+	// cyl3/cyl4 属于导丝侧夹爪对。
+	unsigned short cyl1_open = 450;
+	unsigned short cyl1_clamp = 5;
+	unsigned short cyl2_open = 5;
+	unsigned short cyl2_clamp = 1000;
+	unsigned short cyl3_open = 550;
+	unsigned short cyl3_clamp = 50;
+	unsigned short cyl4_open = 5;
+	unsigned short cyl4_clamp = 1000;
+	unsigned short cyl3_follow_release = 400;
+	unsigned short cyl4_follow_release = 100;
+};
+
+enum class GuidewireMode
+{
+	None,
+	Independent
+};
+
+// 双手柄与单手柄调试共用的计划回退生命周期。Follow 仍由各轴现有逻辑计算，
+// 这里只管理触发后的夹爪稳定、PLC握手和非阻塞交接。
+enum class PlannedReturnPhase : unsigned char
+{
+	Idle,
+	ClampSettle,
+	SubmitRequest,
+	AwaitAccepted,
+	AwaitDone,
+	RetryClear,
+	AwaitFreshSnapshot,
+	PublishHandoff,
+	AwaitHandoffApplied,
+	PostHandoffClampSettle
+};
+
+enum class PlannedReturnMode : unsigned char
+{
+	None,
+	CatheterDelivery,
+	CatheterRetraction,
+	GuidewireDelivery,
+	GuidewireRetraction,
+	Dual // 双手柄共用递送/撤出方向，执行轴集合由本次触发决定
+};
+
+enum class PlannedReturnRebaseScope : unsigned char
+{
+	Axis1,
+	Axis6,
+	Both
+};
+
+// 统一换手通过通信线程异步提交的 ADS 批量命令用途。
+// 状态机只保存序号并轮询完成结果，主控制线程不等待 ADS 调用。
+enum class PlannedReturnAdsCommandPurpose : unsigned char
+{
+	None,
+	Prepare,
+	Commit,
+	RetryClear,
+	CancelClear
+};
+
+struct PlannedReturnLeg
+{
+	bool active = false;
+	int axis_index = -1; // 0=axis1，5=axis6
+	double target_abs = 0.0;
+	double entry_rel = 0.0;
+	bool request_armed = false; // 已捕获本次commit前事件基线，允许解释后续Notification
+	bool acknowledged = false;
+	bool started = false;
+	// Commit部分成功或传输结果未知时锁存；即使Notification尚未到达也禁止整组自动重发。
+	bool possibly_started = false;
+	bool done = false;
+	std::uint64_t request_event_sequence = 0;
+	std::uint64_t ack_event_sequence = 0;
+	std::uint64_t error_event_sequence = 0;
+	std::uint32_t reported_error_id = 0;
+	std::uint64_t cancel_event_sequence = 0;
+	bool cancel_event_required = false;
+
+	void reset()
+	{
+		*this = PlannedReturnLeg{};
+	}
+};
+
+struct PlannedReturnCoordinator
+{
+	PlannedReturnPhase phase = PlannedReturnPhase::Idle;
+	PlannedReturnMode mode = PlannedReturnMode::None;
+	PlannedReturnRebaseScope rebase_scope = PlannedReturnRebaseScope::Axis1;
+	PlannedReturnLeg legs[2];
+	int leg_count = 0;
+	unsigned int retry_count = 0;
+	ULONGLONG phase_t0_ms = 0;
+	ULONGLONG request_t0_ms = 0;
+	ULONGLONG execution_t0_ms = 0;
+	ULONGLONG retry_clear_t0_ms = 0;
+	std::uint64_t clamp_output_generation = 0;
+	bool clamp_output_applied = false;
+	bool request_prepared = false;
+	std::uint64_t commit_guard_generation = 0;
+	bool retry_clear_issued = false;
+	std::uint64_t retry_clear_snapshot_sequence = 0;
+	PlannedReturnAdsCommandPurpose ads_command_purpose = PlannedReturnAdsCommandPurpose::None;
+	std::uint64_t ads_command_sequence = 0;
+	ULONGLONG ads_command_submit_ms = 0;
+	bool cancel_clear_confirmed = false;
+	bool completion_clear_confirmed = false;
+	std::uint64_t cancel_snapshot_sequence = 0;
+	ULONGLONG cancel_t0_ms = 0;
+	ULONGLONG cancel_clear_retry_after_ms = 0;
+	bool cancel_timeout_reported = false;
+	bool cancel_rebased = false;
+	std::uint64_t cancel_hold_generation = 0;
+	std::uint64_t done_snapshot_sequence = 0;
+	std::uint64_t handoff_generation = 0;
+	double hold_axis3_rel = 0.0;
+	double hold_axis5_rel = 0.0;
+	double hold_axis1_rel = 0.0;
+	double hold_axis6_rel = 0.0;
+	// 夹爪两级时序：clamp_stage 0=仅持有者夹紧，1=移动者已松开；
+	// restore_stage 0=移动者已夹紧(持有者仍夹)，1=持有者已松开。
+	unsigned char clamp_stage = 0;
+	unsigned char restore_stage = 0;
+	std::uint64_t release_output_generation = 0;
+	bool release_applied = false;
+
+	bool active() const
+	{
+		return phase != PlannedReturnPhase::Idle;
+	}
+
+	bool contains_axis(int axis_index) const
+	{
+		for (int i = 0; i < leg_count; ++i)
+		{
+			if (legs[i].active && legs[i].axis_index == axis_index) return true;
+		}
+		return false;
+	}
+
+	// 保持既有WPF数值契约：0=Follow，1=夹爪稳定，2=请求/运动，3=交接/恢复夹爪稳定。
+	int compatibility_phase_for_axis(int axis_index) const
+	{
+		if (!active() || !contains_axis(axis_index)) return 0;
+		if (phase == PlannedReturnPhase::ClampSettle) return 1;
+		if (phase == PlannedReturnPhase::SubmitRequest ||
+			phase == PlannedReturnPhase::AwaitAccepted ||
+			phase == PlannedReturnPhase::AwaitDone ||
+			phase == PlannedReturnPhase::RetryClear)
+		{
+			return 2;
+		}
+		return 3;
+	}
+
+	void reset()
+	{
+		*this = PlannedReturnCoordinator{};
+	}
+};
+
+// 指令触边只记住换手意图；实际到位并低速后才切换夹爪。
+struct DualHandoffRequest
+{
+	bool axis1 = false;
+	bool axis6 = false;
+	bool wire_caused = false;
+	bool gap_boundary = false;
+	bool reverse = false;
+	bool wire_reverse = false;
+	bool axis4_caused = false;
+
+	bool active() const { return axis1 || axis6; }
+	void reset() { *this = DualHandoffRequest{}; }
+};
+
+enum class SpacingRecoveryPhase
+{
+	Idle,
+	ClampWait,
+	Active,
+	ExitSync
+};
+
+struct SpacingRecoveryState
+{
+	bool requested = false;
+	SpacingRecoveryPhase phase = SpacingRecoveryPhase::Idle;
+	DWORD phase_t0 = 0;
+	DWORD last_motion_tick = 0;
+	double axis1_hold_rel = 0.0;
+	double axis2_hold_rel = 0.0;
+	double axis3_cmd_rel = 0.0;
+	double axis5_cmd_rel = 0.0;
+	double axis6_cmd_rel = 0.0;
+	double axis7_hold_rel = 0.0;
+	double pending_delta_mm = 0.0;
+	double moved_mm = 0.0;
+	double remaining_mm = 0.0;
+	bool limit_logged = false;
+	// 单手柄调试退出时使用；双手柄方向始终以当前B6电平为准。
+	int restore_mode_selection = 1;
+	bool restore_vis_reverse_override_active = false;
+	bool restore_vis_reverse_override_value = false;
+	int restore_vis_reverse_override_target = 0;
+
+	bool active() const
+	{
+		return phase != SpacingRecoveryPhase::Idle;
+	}
+
+	void reset()
+	{
+		requested = false;
+		phase = SpacingRecoveryPhase::Idle;
+		phase_t0 = 0;
+		last_motion_tick = 0;
+		pending_delta_mm = 0.0;
+		moved_mm = 0.0;
+		remaining_mm = 0.0;
+		limit_logged = false;
+		restore_mode_selection = 1;
+		restore_vis_reverse_override_active = false;
+		restore_vis_reverse_override_value = false;
+		restore_vis_reverse_override_target = 0;
+	}
+};
+

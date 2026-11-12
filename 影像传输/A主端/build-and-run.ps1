@@ -2,6 +2,7 @@
 $ErrorActionPreference = 'Stop'
 try {
     if (Get-Process -Name ImagingMaster -ErrorAction SilentlyContinue) { throw '请先关闭 ImagingMaster。' }
+    & (Join-Path $PSScriptRoot '../准备依赖.ps1') -Offline
     $project = Join-Path $PSScriptRoot '工程/ImagingMaster/ImagingMaster.csproj'
     $stage = Join-Path $PSScriptRoot ('工程/ImagingMaster/bin/publish-'+[Guid]::NewGuid().ToString('N'))
     & dotnet publish $project -c Release --nologo --verbosity minimal -p:NuGetAudit=false --output $stage
@@ -9,7 +10,7 @@ try {
     $runtime = Join-Path $PSScriptRoot '运行'
     New-Item -ItemType Directory -Path $runtime -Force | Out-Null
     Get-ChildItem -LiteralPath $stage -File | Copy-Item -Destination $runtime -Force
-    foreach ($folder in @('Player','runtimes')) {
+    foreach ($folder in @('Player','runtimes','runtime')) {
         $source = Join-Path $stage $folder
         if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination $runtime -Recurse -Force }
     }
@@ -24,6 +25,7 @@ try {
         }
     }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../依赖/第三方组件说明.md') -Destination $runtime -Force
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../B数据端/有线分机部署与画质设置.md') -Destination $runtime -Force
     Write-Host "已生成完整主端运行包：$runtime"
     if (!$BuildOnly) { Start-Process -FilePath (Join-Path $runtime 'ImagingMaster.exe') -WorkingDirectory $runtime -WindowStyle Normal }
     exit 0

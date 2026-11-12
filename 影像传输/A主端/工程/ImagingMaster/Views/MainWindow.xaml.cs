@@ -8,19 +8,36 @@ namespace MasterConsole.Views
     public partial class MainWindow : Window
     {
         private readonly WebRtcPlayer _player;
-        private bool _closed;
+        private RecordingHost _relay;
+        private bool _closed, _canClose;
         public MainWindow()
         {
             InitializeComponent(); PlaceDefaultWindow();
             _player = new WebRtcPlayer(VideoSurface);
             Loaded += async (s, e) => {
+                bool relayStarted = false;
                 try {
-                    await _player.InitializeAsync(StreamSettings.Load());
+                    var settings = StreamSettings.LoadRelay();
+                    _relay = new RecordingHost(settings);
+                    _relay.Status += text => Dispatcher.BeginInvoke(new Action(() => { if (!_closed) RecordingStatus.Text = text; }));
+                    _relay.Start();
+                    relayStarted = true;
+                    await _player.InitializeAsync(settings.Playback);
                     if (!_closed) StartupStatus.Visibility = Visibility.Collapsed;
                 }
-                catch (Exception ex) { if (!_closed) { VideoSurface.Visibility = Visibility.Collapsed; StartupStatus.Text = "播放器未启动：" + ex.Message + "\n请确认已安装 Microsoft Edge WebView2 Runtime。"; } }
+                catch (Exception ex) { if (!_closed) { VideoSurface.Visibility = Visibility.Collapsed; StartupStatus.Text = "播放器未启动：" + ex.Message + "\n请确认配置、媒体运行库和 Microsoft Edge WebView2 Runtime。"; if (!relayStarted) RecordingStatus.Text = "未录像：" + ex.Message; } }
             };
-            Closed += (s, e) => { _closed = true; _player.Dispose(); };
+            Closing += async (s, e) => {
+                if (_canClose) return;
+                e.Cancel = true;
+                if (_closed) return;
+                _closed = true;
+                _player.Dispose();
+                RecordingStatus.Text = "录像收尾中…";
+                if (_relay != null) await _relay.StopAsync();
+                _canClose = true;
+                Close();
+            };
         }
         private void PlaceDefaultWindow()
         {

@@ -1,4 +1,4 @@
-﻿param([switch]$BandwidthOnly, [switch]$LoggingOnly, [switch]$EncodingOnly)
+﻿param([switch]$BandwidthOnly, [switch]$LoggingOnly, [switch]$EncodingOnly, [switch]$RecordingOnly)
 $ErrorActionPreference = 'Stop'
 if (!$LoggingOnly) { & (Join-Path $PSScriptRoot '准备依赖.ps1') -Offline }
 $project = Join-Path $PSScriptRoot 'B数据端/ScreenCut源码/tools/ScreenCutCheck/ScreenCutCheck.csproj'
@@ -12,5 +12,6 @@ $record = 'last-run.txt'
 if ($BandwidthOnly) { $testArgs = @('--bandwidth'); $record = 'bandwidth-run.txt' }
 if ($LoggingOnly) { $testArgs = @('--logging'); $record = 'logging-run.txt' }
 if ($EncodingOnly) { $testArgs = @('--encoding'); $record = 'encoding-run.txt' }
+if ($RecordingOnly) { $testArgs = @('--recording'); $record = 'recording-run.txt' }
 & $exe @testArgs 2>&1 | Tee-Object -FilePath (Join-Path $env:IMAGING_TEST_OUTPUT $record)
 if ($LASTEXITCODE -ne 0) { throw "回环检查失败，见 验证记录/$record。" }

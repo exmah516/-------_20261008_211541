@@ -8,6 +8,9 @@
   <ItemGroup>
     <Reference Include="System.Web.Extensions" />
     <Reference Include="System.Web" />
+    <Reference Include="System.Net.Http" />
+    <Compile Include="../../../B数据端/ScreenCut源码/ScreenCut/ProcessJob.cs" Link="Services/ProcessJob.cs" />
+    <Content Include="../../../依赖/runtime/mediamtx.exe;../../../依赖/runtime/MediaMTX-LICENSE" Link="runtime/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
     <Content Include="Player/**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../config/*.ini" Link="config/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

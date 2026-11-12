@@ -1,10 +1,11 @@
 # 影像传输：截图与监控分机部署
 
-数据端有两份独立运行包，支持不同电脑、不同 IP：**ScreenCut 截图端**负责 DSA 桌面采集，**CameraMonitor 监控端**负责两路海康 RTSP。主端继续显示三路画面，通过两份 INI 分别连接它们，不需要修改主端播放器。
+数据端有两份独立运行包：**ScreenCut 截图端**负责 DSA 桌面采集，**CameraMonitor 监控端**负责两路海康 RTSP。**ImagingMaster 主端**通过本地 MediaMTX 各拉取一次上游，供三路 WebView2 显示并保存原码流录像。
 
 ```text
-截图电脑 → FFmpeg + MediaMTX → WebRTC ──┐
-监控电脑 → 两路 RTSP + MediaMTX → WebRTC ┴→ 原影像主端
+截图电脑 192.168.2.27 → FFmpeg + MediaMTX → WebRTC ──┐
+监控电脑 192.168.60.1 → 两路 RTSP + MediaMTX → WebRTC ┴→ 主端本地 MediaMTX → WebView2
+                                                                        └→ fMP4 录像
 ```
 
 完整配置步骤、三台电脑 IP 示例、端口表和画质档位见 [有线分机部署与画质设置](B数据端/有线分机部署与画质设置.md)。
@@ -16,7 +17,7 @@
 1. 依赖已准备好；缺失时运行 `powershell -ExecutionPolicy Bypass -File .\准备依赖.ps1`，固定版本与 SHA256 校验沿用现有脚本。
 2. 运行 `B数据端/编译并启动数据端.cmd`，生成并启动两个独立软件。仅构建用 `powershell -ExecutionPolicy Bypass -File .\B数据端\build-and-run.ps1 -BuildOnly`。
 3. 复制整个 `B数据端/截图端` 到截图电脑，整个 `B数据端/监控端` 到监控电脑。在各自的 streaming.config 中填写主端 IP 与该电脑监听 IP。
-4. 使用原 `A主端/运行`，在其 config/dsa_screencut.ini 配截图电脑，在 config/hik_cameras.ini 配监控电脑。修改后重启主端。
+4. 编译更新 `A主端/运行` 完整目录（含 runtime/mediamtx.exe）；两份 INI 保存上游和录像目录。截图链路主端 IP 为 192.168.2.21，监控链路主端 IP 为 192.168.50.1。
 5. 依次或分别打开两个软件。截图端预览区域后点“开始传图 / 应用画质”；监控端打开即接入相机。任意一端关闭不影响另一端，也能使用默认不同端口部署在同机。
 
 首次构建从旧包迁移相机凭据、设备 IP、网口和截图区域，新截图包默认 1080p25、6000 kbps。已有独立运行包的配置不会被再次构建覆盖。旧 `B数据端/运行` 仅保留兼容包，`B数据端/ScreenCut` 保留更早版本；分机部署使用两个新目录，切换前关闭旧程序。
@@ -30,7 +31,7 @@
 | 本机 RTSP | 8554 | 8555 |
 | 本机管理 API | 9997 | 9998 |
 
-仅对主端放行信令和媒体端口。RTSP 和 API 限定本机。各端的 MasterIp 是允许读取的主端地址，RelayListenIp 是该软件所在电脑的实际有线地址。
+仅对各链路主端 IP 放行发送端信令和媒体端口。RTSP 和 API 限定本机。主端新增本地信令 8891、媒体 8191、API 9999，全部服务仅绑定 127.0.0.1。各端的 MasterIp 是允许读取的主端地址，RelayListenIp 是该软件所在电脑的实际有线地址。
 
 ## 画质与行为
 
@@ -44,7 +45,7 @@
 
 `powershell -ExecutionPolicy Bypass -File .\单机回环测试.ps1` 使用不同回环 IP 和端口模拟两台发送电脑，检查三路真实 H.264 WebRTC 解码、在线切换 1080p、停开一端不影响另一端、网口绑定、认证、丢包/抖动恢复和 TCP ICE。测试不修改现场 IP、网卡或防火墙。
 
-可用 `-LoggingOnly` 单测日志，`-EncodingOnly` 单测原低带宽编码画质。`-BandwidthOnly` 保留原 2 Mbps 模拟链路回归用途。结果写入“验证记录”，真实双机硬件链路仍需现场验收。
+可用 `-RecordingOnly` 检查主端 WHEP 中继、真实 WebView 解码、录像、两端断流恢复、隐藏窗口和进程退出；`-LoggingOnly` 单测日志，`-EncodingOnly` 单测原低带宽编码画质。`-BandwidthOnly` 保留原 2 Mbps 模拟链路回归用途。结果写入“验证记录”，真实双机源地址、网卡流量和硬件链路仍需现场验收。
 
 构建后可运行 `pwsh -STA -NoProfile -File .\B数据端\ScreenCut源码\tools\ScreenCutCheck\SplitDeploymentCheck.ps1`，将两个实际运行包复制到临时目录，用独立 IP/服务进程检查画质档位、手动参数、非法输入、配置保存及进程启停恢复；测试期间相机被禁用。
 

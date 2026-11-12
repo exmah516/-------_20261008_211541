@@ -11,11 +11,15 @@
   <Grid Margin="12">
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
     <Border Style="{StaticResource CardBorder}" Padding="10,6" Margin="0,0,0,8">
+      <StackPanel>
       <WrapPanel>
         <Button Content="DSA影像" Tag="dsa" Click="DisplaySelect_Click" Style="{StaticResource CompactButton}" Margin="0,0,4,0"/>
         <Button Content="监控1" Tag="camera1" Click="DisplaySelect_Click" Style="{StaticResource CompactButton}" Margin="0,0,4,0"/>
         <Button Content="监控2" Tag="camera2" Click="DisplaySelect_Click" Style="{StaticResource CompactButton}"/>
       </WrapPanel>
+      <TextBlock x:Name="RecordingStatus" Text="未录像：媒体服务启动中…" Margin="0,6,0,0"
+                 TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+      </StackPanel>
     </Border>
     <Grid Grid.Row="1" Background="#111821">
       <wv:WebView2 x:Name="VideoSurface" DefaultBackgroundColor="#111821"/>

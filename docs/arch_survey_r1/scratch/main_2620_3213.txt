@@ -1,0 +1,595 @@
+介入机器人/B数据端/工程/ADS项目/main.cpp
+2620: 						? independent_axis1_hold_rel : planned_return.hold_axis1_rel;
+2621: 					pos[1] = (guidewire_mode == GuidewireMode::Independent)
+2622: 						? independent_axis2_hold_rel : axis2_hold_rel;
+2623: 					pos[2] = (guidewire_mode == GuidewireMode::Independent)
+2624: 						? independent_axis3_hold_rel : planned_return.hold_axis3_rel;
+2625: 					pos[4] = (guidewire_mode == GuidewireMode::Independent)
+2626: 						? independent_axis5_hold_rel : planned_return.hold_axis5_rel;
+2627: 					cylinder1_cmd = cyl.cyl1_open;
+2628: 					cylinder2_cmd = cyl.cyl2_clamp;
+2629: 				}
+2630: 				if (!axis6_leg_active)
+2631: 				{
+2632: 					pos[5] = planned_return.hold_axis6_rel;
+2633: 					pos[6] = axis7_hold_rel;
+2634: 					cylinder3_cmd = cyl.cyl3_open;
+2635: 					cylinder4_cmd = cyl.cyl4_clamp;
+2636: 				}
+2637: 			};
+2638: 
+2639: 			auto enter_planned_return_retry = [&](const char* reason)
+2640: 			{
+2641: 				for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
+2642: 				{
+2643: 					refresh_planned_return_leg(planned_return.legs[leg_index]);
+2644: 				}
+2645: 				if (planned_return.retry_count >= 1 || planned_return_any_started())
+2646: 				{
+2647: 					fail_planned_return(reason, planned_return_has_error(), true);
+2648: 					return;
+2649: 				}
+2650: 				planned_return.request_prepared = false;
+2651: 				planned_return.commit_guard_generation = 0;
+2652: 				axis1_fast_return = false;
+2653: 				axis6_fast_retract = false;
+2654: 				planned_return.phase = PlannedReturnPhase::RetryClear;
+2655: 				planned_return.retry_clear_t0_ms = now_ms;
+2656: 				planned_return.retry_clear_issued = false;
+2657: 				planned_return.retry_clear_snapshot_sequence = ads_snapshot_sequence;
+2658: 				std::cout << reason << "；PLC尚未启动动作，将清除请求并安全重试一次。"
+2659: 					<< std::endl;
+2660: 			};
+2661: 
+2662: 			auto step_planned_return = [&]()
+2663: 			{
+2664: 				if (!planned_return.active()) return;
+2665: 				for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
+2666: 				{
+2667: 					refresh_planned_return_leg(planned_return.legs[leg_index]);
+2668: 				}
+2669: 				if (planned_return.phase == PlannedReturnPhase::SubmitRequest &&
+2670: 					planned_return.ads_command_purpose == PlannedReturnAdsCommandPurpose::Commit &&
+2671: 					planned_return_all_acknowledged() && planned_return_has_error() == nullptr)
+2672: 				{
+2673: 					// PLC 已确认各腿时不再依赖写入回执，避免 ADS 短暂丢包误取消已启动的动作。
+2674: 					clear_planned_return_ads_command_tracking();
+2675: 					planned_return.request_prepared = false;
+2676: 					planned_return.commit_guard_generation = 0;
+2677: 					planned_return.phase = PlannedReturnPhase::AwaitDone;
+2678: 				}
+2679: 				apply_planned_return_outputs();
+2680: 
+2681: 				if (planned_return.phase == PlannedReturnPhase::ClampSettle)
+2682: 				{
+2683: 					const DWORD clamp_wait_ms = planned_return_settle_wait_ms(
+2684: 						false, planned_return.clamp_stage);
+2685: 					if (planned_return.clamp_output_generation != 0 &&
+2686: 						!planned_return.clamp_output_applied &&
+2687: 						ads_communication.applied_motion_output_generation() >=
+2688: 						planned_return.clamp_output_generation)
+2689: 					{
+2690: 						planned_return.clamp_output_applied = true;
+2691: 						planned_return.phase_t0_ms = now_ms;
+2692: 					}
+2693: 					if (planned_return.clamp_output_applied &&
+2694: 						(now_ms - planned_return.phase_t0_ms) >= clamp_wait_ms)
+2695: 					{
+2696: 						if (planned_return.clamp_stage == 0)
+2697: 						{
+2698: 							// 持有者已夹紧并稳定：下一级松开移动者，重新捕获输出代次。
+2699: 							planned_return.clamp_stage = 1;
+2700: 							planned_return.clamp_output_generation = 0;
+2701: 							planned_return.clamp_output_applied = false;
+2702: 							apply_planned_return_outputs();
+2703: 						}
+2704: 						else
+2705: 						{
+2706: 							planned_return.phase = PlannedReturnPhase::SubmitRequest;
+2707: 						}
+2708: 					}
+2709: 				}
+2710: 				else if (planned_return.phase == PlannedReturnPhase::SubmitRequest)
+2711: 				{
+2712: 					bool existing_busy = false;
+2713: 					for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
+2714: 					{
+2715: 						PlannedReturnLeg& leg = planned_return.legs[leg_index];
+2716: 						const PlannedReturnEventView events = planned_return_event_view(leg.axis_index);
+2717: 						if (events.busy)
+2718: 						{
+2719: 							leg.started = true;
+2720: 							existing_busy = true;
+2721: 						}
+2722: 					}
+2723: 
+2724: 					if (existing_busy &&
+2725: 						planned_return.ads_command_purpose != PlannedReturnAdsCommandPurpose::Commit)
+2726: 					{
+2727: 						fail_planned_return(
+2728: 							"计划回退提交前检测到PLC已有Busy，禁止覆盖正在执行的动作",
+2729: 							nullptr,
+2730: 							true);
+2731: 					}
+2732: 					else if (!planned_return.request_prepared)
+2733: 					{
+2734: 						if (planned_return.ads_command_purpose == PlannedReturnAdsCommandPurpose::None)
+2735: 						{
+2736: 							if (!submit_planned_return_ads_command(
+2737: 								AdsPlannedReturnOperation::Prepare,
+2738: 								PlannedReturnAdsCommandPurpose::Prepare,
+2739: 								false))
+2740: 							{
+2741: 								enter_planned_return_retry("计划回退参数命令未能进入通信队列");
+2742: 							}
+2743: 						}
+2744: 						else if (planned_return.ads_command_purpose == PlannedReturnAdsCommandPurpose::Prepare)
+2745: 						{
+2746: 							const PlannedReturnAdsPoll poll = poll_planned_return_ads_command();
+2747: 							if (poll == PlannedReturnAdsPoll::Failure)
+2748: 							{
+2749: 								clear_planned_return_ads_command_tracking();
+2750: 								enter_planned_return_retry("计划回退参数批量写入失败");
+2751: 							}
+2752: 							else if (poll == PlannedReturnAdsPoll::Success)
+2753: 							{
+2754: 								clear_planned_return_ads_command_tracking();
+2755: 								planned_return.request_prepared = true;
+2756: 								planned_return.commit_guard_generation = 0;
+2757: 								planned_return.request_t0_ms = now_ms;
+2758: 								apply_planned_return_outputs();
+2759: 							}
+2760: 							else if (planned_return_ads_command_timed_out(now_ms))
+2761: 							{
+2762: 								clear_planned_return_ads_command_tracking();
+2763: 								enter_planned_return_retry("计划回退参数命令等待超过250 ms");
+2764: 							}
+2765: 						}
+2766: 						else
+2767: 						{
+2768: 							clear_planned_return_ads_command_tracking();
+2769: 							enter_planned_return_retry("计划回退参数阶段出现未知通信命令");
+2770: 						}
+2771: 					}
+2772: 					else
+2773: 					{
+2774: 						if (planned_return.ads_command_purpose == PlannedReturnAdsCommandPurpose::Commit)
+2775: 						{
+2776: 							const PlannedReturnAdsPoll poll = poll_planned_return_ads_command();
+2777: 							if (poll == PlannedReturnAdsPoll::Failure)
+2778: 							{
+2779: 								clear_planned_return_ads_command_tracking();
+2780: 								planned_return.request_prepared = false;
+2781: 								planned_return.commit_guard_generation = 0;
+2782: 								enter_planned_return_retry("计划回退请求批量置位失败");
+2783: 							}
+2784: 							else if (poll == PlannedReturnAdsPoll::Success)
+2785: 							{
+2786: 								clear_planned_return_ads_command_tracking();
+2787: 								planned_return.request_prepared = false;
+2788: 								planned_return.commit_guard_generation = 0;
+2789: 								planned_return.request_t0_ms = now_ms;
+2790: 								planned_return.phase = PlannedReturnPhase::AwaitAccepted;
+2791: 								apply_planned_return_outputs();
+2792: 							}
+2793: 							else if (planned_return_ads_command_timed_out(now_ms))
+2794: 							{
+2795: 								// Commit仍在队列/ADS调用中时无法证明Req未生效，禁止清理后整组重发。
+2796: 								latch_planned_return_possibly_started(
+2797: 									planned_return_active_axis_mask());
+2798: 								clear_planned_return_ads_command_tracking();
+2799: 								planned_return.request_prepared = false;
+2800: 								planned_return.commit_guard_generation = 0;
+2801: 								enter_planned_return_retry("计划回退请求命令等待超过250 ms");
+2802: 							}
+2803: 						}
+2804: 						else if (planned_return.commit_guard_generation == 0 ||
+2805: 							ads_communication.applied_motion_output_generation() <
+2806: 							planned_return.commit_guard_generation)
+2807: 						{
+2808: 							// 必须先确认包含快退旁路和冻结参考的输出代次已经写入，
+2809: 							// 才允许Req=TRUE进入队列；因此通信线程不可能把Commit与旧输出配对。
+2810: 							if ((now_ms - planned_return.request_t0_ms) >=
+2811: 								cfg.planned_return_ack_timeout_ms)
+2812: 							{
+2813: 								planned_return.request_prepared = false;
+2814: 								planned_return.commit_guard_generation = 0;
+2815: 								enter_planned_return_retry("计划回退提交保护输出确认超时");
+2816: 							}
+2817: 						}
+2818: 						else
+2819: 						{
+2820: 							bool idle_state_ready = true;
+2821: 							for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
+2822: 							{
+2823: 								const PlannedReturnEventView events =
+2824: 									planned_return_event_view(planned_return.legs[leg_index].axis_index);
+2825: 								idle_state_ready = idle_state_ready && !events.busy &&
+2826: 									!events.done && !events.error;
+2827: 							}
+2828: 							if (idle_state_ready)
+2829: 							{
+2830: 								for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
+2831: 								{
+2832: 									PlannedReturnLeg& leg = planned_return.legs[leg_index];
+2833: 									const PlannedReturnEventView events = planned_return_event_view(leg.axis_index);
+2834: 									leg.request_event_sequence = events.event_sequence;
+2835: 									leg.error_event_sequence = events.event_sequence;
+2836: 									// 命令一旦进入通信队列就可能在下一PLC扫描启动；先武装边沿检测。
+2837: 									leg.request_armed = true;
+2838: 								}
+2839: 								if (!submit_planned_return_ads_command(
+2840: 									AdsPlannedReturnOperation::Commit,
+2841: 									PlannedReturnAdsCommandPurpose::Commit,
+2842: 									false))
+2843: 								{
+2844: 									for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
+2845: 									{
+2846: 										planned_return.legs[leg_index].request_armed = false;
+2847: 									}
+2848: 									planned_return.request_prepared = false;
+2849: 									enter_planned_return_retry("计划回退请求未能进入通信队列");
+2850: 								}
+2851: 								else
+2852: 								{
+2853: 									// commit等待通信线程完成期间立即拉起快退旁路/力反馈冻结，
+2854: 									// refer仍保持各腿entry位置直到观察到本次ACK。
+2855: 									apply_planned_return_outputs();
+2856: 								}
+2857: 							}
+2858: 							else if ((now_ms - planned_return.request_t0_ms) >=
+2859: 								cfg.planned_return_ack_timeout_ms)
+2860: 							{
+2861: 								planned_return.request_prepared = false;
+2862: 								enter_planned_return_retry("计划回退提交前PLC状态清理超时");
+2863: 							}
+2864: 						}
+2865: 					}
+2866: 				}
+2867: 				else if (planned_return.phase == PlannedReturnPhase::AwaitAccepted)
+2868: 				{
+2869: 					const PlannedReturnLeg* error_leg = planned_return_has_error();
+2870: 					if (error_leg != nullptr)
+2871: 					{
+2872: 						enter_planned_return_retry("计划回退在PLC启动前报告错误");
+2873: 					}
+2874: 					else if (planned_return_all_acknowledged())
+2875: 					{
+2876: 						planned_return.phase = PlannedReturnPhase::AwaitDone;
+2877: 					}
+2878: 					else if ((now_ms - planned_return.request_t0_ms) >=
+2879: 						cfg.planned_return_ack_timeout_ms)
+2880: 					{
+2881: 						enter_planned_return_retry("计划回退请求确认超时");
+2882: 					}
+2883: 				}
+2884: 				else if (planned_return.phase == PlannedReturnPhase::AwaitDone)
+2885: 				{
+2886: 					const PlannedReturnLeg* error_leg = planned_return_has_error();
+2887: 					if (error_leg != nullptr)
+2888: 					{
+2889: 						fail_planned_return("计划回退运动报错", error_leg, true);
+2890: 					}
+2891: 					else if (planned_return_all_done())
+2892: 					{
+2893: 						// Done事件可能落在当前ADS读快照之后，因此先记录序号并等待下一份
+2894: 						// 有效100 Hz快照；随后把清Req和交接输出合并到同一次Sum Write。
+2895: 						planned_return.done_snapshot_sequence = ads_snapshot_sequence;
+2896: 						planned_return.completion_clear_confirmed = false;
+2897: 						axis1_fast_return = false;
+2898: 						axis6_fast_retract = false;
+2899: 						planned_return.phase = PlannedReturnPhase::AwaitFreshSnapshot;
+2900: 						apply_planned_return_outputs();
+2901: 					}
+2902: 					else if (planned_return.execution_t0_ms != 0 &&
+2903: 						(now_ms - planned_return.execution_t0_ms) >=
+2904: 						cfg.planned_return_execution_timeout_ms)
+2905: 					{
+2906: 						fail_planned_return("计划回退执行超时", nullptr, true);
+2907: 					}
+2908: 				}
+2909: 				else if (planned_return.phase == PlannedReturnPhase::RetryClear)
+2910: 				{
+2911: 					if (planned_return_any_started())
+2912: 					{
+2913: 						fail_planned_return("清理待重试请求期间检测到PLC已经启动动作", nullptr, true);
+2914: 					}
+2915: 					else if (!planned_return.retry_clear_issued)
+2916: 					{
+2917: 						if (planned_return.ads_command_purpose == PlannedReturnAdsCommandPurpose::None)
+2918: 						{
+2919: 							if (!submit_planned_return_ads_command(
+2920: 								AdsPlannedReturnOperation::Clear,
+2921: 								PlannedReturnAdsCommandPurpose::RetryClear,
+2922: 								false))
+2923: 							{
+2924: 								fail_planned_return("安全重试前清Req命令未能进入通信队列", nullptr, true);
+2925: 							}
+2926: 						}
+2927: 						else if (planned_return.ads_command_purpose ==
+2928: 							PlannedReturnAdsCommandPurpose::RetryClear)
+2929: 						{
+2930: 							const PlannedReturnAdsPoll poll = poll_planned_return_ads_command();
+2931: 							if (poll == PlannedReturnAdsPoll::Failure)
+2932: 							{
+2933: 								clear_planned_return_ads_command_tracking();
+2934: 								fail_planned_return("安全重试前清除PLC请求失败", nullptr, true);
+2935: 							}
+2936: 							else if (poll == PlannedReturnAdsPoll::Success)
+2937: 							{
+2938: 								clear_planned_return_ads_command_tracking();
+2939: 								planned_return.retry_clear_issued = true;
+2940: 								planned_return.retry_clear_t0_ms = now_ms;
+2941: 								planned_return.retry_clear_snapshot_sequence = ads_snapshot_sequence;
+2942: 							}
+2943: 							else if (planned_return_ads_command_timed_out(now_ms))
+2944: 							{
+2945: 								clear_planned_return_ads_command_tracking();
+2946: 								fail_planned_return("安全重试前清Req命令等待超过250 ms", nullptr, true);
+2947: 							}
+2948: 						}
+2949: 					}
+2950: 					else
+2951: 					{
+2952: 						bool reset_state_ready = ads_motion_cycle_valid &&
+2953: 							ads_snapshot_sequence > planned_return.retry_clear_snapshot_sequence;
+2954: 						for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
+2955: 						{
+2956: 							const PlannedReturnEventView events =
+2957: 								planned_return_event_view(planned_return.legs[leg_index].axis_index);
+2958: 							reset_state_ready = reset_state_ready && !events.busy && !events.error;
+2959: 						}
+2960: 						if (reset_state_ready)
+2961: 						{
+2962: 							if (!planned_return_targets_safe())
+2963: 							{
+2964: 								fail_planned_return("安全重试前目标重新校验失败", nullptr, true);
+2965: 							}
+2966: 							else
+2967: 							{
+2968: 								++planned_return.retry_count;
+2969: 								for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
+2970: 								{
+2971: 									PlannedReturnLeg& leg = planned_return.legs[leg_index];
+2972: 									leg.acknowledged = false;
+2973: 									leg.started = false;
+2974: 									leg.possibly_started = false;
+2975: 									leg.done = false;
+2976: 									leg.request_armed = false;
+2977: 									leg.request_event_sequence = 0;
+2978: 									leg.ack_event_sequence = 0;
+2979: 									leg.error_event_sequence = 0;
+2980: 									leg.reported_error_id = 0;
+2981: 									leg.cancel_event_sequence = 0;
+2982: 									leg.cancel_event_required = false;
+2983: 									leg.entry_rel = plc_act_pos[leg.axis_index];
+2984: 								}
+2985: 								planned_return.request_prepared = false;
+2986: 								planned_return.commit_guard_generation = 0;
+2987: 						planned_return.execution_t0_ms = 0;
+2988: 						planned_return.phase = PlannedReturnPhase::SubmitRequest;
+2989: 					}
+2990: 						}
+2991: 						else if ((now_ms - planned_return.retry_clear_t0_ms) >=
+2992: 							cfg.planned_return_retry_clear_timeout_ms)
+2993: 						{
+2994: 							fail_planned_return("安全重试前PLC状态复位超时", nullptr, true);
+2995: 						}
+2996: 					}
+2997: 				}
+2998: 				else if (planned_return.phase == PlannedReturnPhase::AwaitFreshSnapshot)
+2999: 				{
+3000: 					if (ads_motion_cycle_valid && ads_snapshot_sequence > planned_return.done_snapshot_sequence)
+3001: 					{
+3002: 						// 同步暂未成功时留在本阶段，下一份有效快照继续尝试。
+3003: 						if (rebase_planned_return())
+3004: 						{
+3005: 							axis1_fast_return = false;
+3006: 							axis6_fast_retract = false;
+3007: 							planned_return.phase = PlannedReturnPhase::PublishHandoff;
+3008: 						}
+3009: 					}
+3010: 				}
+3011: 				else if (planned_return.phase == PlannedReturnPhase::AwaitHandoffApplied)
+3012: 				{
+3013: 					if (planned_return.handoff_generation != 0 &&
+3014: 						ads_communication.applied_motion_output_generation() >=
+3015: 						planned_return.handoff_generation)
+3016: 					{
+3017: 						// handoff generation对应的同一Sum Write同时携带各腿Req=FALSE，
+3018: 						// 因而该代次成功即可同时确认清Req、实际位置保持和夹爪恢复。
+3019: 						planned_return.completion_clear_confirmed = true;
+3020: 						planned_return.phase_t0_ms = now_ms;
+3021: 						planned_return.phase = PlannedReturnPhase::PostHandoffClampSettle;
+3022: 					}
+3023: 				}
+3024: 				else if (planned_return.phase == PlannedReturnPhase::PostHandoffClampSettle)
+3025: 				{
+3026: 					if (planned_return.restore_stage == 0)
+3027: 					{
+3028: 						// 移动者已夹紧并稳定后，再松开持有者。
+3029: 						if ((now_ms - planned_return.phase_t0_ms) >=
+3030: 							planned_return_settle_wait_ms(true, planned_return.restore_stage))
+3031: 						{
+3032: 							planned_return.restore_stage = 1;
+3033: 							planned_return.release_output_generation = 0;
+3034: 							planned_return.release_applied = false;
+3035: 							apply_planned_return_outputs();
+3036: 						}
+3037: 					}
+3038: 					else if (!planned_return.release_applied)
+3039: 					{
+3040: 						if (planned_return.release_output_generation != 0 &&
+3041: 							ads_communication.applied_motion_output_generation() >=
+3042: 							planned_return.release_output_generation)
+3043: 						{
+3044: 							planned_return.release_applied = true;
+3045: 							planned_return.phase_t0_ms = now_ms;
+3046: 						}
+3047: 					}
+3048: 					else if ((now_ms - planned_return.phase_t0_ms) >=
+3049: 						planned_return_settle_wait_ms(true, planned_return.restore_stage) &&
+3050: 						ads_motion_cycle_valid)
+3051: 					{
+3052: 						if (rebase_planned_return())
+3053: 						{
+3054: 							// 夹爪恢复和最终重同步完成后才开始计算释放距离；
+3055: 							// 换手期间的自动轴运动不能消耗这 2 mm。
+3056: 							if (planned_return.contains_axis(0))
+3057: 								ff.complete_clamp_hold(1, plc_act_pos[0] + plc_init_pos[0],
+3058: 									std::chrono::duration_cast<std::chrono::milliseconds>(
+3059: 										std::chrono::steady_clock::now().time_since_epoch()).count());
+3060: 							if (planned_return.contains_axis(5))
+3061: 								ff.complete_clamp_hold(2, plc_act_pos[5] + plc_init_pos[5],
+3062: 									std::chrono::duration_cast<std::chrono::milliseconds>(
+3063: 										std::chrono::steady_clock::now().time_since_epoch()).count());
+3064: 							if (planned_return.mode == PlannedReturnMode::CatheterDelivery ||
+3065: 								(planned_return.mode == PlannedReturnMode::Dual &&
+3066: 									planned_return.contains_axis(0) && !axis1_reverse_pressed))
+3067: 							{
+3068: 								// 回退完成后的附加映射只在后续正常导管前推中生效。
+3069: 								arm_axis1_delivery_mapping();
+3070: 							}
+3071:                             return_recovery.completed();
+3072: 							reset_planned_return();
+3073: 						}
+3074: 					}
+3075: 				}
+3076: 			};
+3077: 
+3078: 			auto compute_axis7_cmd_rel = [&]() -> double
+3079: 			{
+3080: 				const double axis7_follow_rel =
+3081: 					axis6_crawl.rot_base_rel + (axis6_rot_filtered - axis6_crawl.rot_ref) * cfg.axis_rot_scale_deg;
+3082: 				axis7_hold_rel = axis7_follow_rel;
+3083: 				return axis7_follow_rel;
+3084: 			};
+3085: 
+3086: 
+3087: 			const double axis7_cmd_rel =
+3088: 				(guidewire_mode == GuidewireMode::None)
+3089: 				? axis7_hold_rel
+3090: 				: compute_axis7_cmd_rel();
+3091: 			pos[6] = axis7_cmd_rel;
+3092: 
+3093: 			// axis6 软限位锁止时，相关导管/导丝链路统一保持实际位置，
+3094: 			// 防止 axis6 已停而 axis1/3/5 或旋转轴继续造成相对拉扯。
+3095: 				auto hold_axis6_related_axes = [&]()
+3096: 				{
+3097: 					dual_handoff.reset();
+3098: 					pos[0] = plc_act_pos[0];
+3099: 					pos[1] = plc_act_pos[1];
+3100: 					pos[2] = plc_act_pos[2];
+3101: 				pos[4] = plc_act_pos[4];
+3102: 				pos[5] = plc_act_pos[5];
+3103: 				pos[6] = plc_act_pos[6];
+3104: 				axis1_follow_cmd_abs = axis1_abs;
+3105: 				axis6_follow_cmd_abs = axis6_abs;
+3106: 					axis2_hold_rel = plc_act_pos[1];
+3107: 					axis7_hold_rel = plc_act_pos[6];
+3108: 					// 软件锁止时保持两组夹爪的稳定抓持组合，避免默认 Follow
+3109: 					// 命令把已经冻结的器械意外释放。
+3110: 					cylinder1_cmd = cyl.cyl1_open;
+3111: 					cylinder2_cmd = cyl.cyl2_clamp;
+3112: 					cylinder3_cmd = cyl.cyl3_open;
+3113: 					cylinder4_cmd = cyl.cyl4_clamp;
+3114: 				};
+3115: 
+3116: 			// 独立导丝的 axis6 爬行状态机（增量式输入）。
+3117: 			// 参数说明：
+3118: 			// - axis6_raw_cmd_abs: 本拍按增量累加后的 axis6 绝对目标（未做最终触发处理）
+3119: 			// - axis6_increment_mm: 本拍 axis6 线性有效增量（mm）
+3120: 			// - axis6_reverse_mode: 当前是否处于反向爬行判定
+3121: 			auto run_axis6_crawl_state = [&](double axis6_raw_cmd_abs,
+3122: 				double axis6_increment_mm,
+3123: 				bool axis6_reverse_mode)
+3124: 			{
+3125: 				if (axis6_soft_limit_hold)
+3126: 				{
+3127: 					hold_axis6_related_axes();
+3128: 					return;
+3129: 				}
+3130: 
+3131: 				const double axis6_window_left_abs_now = axis6_crawl.min_abs();
+3132: 				const double axis6_window_right_abs_now = axis6_crawl.max_abs();
+3133: 				// 该函数只在统一回退协调器空闲时调用，因此这里只保留Follow与触发计算。
+3134: 				{
+3135: 					double axis6_cmd_abs = axis6_follow_cmd_abs;
+3136: 					const bool axis6_increment_active = std::abs(axis6_increment_mm) > 0.0;
+3137: 					if (axis6_increment_active)
+3138: 					{
+3139: 						axis6_cmd_abs = clamp_double(axis6_raw_cmd_abs, axis6_window_left_abs_now, axis6_window_right_abs_now);
+3140: 						if (axis6_target_exceeds_soft_limit(axis6_cmd_abs))
+3141: 						{
+3142: 							engage_axis6_soft_limit_hold(
+3143: 								axis6_cmd_abs,
+3144: 								Axis6SoftLimitReason::HandleTarget,
+3145: 								"axis6 手柄目标");
+3146: 							hold_axis6_related_axes();
+3147: 							return;
+3148: 						}
+3149: 					}
+3150: 
+3151: 					pos[5] = axis6_cmd_abs - plc_init_pos[5];
+3152: 					axis6_follow_cmd_abs = axis6_cmd_abs;
+3153: 					cylinder3_cmd = cyl.cyl3_open;
+3154: 					cylinder4_cmd = cyl.cyl4_clamp;
+3155: 
+3156: 					bool axis6_ready_to_trigger = false;
+3157: 					{
+3158: 						const double axis6_trigger_edge_abs =
+3159: 							axis6_reverse_mode ? axis6_window_right_abs_now : axis6_window_left_abs_now;
+3160: 						const bool axis6_toward_trigger =
+3161: 							axis6_reverse_mode ? (axis6_increment_mm > 0.0) : (axis6_increment_mm < 0.0);
+3162: 
+3163: 						const bool axis6_at_trigger_edge = axis6_reverse_mode
+3164: 							? axis6_abs >= (axis6_trigger_edge_abs - cfg.crawl_arrive_tol_mm)
+3165: 							: axis6_abs <= (axis6_trigger_edge_abs + cfg.crawl_arrive_tol_mm);
+3166: 						// 轴4后退的命令目标先到达窗口右边缘时，实际反馈可能仍有一拍滞后；
+3167: 						// 以同一窗口边界触发计划回退，避免后退停在边缘而不进入快速换端。
+3168: 						const bool axis6_command_at_trigger_edge = axis4_reverse_request &&
+3169: 							(axis6_reverse_mode
+3170: 								? axis6_cmd_abs >= (axis6_trigger_edge_abs - cfg.crawl_arrive_tol_mm)
+3171: 								: axis6_cmd_abs <= (axis6_trigger_edge_abs + cfg.crawl_arrive_tol_mm));
+3172: 						// 到达触发边后仍可由后续同向输入触发换手，不要求到位与输入发生在同一拍。
+3173: 						axis6_ready_to_trigger =
+3174: 							axis6_increment_active &&
+3175: 							axis6_toward_trigger &&
+3176: 							(axis6_at_trigger_edge || axis6_command_at_trigger_edge);
+3177: 						if (axis6_ready_to_trigger)
+3178: 						{
+3179: 							axis6_reverse_switch_guard_active = false;
+3180: 						}
+3181: 					}
+3182: 					if (axis6_ready_to_trigger && !planned_return.active())
+3183: 					{
+3184: 						double axis6_return_target_abs = axis6_reverse_mode
+3185: 							? axis6_window_left_abs_now
+3186: 							: axis6_window_right_abs_now;
+3187: 
+3188: 						if (axis6_target_exceeds_soft_limit(axis6_return_target_abs))
+3189: 						{
+3190: 							engage_axis6_soft_limit_hold(
+3191: 								axis6_return_target_abs,
+3192: 								Axis6SoftLimitReason::PlannedReturn,
+3193: 								"axis6 计划回退");
+3194: 							hold_axis6_related_axes();
+3195: 							return;
+3196: 						}
+3197: 						const PlannedReturnMode return_mode = axis6_reverse_mode
+3198: 							? PlannedReturnMode::GuidewireRetraction : PlannedReturnMode::GuidewireDelivery;
+3199: 						const PlannedReturnRebaseScope rebase_scope = PlannedReturnRebaseScope::Axis6;
+3200: 						if (begin_planned_return(
+3201: 							return_mode,
+3202: 							rebase_scope,
+3203: 							false,
+3204: 							0.0,
+3205: 							true,
+3206: 							axis6_return_target_abs))
+3207: 						{
+3208: 							// 本拍立即冻结另一条链路并下发换手夹爪目标；电机请求仍等待50 ms。
+3209: 							apply_planned_return_outputs();
+3210: 						}
+3211: 					}
+3212: 				}
+3213: 			};

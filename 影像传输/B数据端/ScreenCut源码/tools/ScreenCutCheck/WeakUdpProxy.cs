@@ -38,12 +38,14 @@ internal sealed class WeakUdpProxy : IDisposable
     private readonly Random _random = new Random(42);
     private readonly SemaphoreSlim _pending = new SemaphoreSlim(4096);
     private readonly SharedBottleneck _bandwidth;
+    private readonly bool _impair;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     public long Dropped, Forwarded;
     public volatile bool Paused;
-    public WeakUdpProxy(int port, SharedBottleneck bandwidth = null)
+    public WeakUdpProxy(int port, SharedBottleneck bandwidth = null, bool impair = true)
     {
         _bandwidth = bandwidth;
+        _impair = impair;
         _server = new IPEndPoint(IPAddress.Loopback, port);
         _front = new UdpClient(new IPEndPoint(IPAddress.Parse("127.0.0.2"), port));
         _ = ReceiveAsync();
@@ -90,6 +92,7 @@ internal sealed class WeakUdpProxy : IDisposable
                 delay = _bandwidth == null ? _random.Next(50, 201) :
                     (int)(125 + 75 * Math.Sin(_clock.Elapsed.TotalMilliseconds * 2 * Math.PI / 5000));
                 drop = _random.Next(100) == 0;
+                if (!_impair) { delay = 0; drop = false; }
             }
             int queue = _bandwidth?.Reserve(data.Length) ?? 0;
             if (queue < 0) { Interlocked.Increment(ref Dropped); return; }

@@ -1,0 +1,462 @@
+介入机器人/B数据端/工程/ADS项目/zenoh_service.cpp
+300:         Sleep(100);
+301:     }
+302:     if (!endpoint_ready(config_.endpoint, 250))
+303:     {
+304:         std::cout << "Zenoh: the managed router did not open " << config_.endpoint << "." << std::endl;
+305:         stop_router_process();
+306:         return false;
+307:     }
+308:     return true;
+309: }
+310: 
+311: void ZenohService::stop_router_process()
+312: {
+313:     if (!router_process_) return;
+314:     if (router_started_ && WaitForSingleObject(router_process_, 0) == WAIT_TIMEOUT)
+315:     {
+316:         TerminateProcess(router_process_, 0);
+317:         WaitForSingleObject(router_process_, 2000);
+318:     }
+319:     CloseHandle(router_process_);
+320:     router_process_ = nullptr;
+321:     router_started_ = false;
+322: }
+323: 
+324: bool ZenohService::open_zenoh()
+325: {
+326:     std::string endpoint = config_.endpoint;
+327:     if (endpoint.find_first_of("'\"\\") != std::string::npos) return false;
+328:     const std::string json = "{mode:'client',connect:{endpoints:['" + endpoint + "']}}";
+329:     z_owned_config_t config{};
+330:     if (zc_config_from_str(&config, json.c_str()) < 0) return false;
+331:     if (z_open(&session_, z_move(config), nullptr) < 0) return false;
+332:     zenoh_open_ = true;
+333:     return true;
+334: }
+335: 
+336: bool ZenohService::declare_entities()
+337: {
+338:     if (z_keyexpr_from_str(&handle_key_, vi_protocol::kHandleTopic) < 0 ||
+339:         z_keyexpr_from_str(&command_key_, vi_protocol::kCommandTopic) < 0 ||
+340:         z_keyexpr_from_str(&state_key_, vi_protocol::kStateTopic) < 0 ||
+341:         z_keyexpr_from_str(&force_key_, vi_protocol::kForceTopic) < 0) return false;
+342: 
+343:     z_publisher_options_t publisher_options{};
+344:     z_publisher_options_default(&publisher_options);
+345:     if (z_declare_publisher(z_loan(session_), &state_publisher_, z_loan(state_key_), &publisher_options) < 0 ||
+346:         z_declare_publisher(z_loan(session_), &force_publisher_, z_loan(force_key_), &publisher_options) < 0) return false;
+347: 
+348:     z_owned_closure_sample_t handle_closure{};
+349:     z_closure(&handle_closure, handle_callback, nullptr, this);
+350:     z_subscriber_options_t subscriber_options{};
+351:     z_subscriber_options_default(&subscriber_options);
+352:     if (z_declare_subscriber(z_loan(session_), &handle_subscriber_, z_loan(handle_key_), z_move(handle_closure), &subscriber_options) < 0)
+353:         return false;
+354:     z_owned_closure_sample_t command_closure{};
+355:     z_closure(&command_closure, command_callback, nullptr, this);
+356:     if (z_declare_subscriber(z_loan(session_), &command_subscriber_, z_loan(command_key_), z_move(command_closure), &subscriber_options) < 0)
+357:         return false;
+358:     return true;
+359: }
+360: 
+361: void ZenohService::close_zenoh()
+362: {
+363:     if (zenoh_open_)
+364:     {
+365:         z_drop(z_move(handle_subscriber_));
+366:         z_drop(z_move(command_subscriber_));
+367:         z_drop(z_move(state_publisher_));
+368:         z_drop(z_move(force_publisher_));
+369:         z_drop(z_move(handle_key_)); z_drop(z_move(command_key_));
+370:         z_drop(z_move(state_key_)); z_drop(z_move(force_key_));
+371:         z_drop(z_move(session_));
+372:         zenoh_open_ = false;
+373:     }
+374: }
+375: 
+376: void ZenohService::publish_state(const VisState& state, const RemoteExtraState& extra)
+377: {
+378:     std::lock_guard<std::mutex> lock(state_mutex_);
+379:     state_ = state;
+380:     extra_ = extra;
+381:     have_state_ = true;
+382:     const std::uint64_t sequence = ++state_snapshot_sequence_;
+383:     const ULONGLONG now = GetTickCount64();
+384:     state_snapshot_tick_ms_ = now;
+385:     for (std::size_t i = 0; i < pending_tasks_.size();)
+386:     {
+387:         PendingTask& task = pending_tasks_[i];
+388:         bool finished = false, success = false;
+389:         std::string reason;
+390:         switch (task.kind)
+391:         {
+392:         case PendingKind::Prepare:
+393:             if (state.self_check_done) { finished = success = true; }
+394:             else if (sequence >= task.start_state_sequence + 2 && state.selfcheck_status == 4)
+395:             { finished = true; reason = "PLC rejected the prepare-position request."; }
+396:             else if (now >= task.deadline_ms) { finished = true; reason = "Prepare-position request timed out."; }
+397:             break;
+398:         case PendingKind::ForceZero:
+399:             if (extra.force_zero_fail_count != task.zero_fail_count)
+400:             { finished = true; reason = "Force-sensor zeroing failed."; force_zeroing_ = false; }
+401:             else if (extra.force_zero_ok_count != task.zero_ok_count)
+402:             {
+403:                 if (task.flag)
+404:                 {
+405:                     queue_command(VisCommand{ VisCommandType::SetForceFeedback, 1, task.index }, 0, false);
+406:                     task.kind = PendingKind::ForceSet;
+407:                     task.start_state_sequence = sequence;
+408:                     task.deadline_ms = now + 3000;
+409:                 }
+410:                 else { finished = success = true; force_zeroing_ = false; }
+411:             }
+412:             else if (now >= task.deadline_ms)
+413:             { finished = true; reason = "Force-sensor zeroing timed out."; force_zeroing_ = false; }
+414:             break;
+415:         case PendingKind::ForceSet:
+416:         {
+417:             const bool reached = (task.index == 1 || state.ff_582_enabled == task.flag) &&
+418:                 (task.index == 2 || state.ff_587_enabled == task.flag);
+419:             if (reached) { finished = success = true; force_zeroing_ = false; }
+420:             else if (now >= task.deadline_ms)
+421:             { finished = true; reason = "Force feedback did not change."; force_zeroing_ = false; }
+422:             break;
+423:         }
+424:         case PendingKind::ForceHold:
+425:             if (state.force_feedback_hold_enabled == task.flag) { finished = success = true; }
+426:             else if (now >= task.deadline_ms) { finished = true; reason = "Force hold did not change."; }
+427:             break;
+428:         case PendingKind::CylinderOn:
+429:         case PendingKind::CylinderOff:
+430:         {
+431:             const bool engaged = (state.cylinder_manual_mask & (1u << task.index)) != 0;
+432:             const bool reached = task.kind == PendingKind::CylinderOn ? engaged : !engaged;
+433:             if (reached) { finished = success = true; }
+434:             else if (now >= task.deadline_ms)
+435:             { finished = true; reason = "Cylinder state did not change."; }
+436:             break;
+437:         }
+438:         case PendingKind::YValve:
+439:             if (extra.y_valve_open == !task.flag) { finished = success = true; }
+440:             else if (now >= task.deadline_ms) { finished = true; reason = "Y-valve state did not change."; }
+441:             break;
+442:         case PendingKind::StartControl:
+443:             if (state.control_active) { finished = success = true; }
+444:             else if (now >= task.deadline_ms)
+445:             { finished = true; reason = "Start-control request was not applied."; }
+446:             break;
+447:         }
+448:         if (finished)
+449:         {
+450:             if (task.kind == PendingKind::Prepare) { prepare_task_state_ = success ? 2 : 3; prepare_task_command_id_ = task.command_id; }
+451:             if (task.kind == PendingKind::StartControl) { start_task_state_ = success ? 2 : 3; start_task_command_id_ = task.command_id; }
+452:             add_result_locked(task.command_id, success ? 0 : 1, reason);
+453:             pending_tasks_.erase(pending_tasks_.begin() + i);
+454:         }
+455:         else ++i;
+456:     }
+457: }
+458: 
+459: bool ZenohService::poll_command(VisCommand& command)
+460: {
+461:     // 只有控制线程取出命令后才展开控制域动作，整批准备动作不会被 FIFO 溢出拆开。
+462:     for (std::size_t consumed = 0; consumed < kMaxCommandQueue; ++consumed)
+463:     {
+464:         std::lock_guard<std::mutex> state_lock(state_mutex_);
+465:         {
+466:             std::lock_guard<std::mutex> queue_lock(command_mutex_);
+467:             for (int i = 0; i < 3; ++i)
+468:             {
+469:                 if (!hold_dirty_[i]) continue;
+470:                 hold_dirty_[i] = false;
+471:                 command = hold_actions_[i].command;
+472:                 dispatched_action_ = ControlAction();
+473:                 return true;
+474:             }
+475:             while (!control_actions_.empty())
+476:             {
+477:                 auto action = std::move(control_actions_.front());
+478:                 control_actions_.pop_front();
+479:                 if (action.session_id != session_id_ || action.lease_epoch != lease_epoch_) continue;
+480:                 command = action.command;
+481:                 dispatched_action_ = std::move(action);
+482:                 return true;
+483:             }
+484:         }
+485:         QueuedCommand item;
+486:         {
+487:             std::lock_guard<std::mutex> queue_lock(command_mutex_);
+488:             if (command_queue_.empty()) return false;
+489:             item = std::move(command_queue_.front());
+490:             command_queue_.pop_front();
+491:         }
+492:         const auto type = static_cast<vi_protocol::Command>(item.frame.command);
+493:         if (type == vi_protocol::Command::ArmAxisJog || type == vi_protocol::Command::ArmCartesianJog ||
+494:             type == vi_protocol::Command::ArmCartesianAlive) item.frame.command_id = 0;
+495:         if (item.frame.session_id != session_id_ || !authenticated_ ||
+496:             (type != vi_protocol::Command::Acquire && item.lease_epoch != lease_epoch_))
+497:         {
+498:             add_result_locked(item.frame.command_id, 1, "Control session or lease changed before command consumption.");
+499:             continue;
+500:         }
+501:         if (GetTickCount64() - item.queued_ms > kCommandMaxAgeMs)
+502:         {
+503:             add_result_locked(item.frame.command_id, 1, "Command expired before ADS consumption.");
+504:             expired_commands_.fetch_add(1);
+505:             continue;
+506:         }
+507:         consume_command_locked(item.frame);
+508:     }
+509:     return false;
+510: }
+511: 
+512: void ZenohService::command_processed()
+513: {
+514:     std::lock_guard<std::mutex> state_lock(state_mutex_);
+515:     std::lock_guard<std::mutex> queue_lock(command_mutex_);
+516:     if (dispatched_action_.session_id == session_id_ && dispatched_action_.lease_epoch == lease_epoch_ &&
+517:         dispatched_action_.has_result)
+518:         add_result_locked(dispatched_action_.request_id, 0, "");
+519:     dispatched_action_ = ControlAction();
+520: }
+521: 
+522: void ZenohService::queue_command(const VisCommand& command, std::int32_t request_id, bool has_result)
+523: {
+524:     std::lock_guard<std::mutex> queue_lock(command_mutex_);
+525:     control_actions_.push_back(ControlAction{ command, request_id, has_result, session_id_, lease_epoch_ });
+526: }
+527: 
+528: void ZenohService::add_result_locked(std::int32_t command_id, std::uint8_t result, const std::string& reason)
+529: {
+530:     if (command_id <= 0) return;
+531:     auto existing = std::find_if(results_.begin(), results_.end(), [command_id](const auto& item) { return item.command_id == command_id; });
+532:     if (existing != results_.end()) results_.erase(existing);
+533:     if (results_.size() >= vi_protocol::kMaxResults) results_.erase(results_.begin());
+534:     results_.push_back(vi_protocol::CommandResult{ command_id, result, reason });
+535: }
+536: 
+537: void ZenohService::handle_callback(z_loaned_sample_t* sample, void* context)
+538: {
+539:     try { if (context) static_cast<ZenohService*>(context)->receive_handle(sample); }
+540:     catch (...) { /* 不允许 C++ 异常跨过原生回调边界。 */ }
+541: }
+542: 
+543: void ZenohService::command_callback(z_loaned_sample_t* sample, void* context)
+544: {
+545:     try { if (context) static_cast<ZenohService*>(context)->receive_command(sample); }
+546:     catch (...) { /* 不允许 C++ 异常跨过原生回调边界。 */ }
+547: }
+548: 
+549: bool ZenohService::unpack_bytes(z_loaned_sample_t* sample, std::vector<std::uint8_t>& bytes)
+550: {
+551:     const z_loaned_bytes_t* payload = z_sample_payload(sample);
+552:     if (!payload) return false;
+553:     const std::size_t length = z_bytes_len(payload);
+554:     if (length == 0 || length > kMaxPayloadBytes) return false;
+555:     bytes.resize(length);
+556:     z_bytes_reader_t reader = z_bytes_get_reader(payload);
+557:     return z_bytes_reader_read(&reader, bytes.data(), length) == length;
+558: }
+559: 
+560: bool ZenohService::decode(const std::vector<std::uint8_t>& bytes, vi_protocol::HandleFrame& frame)
+561: {
+562:     return vi_protocol::decode(bytes, frame) &&
+563:         frame.version == vi_protocol::kVersion && frame.session_id != 0 && frame.sequence != 0 && finite(frame);
+564: }
+565: 
+566: bool ZenohService::decode(const std::vector<std::uint8_t>& bytes, vi_protocol::CommandFrame& frame)
+567: {
+568:     return vi_protocol::decode(bytes, frame) &&
+569:         frame.version == vi_protocol::kVersion && frame.sequence != 0 && valid_command(frame);
+570: }
+571: 
+572: void ZenohService::receive_handle(z_loaned_sample_t* sample)
+573: {
+574:     std::vector<std::uint8_t> bytes;
+575:     vi_protocol::HandleFrame frame;
+576:     if (!unpack_bytes(sample, bytes) || !decode(bytes, frame)) return;
+577:     on_handle(frame);
+578: }
+579: 
+580: void ZenohService::receive_command(z_loaned_sample_t* sample)
+581: {
+582:     std::vector<std::uint8_t> bytes;
+583:     vi_protocol::CommandFrame frame;
+584:     if (!unpack_bytes(sample, bytes) || !decode(bytes, frame)) return;
+585:     on_command(frame);
+586: }
+587: 
+588: std::vector<std::uint8_t> ZenohService::pack(const vi_protocol::HandleFrame& frame) { return encode_array(frame); }
+589: std::vector<std::uint8_t> ZenohService::pack(const vi_protocol::CommandFrame& frame) { return encode_array(frame); }
+590: std::vector<std::uint8_t> ZenohService::pack(const vi_protocol::StateFrame& frame) { return encode_array(frame); }
+591: std::vector<std::uint8_t> ZenohService::pack(const vi_protocol::ForceFrame& frame) { return encode_array(frame); }
+592: 
+593: bool ZenohService::hmac_sha256(const std::vector<std::uint8_t>& key, const std::uint8_t* data, std::size_t size, std::uint8_t out[32]) const
+594: {
+595:     if (!bcrypt_algorithm_ || key.empty() || size > ULONG_MAX) return false;
+596:     BCRYPT_HASH_HANDLE hash = nullptr;
+597:     NTSTATUS status = BCryptCreateHash(static_cast<BCRYPT_ALG_HANDLE>(bcrypt_algorithm_), &hash, nullptr, 0,
+598:         const_cast<PUCHAR>(key.data()), static_cast<ULONG>(key.size()), 0);
+599:     if (!BCRYPT_SUCCESS(status)) return false;
+600:     status = BCryptHashData(hash, const_cast<PUCHAR>(data), static_cast<ULONG>(size), 0);
+601:     if (BCRYPT_SUCCESS(status)) status = BCryptFinishHash(hash, out, 32, 0);
+602:     BCryptDestroyHash(hash);
+603:     return BCRYPT_SUCCESS(status);
+604: }
+605: 
+606: std::vector<std::uint8_t> ZenohService::sign(const vi_protocol::HandleFrame& frame) const
+607: {
+608:     auto clean = frame; clean.auth_tag.clear();
+609:     std::uint8_t mac[32]{};
+610:     const auto bytes = pack(clean);
+611:     if (!hmac_sha256(session_key_, bytes.data(), bytes.size(), mac)) return {};
+612:     return std::vector<std::uint8_t>(mac, mac + 16);
+613: }
+614: 
+615: std::vector<std::uint8_t> ZenohService::sign(const vi_protocol::CommandFrame& frame) const
+616: {
+617:     auto clean = frame; clean.auth_tag.clear();
+618:     const auto bytes = pack(clean);
+619:     std::uint8_t mac[32]{};
+620:     if (!hmac_sha256(session_key_, bytes.data(), bytes.size(), mac)) return {};
+621:     return std::vector<std::uint8_t>(mac, mac + 16);
+622: }
+623: 
+624: bool ZenohService::verify_tag(const vi_protocol::HandleFrame& frame) const
+625: {
+626:     const auto expected = sign(frame);
+627:     return frame.auth_tag.size() == 16 && expected.size() == 16 && constant_time_equal(frame.auth_tag.data(), expected.data(), 16);
+628: }
+629: 
+630: bool ZenohService::verify_tag(const vi_protocol::CommandFrame& frame) const
+631: {
+632:     const auto expected = sign(frame);
+633:     return frame.auth_tag.size() == 16 && expected.size() == 16 && constant_time_equal(frame.auth_tag.data(), expected.data(), 16);
+634: }
+635: 
+636: void ZenohService::on_handle(const vi_protocol::HandleFrame& frame)
+637: {
+638:     std::lock_guard<std::mutex> lock(state_mutex_);
+639:     if (!authenticated_ || !lease_held_ || frame.session_id != session_id_ || !verify_tag(frame)) return;
+640:     if (have_handle_sequence_ && frame.sequence <= last_handle_sequence_) return;
+641:     last_handle_sequence_ = frame.sequence;
+642:     have_handle_sequence_ = true;
+643:     echo_main_monotonic_ms_ = frame.monotonic_ms;
+644:     last_handle_rx_ms_ = GetTickCount64();
+645: 
+646:     for (int slot = 0; slot < 2; ++slot)
+647:     {
+648:         remote_handle_bridge::Sample sample;
+649:         if (slot == 0)
+650:         {
+651:             sample.device_epoch = frame.device_epoch582;
+652:             sample.valid = frame.valid582; sample.buttons = frame.buttons582;
+653:             sample.encoders[0] = frame.encoder582_0; sample.encoders[1] = frame.encoder582_1;
+654:             sample.joints[0] = frame.joint582_0; sample.joints[1] = frame.joint582_1;
+655:             sample.vels[0] = frame.velocity582_0; sample.vels[1] = frame.velocity582_1;
+656:         }
+657:         else
+658:         {
+659:             sample.device_epoch = frame.device_epoch587;
+660:             sample.valid = frame.valid587; sample.buttons = frame.buttons587;
+661:             sample.encoders[0] = frame.encoder587_0; sample.encoders[1] = frame.encoder587_1;
+662:             sample.joints[0] = frame.joint587_0; sample.joints[1] = frame.joint587_1;
+663:             sample.vels[0] = frame.velocity587_0; sample.vels[1] = frame.velocity587_1;
+664:         }
+665:         remote_handle_bridge::put_sample(slot, sample);
+666:     }
+667: 
+668:     const int directions[3] = { frame.injector1_direction, frame.injector2_direction, frame.axis4_direction };
+669:     std::lock_guard<std::mutex> queue_lock(command_mutex_);
+670:     for (int i = 0; i < 3; ++i)
+671:     {
+672:         const ULONGLONG now = last_handle_rx_ms_;
+673:         const int direction = directions[i];
+674:         if (direction == hold_direction_[i] && (direction == 0 || now - hold_last_push_ms_[i] < kHoldRenewMs)) continue;
+675:         VisCommand command;
+676:         if (i < 2) { command.type = VisCommandType::SetInjectorManualJog; command.param1 = i + 1; command.param2 = direction; }
+677:         else { command.type = VisCommandType::SetAxis4ManualJog; command.param1 = direction; }
+678:         hold_actions_[i] = ControlAction{ command, 0, false, session_id_, lease_epoch_ };
+679:         hold_dirty_[i] = true;
+680:         hold_direction_[i] = direction; hold_last_push_ms_[i] = now;
+681:     }
+682: }
+683: 
+684: void ZenohService::on_command(const vi_protocol::CommandFrame& frame)
+685: {
+686:     const auto type = static_cast<vi_protocol::Command>(frame.command);
+687:     std::lock_guard<std::mutex> lock(state_mutex_);
+688:     if (type == vi_protocol::Command::Hello)
+689:     {
+690:         if (frame.session_id != 0 || frame.nonce_client.size() != 16 || !frame.nonce_server.empty() ||
+691:             !frame.proof.empty() || !frame.auth_tag.empty()) return;
+692:         // 挑战与当前控制会话分开，未经认证的 Hello 不能撤销有效租约。
+693:         if (challenge_session_id_ != 0 && challenge_client_nonce_ == frame.nonce_client &&
+694:             GetTickCount64() - challenge_tick_ms_ <= 10000) return;
+695:         std::uint64_t id = 0;
+696:         if (!BCRYPT_SUCCESS(BCryptGenRandom(nullptr, reinterpret_cast<PUCHAR>(&id), sizeof(id), BCRYPT_USE_SYSTEM_PREFERRED_RNG))) return;
+697:         if (id == 0) id = 1;
+698:         std::vector<std::uint8_t> server_nonce(16);
+699:         if (!BCRYPT_SUCCESS(BCryptGenRandom(nullptr, server_nonce.data(), static_cast<ULONG>(server_nonce.size()), BCRYPT_USE_SYSTEM_PREFERRED_RNG))) return;
+700:         challenge_session_id_ = id; challenge_sequence_ = frame.sequence;
+701:         challenge_client_nonce_ = frame.nonce_client; challenge_server_nonce_ = std::move(server_nonce);
+702:         challenge_tick_ms_ = GetTickCount64();
+703:         return;
+704:     }
+705:     if (type == vi_protocol::Command::Authenticate)
+706:     {
+707:         if (frame.session_id == 0 || frame.session_id != challenge_session_id_ ||
+708:             frame.nonce_client != challenge_client_nonce_ || frame.nonce_server != challenge_server_nonce_ ||
+709:             frame.proof.size() != 32 || !frame.auth_tag.empty() || frame.sequence <= challenge_sequence_ ||
+710:             GetTickCount64() - challenge_tick_ms_ > 10000) return;
+711:         std::vector<std::uint8_t> message = bytes_of("auth");
+712:         message.insert(message.end(), challenge_client_nonce_.begin(), challenge_client_nonce_.end());
+713:         message.insert(message.end(), challenge_server_nonce_.begin(), challenge_server_nonce_.end());
+714:         std::uint8_t expected[32]{};
+715:         if (!hmac_sha256(token_, message.data(), message.size(), expected) ||
+716:             !constant_time_equal(expected, frame.proof.data(), 32)) return;
+717:         std::vector<std::uint8_t> key_message = bytes_of("key");
+718:         key_message.insert(key_message.end(), challenge_client_nonce_.begin(), challenge_client_nonce_.end());
+719:         key_message.insert(key_message.end(), challenge_server_nonce_.begin(), challenge_server_nonce_.end());
+720:         std::uint8_t full_key[32]{};
+721:         if (!hmac_sha256(token_, key_message.data(), key_message.size(), full_key)) return;
+722:         release_lease_locked("Authenticated client session changed.");
+723:         session_id_ = challenge_session_id_; client_nonce_ = challenge_client_nonce_; server_nonce_ = challenge_server_nonce_;
+724:         session_key_.assign(full_key, full_key + 16); authenticated_ = true;
+725:         last_command_sequence_ = frame.sequence; have_command_sequence_ = true;
+726:         last_handle_sequence_ = 0; have_handle_sequence_ = false;
+727:         echo_main_monotonic_ms_ = frame.monotonic_ms;
+728:         challenge_session_id_ = 0; challenge_client_nonce_.clear(); challenge_server_nonce_.clear();
+729:         {
+730:             std::lock_guard<std::mutex> queue_lock(command_mutex_);
+731:             command_queue_.clear(); control_actions_.clear(); dispatched_action_ = ControlAction();
+732:         }
+733:         results_.clear(); prepare_task_state_ = start_task_state_ = 0;
+734:         std::cout << "Zenoh: authenticated client session." << std::endl;
+735:         return;
+736:     }
+737: 
+738:     if (!authenticated_ || frame.session_id != session_id_ ||
+739:         (have_command_sequence_ && frame.sequence <= last_command_sequence_) || !verify_tag(frame)) return;
+740:     last_command_sequence_ = frame.sequence;
+741:     have_command_sequence_ = true;
+742:     echo_main_monotonic_ms_ = frame.monotonic_ms;
+743: 
+744:     {
+745:         std::lock_guard<std::mutex> queue_lock(command_mutex_);
+746:         if (command_queue_.size() >= kMaxCommandQueue)
+747:         {
+748:             const auto dropped = command_queue_.front().frame;
+749:             command_queue_.pop_front();
+750:             if (dropped.command != static_cast<std::uint8_t>(vi_protocol::Command::ArmAxisJog) &&
+751:                 dropped.command != static_cast<std::uint8_t>(vi_protocol::Command::ArmCartesianJog) &&
+752:                 dropped.command != static_cast<std::uint8_t>(vi_protocol::Command::ArmCartesianAlive))
+753:                 add_result_locked(dropped.command_id, 1, "ADS command FIFO overflow: oldest command dropped.");
+754:             dropped_commands_.fetch_add(1);
+755:         }
+756:         command_queue_.push_back(QueuedCommand{ frame, GetTickCount64(), lease_epoch_ });
+757:     }
+758: }
+759: 
+760: void ZenohService::consume_command_locked(const vi_protocol::CommandFrame& received_frame)

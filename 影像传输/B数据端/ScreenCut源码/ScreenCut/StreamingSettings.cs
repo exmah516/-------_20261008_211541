@@ -37,8 +37,8 @@ namespace ScreenCut
                 return n;
             }
             var s = new StreamingSettings {
-                MasterIp = Ipv4(Get("MasterIp", "192.168.50.1")),
-                ListenIp = Ipv4(Get("RelayListenIp", "192.168.60.1")),
+                MasterIp = Ipv4(Get("MasterIp", includeCameras ? "192.168.50.1" : "192.168.2.21")),
+                ListenIp = Ipv4(Get("RelayListenIp", includeCameras ? "192.168.60.1" : "192.168.2.27")),
                 WebRtcPort = Number("WebRtcPort", 8889, 1024, 65535),
                 MediaPort = Number("WebRtcMediaPort", 8189, 1024, 65535),
                 RtspPort = Number("LocalRtspPort", 8554, 1024, 65535),

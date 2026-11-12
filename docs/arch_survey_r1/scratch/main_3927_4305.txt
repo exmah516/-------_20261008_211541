@@ -1,0 +1,380 @@
+介入机器人/B数据端/工程/ADS项目/main.cpp
+3927: 			else
+3928: 			{
+3929: 				// 常规导管模式：
+3930: 				// - axis1/2 由导管手柄控制（双物理手柄配置下为 587）
+3931: 				// - 轴 3/5 在 Follow 阶段镜像 axis1 平移
+3932: 				// - 轴4点动时，axis6按固定速度同步递进，并限制在轴5相对窗口内
+3933: 				// - axis1 触发快退时，axis6 按反向等位移联动，并限制在轴5相对窗口内
+3934: 				double axis6_catheter_window_start_abs = axis6_abs;
+3935: 				double axis6_catheter_window_end_abs = axis6_abs;
+3936: 				// 普通导管按轴5实际位置约束轴1回退时的轴6联动目标。
+3937: 				motion_sync::calculate_axis6_window_from_axis5(
+3938: 					ctx,
+3939: 					axis6_catheter_window_start_abs,
+3940: 					axis6_catheter_window_end_abs);
+3941: 				axis6_crawl.start_abs = axis6_catheter_window_start_abs;
+3942: 				axis6_crawl.end_abs = axis6_catheter_window_end_abs;
+3943: 				axis6_crawl.window_active = is_within_range(
+3944: 					axis6_abs,
+3945: 					axis6_crawl.min_abs(),
+3946: 					axis6_crawl.max_abs(),
+3947: 					cfg.crawl_arrive_tol_mm);
+3948: 				const bool axis1_now_in_window = is_within_range(axis1_abs, axis1_min_abs, axis1_max_abs, cfg.crawl_arrive_tol_mm);
+3949: 				if (!axis1_crawl.window_active && axis1_now_in_window)
+3950: 				{
+3951: 					capture_axis1_follow_baseline();
+3952: 					axis1_crawl.window_active = true;
+3953: 				}
+3954: 
+3955: 				// 轴4前进对应axis6位置减少，轴4后退对应axis6位置增加。
+3956: 				// 轴6仍复用既有窗口夹紧、触发回退和夹爪时序。
+3957: 				const bool axis4_axis6_coupling_active =
+3958: 					guidewire_mode == GuidewireMode::None &&
+3959: 					(axis4_forward_request || axis4_reverse_request);
+3960: 				if (axis4_axis6_coupling_active)
+3961: 				{
+3962: 					const ULONGLONG coupling_now_ms = GetTickCount64();
+3963: 					if (!axis4_axis6_coupling_active_prev)
+3964: 					{
+3965: 						// 计划回退交接后以当前实际位置重新起算，首拍只重建时间基准。
+3966: 						axis6_follow_cmd_abs = axis6_abs;
+3967: 						axis4_axis6_coupling_last_ms = coupling_now_ms;
+3968: 					}
+3969: 					else
+3970: 					{
+3971: 						const double elapsed_s = static_cast<double>(
+3972: 							coupling_now_ms - axis4_axis6_coupling_last_ms) / 1000.0;
+3973: 						axis4_axis6_coupling_last_ms = coupling_now_ms;
+3974: 						const double axis6_increment_mm =
+3975: 							(axis4_forward_request ? -1.0 : 1.0) *
+3976: 							axis4_coupled_axis6_speed_mm_s * elapsed_s;
+3977: 						run_axis6_crawl_state(
+3978: 							axis6_follow_cmd_abs + axis6_increment_mm,
+3979: 							axis6_increment_mm,
+3980: 							axis4_reverse_request);
+3981: 					}
+3982: 					// 保持联动基准有效；计划回退结束后的第一次循环不能丢失后续点动。
+3983: 					axis4_axis6_coupling_active_prev = true;
+3984: 				}
+3985: 				else
+3986: 				{
+3987: 					axis4_axis6_coupling_last_ms = 0;
+3988: 					axis4_axis6_coupling_active_prev = false;
+3989: 				}
+3990: 
+3991: 				{
+3992: 					const double axis1_raw_cmd_abs = axis1_follow_cmd_abs + axis1_directional_increment_mm;
+3993: 					const bool axis1_follow_enabled = axis1_reverse_pressed || !axis1_delivery_stop_latched;
+3994: 					if (axis3_from_left_mm >
+3995: 						(cfg.axis3_delivery_stop_from_left_mm + cfg.axis3_delivery_release_hysteresis_mm))
+3996: 					{
+3997: 						axis1_delivery_stop_prompted = false;
+3998: 					}
+3999: 
+4000: 					if (axis1_delivery_stop_latched &&
+4001: 						axis1_reverse_pressed &&
+4002: 						axis1_directional_increment_mm > 0.0)
+4003: 					{
+4004: 						axis1_delivery_stop_latched = false;
+4005: 						axis1_delivery_stop_prompted = false;
+4006: 					}
+4007: 
+4008: 					const double axis1_follow_start_abs = axis1_follow_cmd_abs;
+4009: 					auto constrain_axis1_follow_cmd_abs = [&](double candidate_abs) -> double
+4010: 					{
+4011: 						double command_abs = axis1_follow_start_abs;
+4012: 						if (axis1_directional_increment_active && axis1_follow_enabled)
+4013: 						{
+4014: 							command_abs = axis1_crawl.window_active
+4015: 								? clamp_double(candidate_abs, axis1_window_left_abs_now, axis1_window_right_abs_now)
+4016: 								: candidate_abs;
+4017: 						}
+4018: 						if (axis1_crawl.window_active)
+4019: 						{
+4020: 							command_abs = clamp_double(command_abs, axis1_window_left_abs_now, axis1_window_right_abs_now);
+4021: 						}
+4022: 						if (!axis1_reverse_pressed && command_abs < axis1_window_left_abs_now)
+4023: 						{
+4024: 							command_abs = axis1_window_left_abs_now;
+4025: 						}
+4026: 						if (axis1_delivery_stop_latched && !axis1_reverse_pressed)
+4027: 						{
+4028: 							command_abs = axis1_window_left_abs_now;
+4029: 						}
+4030: 						return command_abs;
+4031: 					};
+4032: 
+4033: 					const double axis1_nominal_cmd_abs = constrain_axis1_follow_cmd_abs(axis1_raw_cmd_abs);
+4034: 					const double axis1_nominal_delta_axis_mm = axis1_nominal_cmd_abs - axis1_follow_start_abs;
+4035: 					const double axis1_nominal_forward_mm =
+4036: 						(!axis1_reverse_pressed && axis1_nominal_delta_axis_mm < 0.0)
+4037: 						? -axis1_nominal_delta_axis_mm : 0.0;
+4038: 					double axis1_cmd_abs = axis1_nominal_cmd_abs;
+4039: 					double axis1_requested_forward_mm = axis1_nominal_forward_mm;
+4040: 					bool axis1_tracking_output_clamped = false;
+4041: 					if (axis1_nominal_forward_mm > 0.0)
+4042: 					{
+4043: 						axis1_requested_forward_mm = tracking_controller.request_compensated_forward_increment(
+4044: 							DeliveryTrackingAxis::Axis1,
+4045: 							axis1_nominal_forward_mm,
+4046: 							now_ms);
+4047: 						const double axis1_compensated_target_abs =
+4048: 							axis1_follow_start_abs - axis1_requested_forward_mm;
+4049: 						axis1_cmd_abs = constrain_axis1_follow_cmd_abs(axis1_compensated_target_abs);
+4050: 						axis1_tracking_output_clamped =
+4051: 							std::abs(axis1_cmd_abs - axis1_compensated_target_abs) > 1e-6;
+4052: 					}
+4053: 					// 计划回退完成后，映射只作用于普通导管正向 Follow 的前 10 mm。
+4054: 					// 进度使用本拍名义手柄增量累计，不能从已附加映射的绝对目标反推，
+4055: 					// 否则每拍都会把附加量再次当成新的名义输入。
+4056: 					double axis1_mapping_extra_requested_mm = 0.0;
+4057: 					if (axis1_delivery_mapping_active &&
+4058: 						!axis1_reverse_pressed &&
+4059: 						axis1_nominal_forward_mm > 0.0 &&
+4060: 						cfg.axis1_post_return_mapping_span_mm > 1e-6)
+4061: 					{
+4062: 						const double mapping_span_mm = cfg.axis1_post_return_mapping_span_mm;
+4063: 						const double progress_before_mm = clamp_double(
+4064: 							axis1_delivery_mapping_progress_mm,
+4065: 							0.0,
+4066: 							mapping_span_mm);
+4067: 						const double progress_after_mm = (std::min)(
+4068: 							mapping_span_mm,
+4069: 							progress_before_mm + axis1_nominal_forward_mm);
+4070: 						const double target_extra_mm = clamp_double(
+4071: 							cfg.axis1_post_return_lead_mm * progress_after_mm / mapping_span_mm,
+4072: 							0.0,
+4073: 							cfg.axis1_post_return_lead_limit_mm);
+4074: 						axis1_mapping_extra_requested_mm = (std::max)(
+4075: 							0.0,
+4076: 							target_extra_mm - axis1_delivery_mapping_applied_extra_mm);
+4077: 						const double mapped_target_abs = axis1_cmd_abs - axis1_mapping_extra_requested_mm;
+4078: 						const double mapped_cmd_abs = constrain_axis1_follow_cmd_abs(mapped_target_abs);
+4079: 						const double mapping_extra_applied_mm = (std::max)(
+4080: 							0.0,
+4081: 							axis1_cmd_abs - mapped_cmd_abs);
+4082: 						axis1_cmd_abs = mapped_cmd_abs;
+4083: 						axis1_delivery_mapping_progress_mm = progress_after_mm;
+4084: 						axis1_delivery_mapping_applied_extra_mm += mapping_extra_applied_mm;
+4085: 						axis3_base_rel += mapping_extra_applied_mm;
+4086: 						axis5_base_rel += mapping_extra_applied_mm;
+4087: 						if (progress_after_mm >= mapping_span_mm - 1e-6)
+4088: 						{
+4089: 							axis1_delivery_mapping_active = false;
+4090: 						}
+4091: 					}
+4092: 					const double axis1_effective_delta_axis_mm = axis1_cmd_abs - axis1_follow_start_abs;
+4093: 					const double axis1_effective_forward_mm =
+4094: 						(!axis1_reverse_pressed && axis1_effective_delta_axis_mm < 0.0)
+4095: 						? -axis1_effective_delta_axis_mm : 0.0;
+4096: 					// 映射附加量不计入 PI 的实际补偿量；只有 PI 请求范围内的运动
+4097: 					// 才用于清理主从补偿欠账，避免映射被误显示为 PI 增益。
+4098: 					const double axis1_tracking_effective_forward_mm = (std::min)(
+4099: 						axis1_effective_forward_mm,
+4100: 						axis1_requested_forward_mm);
+4101: 					if (axis1_requested_forward_mm > 1e-6 &&
+4102: 						axis1_tracking_effective_forward_mm + 1e-6 < axis1_requested_forward_mm)
+4103: 					{
+4104: 						axis1_tracking_output_clamped = true;
+4105: 					}
+4106: 					tracking_controller.commit_command(
+4107: 						DeliveryTrackingAxis::Axis1,
+4108: 						axis1_nominal_forward_mm,
+4109: 						axis1_requested_forward_mm,
+4110: 						axis1_tracking_effective_forward_mm,
+4111: 						axis1_tracking_output_clamped);
+4112: 
+4113: 					pos[0] = axis1_cmd_abs - plc_init_pos[0]; // 绝对目标 -> refer相对坐标（相对 init_pos）
+4114: 					axis1_follow_cmd_abs = axis1_cmd_abs;
+4115: 
+4116: 					pos[1] = axis1_crawl.rot_base_rel +
+4117: 						(axis1_rot_filtered - axis1_crawl.rot_ref) * cfg.axis_rot_scale_deg;
+4118: 					axis2_hold_rel = pos[1];
+4119: 
+4120: 					// 先行差额已吸收到镜像基准，轴3/5只跟随名义行程。
+4121: 					apply_axis1_mirror_from_abs(axis1_cmd_abs, false);
+4122: 					{
+4123: 						// 非轴4联动时，导管模式保持axis6基准位；联动时保留爬行状态机目标。
+4124: 						// 前进沿用既有输出；后退必须保留 run_axis6_crawl_state/计划回退
+4125: 						// 已生成的 axis6 与 cyl3/cyl4 反向时序，避免被默认值覆盖。
+4126: 						if (!axis4_axis6_coupling_active || axis4_forward_request)
+4127: 						{
+4128: 							if (!axis4_axis6_coupling_active)
+4129: 							{
+4130: 								pos[5] = axis6_mirror_base_rel;
+4131: 							}
+4132: 							cylinder3_cmd = cyl.cyl3_follow_release;
+4133: 							cylinder4_cmd = cyl.cyl4_clamp;
+4134: 						}
+4135: 					}
+4136: 
+4137: 					if (axis1_crawl.window_active)
+4138: 					{
+4139: 						const double axis1_trigger_edge_abs = axis1_reverse_pressed
+4140: 							? axis1_window_right_abs_now
+4141: 							: axis1_window_left_abs_now;
+4142: 						if (axis1_reverse_switch_guard_active &&
+4143: 							(std::abs(axis1_abs - axis1_trigger_edge_abs) > cfg.reverse_switch_trigger_guard_mm))
+4144: 						{
+4145: 							axis1_reverse_switch_guard_active = false;
+4146: 						}
+4147: 						const bool axis1_switch_guard_blocked =
+4148: 							axis1_reverse_switch_guard_active &&
+4149: 							(std::abs(axis1_abs - axis1_trigger_edge_abs) <= cfg.reverse_switch_trigger_guard_mm);
+4150: 						const bool axis1_toward_trigger =
+4151: 							axis1_reverse_pressed ? (axis1_directional_increment_mm > 0.0) : (axis1_directional_increment_mm < 0.0);
+4152: 						const double axis1_prev_abs = axis1_prev_abs_valid ? axis1_prev_abs_for_trigger : axis1_abs;
+4153: 						// 按运动方向判断是否到达或跨过触发边，避免高速时越过 ±tol 后漏掉回退。
+4154: 						const bool axis1_enter_trigger_edge = axis1_reverse_pressed
+4155: 							? ((axis1_prev_abs < (axis1_trigger_edge_abs - cfg.crawl_arrive_tol_mm)) &&
+4156: 								(axis1_abs >= (axis1_trigger_edge_abs - cfg.crawl_arrive_tol_mm)))
+4157: 							: ((axis1_prev_abs > (axis1_trigger_edge_abs + cfg.crawl_arrive_tol_mm)) &&
+4158: 								(axis1_abs <= (axis1_trigger_edge_abs + cfg.crawl_arrive_tol_mm)));
+4159: 						const bool axis1_at_or_past_trigger_edge = axis1_reverse_pressed
+4160: 							? (axis1_abs >= (axis1_trigger_edge_abs - cfg.crawl_arrive_tol_mm))
+4161: 							: (axis1_abs <= (axis1_trigger_edge_abs + cfg.crawl_arrive_tol_mm));
+4162: 						// 上位机重启、重同步或跟踪误差可能让轴停在边界上或略微
+4163: 						// 越过边界；有效同向输入仍作为重新武装信号。
+4164: 						const bool axis1_retrigger_from_edge =
+4165: 							axis1_at_or_past_trigger_edge &&
+4166: 							axis1_toward_trigger &&
+4167: 							axis1_directional_increment_active;
+4168: 						const bool axis1_ready_to_trigger =
+4169: 							axis1_directional_increment_active &&
+4170: 							axis1_toward_trigger &&
+4171: 							axis1_follow_enabled &&
+4172: 							(axis1_enter_trigger_edge || axis1_retrigger_from_edge) &&
+4173: 							(!axis1_switch_guard_blocked || axis1_retrigger_from_edge);
+4174: 						if (axis1_ready_to_trigger)
+4175: 						{
+4176: 							if (!axis1_reverse_pressed && axis3_delivery_stop_active)
+4177: 							{
+4178: 								axis1_delivery_stop_latched = true;
+4179: 								if (!axis1_delivery_stop_prompted)
+4180: 								{
+4181: 									std::cout << "已到达投送停止位：axis3 距左限位 <= 20mm。请切换反向模式后继续。" << std::endl;
+4182: 									axis1_delivery_stop_prompted = true;
+4183: 								}
+4184: 							}
+4185: 							else
+4186: 							{
+4187: 								const double axis1_return_target_abs = axis1_reverse_pressed
+4188: 									? axis1_window_left_abs_now
+4189: 									: axis1_window_right_abs_now;
+4190: 								// 切缸前验证导管双腿回退的轴6联动终点。
+4191: 								const double axis6_coupled_target_raw_abs =
+4192: 									axis6_abs - (axis1_return_target_abs - axis1_abs);
+4193: 								const double candidate_axis6_coupled_target_abs = clamp_double(
+4194: 									axis6_coupled_target_raw_abs,
+4195: 									axis6_catheter_window_start_abs,
+4196: 									axis6_catheter_window_end_abs);
+4197: 								bool axis6_coupled_target_safe = true;
+4198: 								if (axis6_target_exceeds_soft_limit(candidate_axis6_coupled_target_abs))
+4199: 								{
+4200: 									engage_axis6_soft_limit_hold(
+4201: 										candidate_axis6_coupled_target_abs,
+4202: 										Axis6SoftLimitReason::Axis1CoupledReturn,
+4203: 										"axis1 回退时 axis6 联动目标");
+4204: 									hold_axis6_related_axes();
+4205: 									axis6_coupled_target_safe = false;
+4206: 								}
+4207: 
+4208: 								if (axis6_coupled_target_safe)
+4209: 								{
+4210: 									const PlannedReturnMode return_mode = axis1_reverse_pressed
+4211: 										? PlannedReturnMode::CatheterRetraction : PlannedReturnMode::CatheterDelivery;
+4212: 									if (begin_planned_return(
+4213: 										return_mode,
+4214: 										PlannedReturnRebaseScope::Axis1,
+4215: 										true,
+4216: 										axis1_return_target_abs,
+4217: 										true,
+4218: 										candidate_axis6_coupled_target_abs))
+4219: 									{
+4220: 										// 本拍先完成夹爪切换和跨链路冻结，电机请求仍等待50 ms。
+4221: 										apply_planned_return_outputs();
+4222: 									}
+4223: 								}
+4224: 							}
+4225: 						}
+4226: 					}
+4227: 				}
+4228: 
+4229: 			}
+4230: 
+4231: 			if (!axis6_soft_limit_hold && axis6_soft_limit_warning_active)
+4232: 			{
+4233: 				std::cout << "axis6 软件限位阻断已解除：当前动作未再请求越过 "
+4234: 					<< cfg.axis6_soft_limit_from_left_mm
+4235: 					<< " mm，控制链路重新按实际位置接管。" << std::endl;
+4236: 				axis6_soft_limit_warning_active = false;
+4237: 				axis6_soft_limit_warning_reason = Axis6SoftLimitReason::None;
+4238: 			}
+4239: 
+4240: 			const bool tracking_return_started_this_cycle = planned_return.active();
+4241: 			if (tracking_return_started_this_cycle)
+4242: 			{
+4243: 				// 本拍触发 SwitchWait/回退时立即结束实验段并冻结 PI；
+4244: 				// 换手前向欠账保留，待恢复正向 Follow 后继续由受限映射逐步补偿。
+4245: 				tracking_controller.invalidate_all(TrackingInvalidReason::CrawlReturnActive);
+4246: 			}
+4247: 			else
+4248: 			{
+4249: 				// 以状态机构最终生成的命令复核 150 ms 夹持假设。
+4250: 				// 这里再次调用不会重复累计实际位移，因为本拍实际位置尚未改变。
+4251: 				const bool axis1_final_grip_command =
+4252: 					cylinder2_cmd == cyl.cyl2_clamp && cylinder1_cmd == cyl.cyl1_open;
+4253: 				const bool axis6_final_grip_command =
+4254: 					cylinder4_cmd == cyl.cyl4_clamp && cylinder3_cmd == cyl.cyl3_open;
+4255: 				tracking_controller.update_gate(
+4256: 					DeliveryTrackingAxis::Axis1,
+4257: 					axis1_tracking_reason == TrackingInvalidReason::None,
+4258: 					axis1_final_grip_command,
+4259: 					now_ms,
+4260: 					axis1_abs,
+4261: 					axis1_tracking_reason);
+4262: 				tracking_controller.update_gate(
+4263: 					DeliveryTrackingAxis::Axis6,
+4264: 					axis6_tracking_reason == TrackingInvalidReason::None,
+4265: 					axis6_final_grip_command,
+4266: 					now_ms,
+4267: 					axis6_abs,
+4268: 					axis6_tracking_reason);
+4269: 			}
+4270: 			tracking_controller.finish_cycle(DeliveryTrackingAxis::Axis1, pos[0], plc_act_pos[0]);
+4271: 			tracking_controller.finish_cycle(DeliveryTrackingAxis::Axis6, pos[5], plc_act_pos[5]);
+4272: 
+4273: 			axis1_prev_linear_filtered = axis1_linear_filtered;
+4274: 			axis6_prev_linear_filtered = axis6_linear_filtered;
+4275: 			axis1_prev_rot_filtered = axis1_rot_filtered;
+4276: 			axis6_prev_rot_filtered = axis6_rot_filtered;
+4277: 			axis1_prev_abs_for_trigger = axis1_abs;
+4278: 			axis6_prev_abs_for_trigger = axis6_abs;
+4279: 			axis1_prev_abs_valid = true;
+4280: 			axis6_prev_abs_valid = true;
+4281: 		}
+4282: 		else
+4283: 		{
+4284: 			axis4_axis6_coupling_active_prev = false;
+4285: 			axis4_axis6_coupling_last_ms = 0;
+4286: 			TrackingInvalidReason inactive_reason = TrackingInvalidReason::NotForwardDelivery;
+4287: 			if (return_ads_fault_hold) inactive_reason = TrackingInvalidReason::AdsReturnFault;
+4288: 			else if (motion_startup_active) inactive_reason = TrackingInvalidReason::StartupActive;
+4289: 			else if (estop_hold_active) inactive_reason = TrackingInvalidReason::PlcHold;
+4290: 			else if (spacing_recovery.active() || spacing_recovery.requested) inactive_reason = TrackingInvalidReason::SpacingRecovery;
+4291: 			else if (!control_active) inactive_reason = TrackingInvalidReason::ControlInactive;
+4292: 			tracking_controller.invalidate_all(inactive_reason);
+4293: 			if (tracking_controller.compensation_enabled())
+4294: 			{
+4295: 				tracking_controller.disable_compensation();
+4296: 				std::cout << "主从位移补偿已关闭：运动控制当前不可用。" << std::endl;
+4297: 			}
+4298: 		}
+4299: 
+4300: 		const DWORD spacing_recovery_exit_elapsed_ms =
+4301: 			GetTickCount() - spacing_recovery.phase_t0;
+4302: 		const bool spacing_recovery_targets_settled =
+4303: 			std::abs(plc_act_pos[2] - spacing_recovery.axis3_cmd_rel) <= cfg.crawl_arrive_tol_mm &&
+4304: 			std::abs(plc_act_pos[4] - spacing_recovery.axis5_cmd_rel) <= cfg.crawl_arrive_tol_mm &&
+4305: 			std::abs(plc_act_pos[5] - spacing_recovery.axis6_cmd_rel) <= cfg.crawl_arrive_tol_mm;

@@ -1,0 +1,464 @@
+介入机器人/B数据端/工程/ADS项目/main.cpp
+1778: 
+1779: 		// 5) 单手柄模式切换。
+1780: 		if (single_handle_mode && requested_guidewire_mode != requested_guidewire_mode_prev)
+1781: 		{
+1782: 			if (requested_guidewire_mode == GuidewireMode::None)
+1783: 			{
+1784: 				if (guidewire_mode != GuidewireMode::None)
+1785: 				{
+1786: 					if (!estop_hold_active && !startup_sequence_active)
+1787: 					{
+1788: 						if (exit_guidewire_mode_to_normal())
+1789: 						{
+1790: 							std::cout << "导丝模式：关闭。" << std::endl;
+1791: 							record_experiment_event(
+1792: 								ExperimentEventCode::ModeSwitch,
+1793: 								axis1_reverse_pressed
+1794: 									? static_cast<int>(ModeSelection::CatheterRetraction)
+1795: 									: static_cast<int>(ModeSelection::CatheterDelivery));
+1796: 						}
+1797: 						else
+1798: 						{
+1799: 							guidewire_mode = GuidewireMode::None;
+1800: 							axis6_crawl.enabled = false;
+1801: 							axis6_window_locked = false;
+1802: 							std::cout << "导丝模式退出失败：ADS 重同步失败。" << std::endl;
+1803: 						}
+1804: 					}
+1805: 					else
+1806: 					{
+1807: 						guidewire_mode = GuidewireMode::None;
+1808: 						axis6_crawl.enabled = false;
+1809: 						axis6_window_locked = false;
+1810: 					}
+1811: 				}
+1812: 				// 本拍立即采用普通导管最终方向。
+1813: 				// 退出同步已经消费当前手柄采样；下一拍仍会按方向变化建立触发保护。
+1814: 				axis1_reverse_pressed =
+1815: 					(vis_reverse_override_active && vis_reverse_override_target == 0)
+1816: 					? vis_reverse_override_value
+1817: 					: false;
+1818: 			}
+1819: 			else if (estop_hold_active)
+1820: 			{
+1821: 				std::cout << "导丝模式切换已忽略：处于 PLC 急停状态。" << std::endl;
+1822: 			}
+1823: 			else if (!startup.completed || startup.phase != StartupPhase::Done)
+1824: 			{
+1825: 				std::cout << "导丝模式切换已忽略：启动准备尚未完成。" << std::endl;
+1826: 			}
+1827: 			else if (!control_active || return_ads_fault_hold)
+1828: 			{
+1829: 				std::cout << "导丝模式切换已忽略：控制尚未激活。" << std::endl;
+1830: 			}
+1831: 			else
+1832: 			{
+1833: 				bool mode_ok = false;
+1834: 				bool mode_attempted = false;
+1835: 				bool mode_rejected = false;
+1836: 				{
+1837: 					double axis6_from_left_mm = 0.0;
+1838: 					const bool gate_checked = check_axis6_guidewire_entry_gate(axis6_from_left_mm);
+1839: 					if (!gate_checked)
+1840: 					{
+1841: 						std::cout << "导丝模式切换失败：无法读取 axis6 进入门控的 PLC 状态。" << std::endl;
+1842: 						mode_rejected = true;
+1843: 					}
+1844: 					else if (axis6_from_left_mm >= cfg.guidewire_entry_axis6_from_left_max_mm)
+1845: 					{
+1846: 						std::cout
+1847: 							<< "导丝模式切换已忽略：axis6 距左限位 = "
+1848: 							<< axis6_from_left_mm
+1849: 							<< " mm，要求 < "
+1850: 							<< cfg.guidewire_entry_axis6_from_left_max_mm
+1851: 							<< " mm。"
+1852: 							<< std::endl;
+1853: 						mode_rejected = true;
+1854: 					}
+1855: 				}
+1856: 
+1857: 				if (!mode_rejected)
+1858: 				{
+1859: 					mode_attempted = true;
+1860: 					if (requested_guidewire_mode == GuidewireMode::Independent)
+1861: 					{
+1862: 						mode_ok = enter_independent_guidewire_mode();
+1863: 						if (mode_ok)
+1864: 						{
+1865: 							clear_cylinder_manual_overrides();
+1866: 							guidewire_mode = GuidewireMode::Independent;
+1867: 							record_experiment_event(
+1868: 								ExperimentEventCode::ModeSwitch,
+1869: 								axis6_effective_reverse_pressed
+1870: 									? static_cast<int>(ModeSelection::GuidewireRetraction)
+1871: 									: static_cast<int>(ModeSelection::GuidewireDelivery));
+1872: 							// 入口已按当前实际位置和当前手柄姿态重建基准，
+1873: 							// 同步首拍方向电平，避免把模式切换误判成反向切换。
+1874: 							axis6_effective_reverse_prev = axis6_effective_reverse_pressed;
+1875: 							axis6_reverse_switch_guard_active = false;
+1876: 							std::cout << (axis6_effective_reverse_pressed ? "导丝模式：反向取出。" : "导丝模式：正向输送。") << std::endl;
+1877: 						}
+1878: 					}
+1879: 
+1880: 				}
+1881: 
+1882: 				if (mode_attempted && !mode_ok)
+1883: 				{
+1884: 					std::cout << "导丝模式切换失败。" << std::endl;
+1885: 				}
+1886: 
+1887: 			}
+1888: 		}
+1889: 		requested_guidewire_mode_prev = requested_guidewire_mode;
+1890: 
+1891: 		// 6) 自检和重同步请求均由 Notification 驱动，不再做周期单读。
+1892: 		if (ads_self_check_valid && !homing_restore_submitted && has_self_check_flag && self_check_done != last_self_check_done)
+1893: 		{
+1894: 			if (last_self_check_done && !self_check_done)
+1895: 			{
+1896: 				(void)cancel_active_return_motion(true);
+1897: 				control_active = false;
+1898: 				clear_force_output();
+1899: 				std::cout << (ads_stats.state == AdsConnectionState::Running
+1900: 					? "PLC 自检完成标志变为 false，已停止当前控制。"
+1901: 					: "ADS 未就绪，自检完成缓存已失效，已停止当前控制；不能据此判定 PLC 重启自检。") << std::endl;
+1902: 			}
+1903: 			else if (!last_self_check_done && self_check_done)
+1904: 			{
+1905:                 if (!homing_restore_applied)
+1906:                 {
+1907:                     homing_record_pending = true;
+1908:                     homing_record_refresh_generation = ads_communication.coordinate_refresh_generation();
+1909:                 }
+1910: 				const bool coordinates_refreshed = ads_communication.refresh_coordinates();
+1911: 				if (!coordinates_refreshed)
+1912: 				{
+1913: 					ads_communication.request_coordinate_refresh();
+1914: 					std::cout << "警告：PLC 自检完成后的坐标缓存同步失败，已排队重试；本拍不下发重同步参考。" << std::endl;
+1915: 				}
+1916: 				spacing_recovery.reset();
+1917: 				(void)cancel_active_return_motion(true);
+1918: 				if (!restore_startup_v_limit())
+1919: 				{
+1920: 					std::cout << "警告：PLC 自检切换后恢复启动期速度限制参数失败。" << std::endl;
+1921: 				}
+1922: 				guidewire_mode = GuidewireMode::None;
+1923: 				axis6_crawl.enabled = false;
+1924: 				axis6_window_locked = false;
+1925:                 const bool restored_homing = homing_restore_applied;
+1926:                 homing_restore_applied = false;
+1927:                 startup.completed = !restored_homing || control_before_plc_restart;
+1928:                 startup.phase = startup.completed ? StartupPhase::Done : StartupPhase::WaitForEnter;
+1929: 				startup.direct_positioning = false;
+1930: 				startup.prompted = false;
+1931: 				if (coordinates_refreshed && !estop_hold_active &&
+1932: 					!ads_soft_hold_active && sync_all(30))
+1933: 				{
+1934:                     control_active = startup.completed && startup.phase == StartupPhase::Done;
+1935: 					plc_restart_recovery_latched = false;
+1936: 					std::cout << "PLC 自检已完成，已自动进入手柄控制。" << std::endl;
+1937: 				}
+1938: 				else
+1939: 				{
+1940: 					control_active = false;
+1941: 				}
+1942: 			}
+1943: 		}
+1944:         // 寻参记录只消费既有坐标刷新成功事件；刷新失败时等待既有后台刷新。
+1945:         if (homing_record_pending && ads_self_check_valid && ads_snapshot.valid && self_check_done && plc_app_name_read &&
+1946:             ads_communication.coordinate_refresh_generation() > homing_record_refresh_generation)
+1947:         {
+1948:             homing_record_pending = false;
+1949:             homing_record.complete = true;
+1950:             homing_record.application = plc_application_name;
+1951:             homing_record.completed_time_unix_ms = homing::now_ms();
+1952:             homing_record.last_abs_time_unix_ms = homing_record.completed_time_unix_ms;
+1953:             for (int axis = 0; axis < 7; ++axis)
+1954:             {
+1955:                 homing_record.leftlimit[axis] = ads_snapshot.leftlimit[axis];
+1956:                 homing_record.init_pos[axis] = ads_snapshot.init_pos[axis];
+1957:                 homing_record.last_abs[axis] = ads_snapshot.act_pos_rel[axis] + ads_snapshot.init_pos[axis];
+1958:             }
+1959:             homing_record_update_ms = GetTickCount64();
+1960:             if (!homing::save(homing_record_path, homing_record)) std::cout << "寻参记录原子写入失败。" << std::endl;
+1961:         }
+1962:         if (!homing_record_pending && !homing_reuse_pending && !homing_restore_submitted && homing_record.complete &&
+1963:             ads_self_check_valid && ads_snapshot.valid && self_check_done && GetTickCount64() - homing_record_update_ms >= 1000)
+1964:         {
+1965:             homing_record_update_ms = GetTickCount64();
+1966:             homing_record.last_abs_time_unix_ms = homing::now_ms();
+1967:             for (int axis = 0; axis < 7; ++axis) homing_record.last_abs[axis] = ads_snapshot.act_pos_rel[axis] + ads_snapshot.init_pos[axis];
+1968:             if (!homing::save(homing_record_path, homing_record)) std::cout << "寻参位置记录原子更新失败。" << std::endl;
+1969:         }
+1970: 		if (ads_self_check_valid && !homing_restore_submitted) last_self_check_done = self_check_done;
+1971: 
+1972: 		// 正在回退时由原交接阶段重建基准，重同步请求不能取消 PLC 中的回退。
+1973: 		if (handle_reinit_req && !last_handle_reinit_req && !planned_return.active())
+1974: 		{
+1975: 			spacing_recovery.reset();
+1976: 			const bool coordinates_refreshed = ads_communication.refresh_coordinates();
+1977: 			if (!coordinates_refreshed) ads_communication.request_coordinate_refresh();
+1978: 			if (coordinates_refreshed && !estop_hold_active &&
+1979: 				!ads_soft_hold_active && !startup.is_active() &&
+1980: 				sync_all(30))
+1981: 			{
+1982: 				control_active = startup.completed && (startup.phase == StartupPhase::Done);
+1983: 			}
+1984: 		}
+1985: 		last_handle_reinit_req = handle_reinit_req;
+1986: 
+1987:         // 回退自动恢复门控。
+1988:         if (return_ads_fault_hold)
+1989:         {
+1990:             ReturnRecoveryConditions conditions;
+1991:             conditions.ads_running = ads_stats.state == AdsConnectionState::Running;
+1992:             conditions.snapshot_valid = ads_motion_cycle_valid && ads_snapshot.valid;
+1993:             conditions.snapshot_sequence = ads_snapshot.attempt_sequence;
+1994:             if (return_recovery.clear_sequence() != 0)
+1995:             {
+1996:                 bool completed = false, success = false;
+1997:                 std::uint8_t mask = 0;
+1998:                 if (ads_communication.planned_return_command_result(return_recovery.clear_sequence(), completed, success, mask) && completed)
+1999:                     return_recovery.clear_result(success, ads_snapshot.attempt_sequence);
+2000:             }
+2001:             conditions.estop = estop_hold_active || ads_snapshot.estop_hold_req;
+2002:             conditions.host_timeout = ads_snapshot.host_comm_timeout;
+2003:             conditions.handle_reinit_done = ads_snapshot.handle_reinit_done;
+2004:             conditions.handles_valid = !handle_soft_hold_active;
+2005:             conditions.startup_active = startup.is_active();
+2006:             conditions.exclusive_task = planned_return.active() || spacing_recovery.active() ||
+2007:                 spacing_recovery.requested || emergency_retract_active || ads_events.axis4_manual_busy;
+2008:             for (int slot = 0; slot < 2; ++slot)
+2009:             { conditions.req[slot] = ads_snapshot.return_req[slot]; conditions.busy[slot] = ads_snapshot.return_busy[slot]; }
+2010:             if (conditions.ads_running && has_new_ads_snapshot && ads_snapshot.valid && return_recovery.clear_due(GetTickCount64(), conditions.req))
+2011:             {
+2012:                 AdsPlannedReturnCommand clear;
+2013:                 clear.operation = AdsPlannedReturnOperation::Clear;
+2014:                 for (int slot = 0; slot < 2; ++slot) if (return_recovery.mask() & (1 << slot))
+2015:                     clear.legs[clear.leg_count++].axis_index = slot == 0 ? 0 : 5;
+2016:                 return_recovery.clear_submitted(ads_communication.submit_planned_return_command(clear));
+2017:             }
+2018:             if (return_recovery.can_restore(conditions) && sync_all(20))
+2019:             {
+2020:                 return_ads_fault_hold = false;
+2021:                 control_active = startup.completed && startup.phase == StartupPhase::Done;
+2022:                 return_recovery.restored();
+2023:                 recovery_event_text = "回退故障已恢复：" + return_recovery.reason();
+2024:                 std::cout << recovery_event_text << std::endl;
+2025:             }
+2026:         }
+2027: 
+2028: 		// 8) 当启动已完成但控制未激活时，通过全量重同步恢复。
+2029: 		const bool motion_startup_active = startup.is_active();
+2030: 		startup_smoothing_bypass = motion_startup_active || emergency_retract_active;
+2031: 		if (!control_active && !return_ads_fault_hold && !motion_startup_active &&
+2032: 			!planned_return.active() && !spacing_recovery.active() &&
+2033: 			ads_motion_cycle_valid && initial_sync_done && !connection_hold_active &&
+2034: 			!handle_soft_hold_active && self_check_done &&
+2035: 			!estop_hold_active && !ads_soft_hold_active && startup.completed)
+2036: 		{
+2037: 			if (sync_all(20))
+2038: 			{
+2039: 				control_active = true;
+2040: 			}
+2041: 		}
+2042: 		unsigned short cylinder1_cmd = cyl.cyl1_open;
+2043: 		unsigned short cylinder2_cmd = cyl.cyl2_clamp;
+2044: 		unsigned short cylinder3_cmd = cyl.cyl3_follow_release;
+2045: 		unsigned short cylinder4_cmd = cyl.cyl4_follow_release;
+2046: 		bool emergency_retract_targets_reached = false;
+2047: 		// 轴4 接线方向与按键语义相反，此处交换映射。
+2048: 		bool axis4_manual_forward_req = axis4_reverse_request;
+2049: 		bool axis4_manual_reverse_req = axis4_forward_request;
+2050: 		tracking_manual_cylinder_override = false;
+2051: 		for (int cylinder_index = 0; cylinder_index < 4; ++cylinder_index)
+2052: 		{
+2053: 			if (cylinder_manual_mode[cylinder_index] != CylinderManualMode::Automatic)
+2054: 			{
+2055: 				tracking_manual_cylinder_override = true;
+2056: 				break;
+2057: 			}
+2058: 		}
+2059: 
+2060: 		// 反馈属于上一拍已发布的动作；先统计到达触发点的位移，再由本拍最终输出停计换手。
+2061: 		auto handle_distance_follow_allowed = [&]() -> bool
+2062: 		{
+2063: 			return control_active && initial_sync_done && !connection_hold_active &&
+2064: 				!ads_soft_hold_active && !handle_soft_hold_active && !return_ads_fault_hold &&
+2065: 				!estop_hold_active && !startup.is_active() && !emergency_retract_active &&
+2066: 				!spacing_recovery.active() && !spacing_recovery.requested &&
+2067: 				!planned_return.active() && !axis6_soft_limit_hold &&
+2068: 				!tracking_manual_cylinder_override;
+2069: 		};
+2070: 		const bool distance_follow_before = handle_distance_follow_allowed();
+2071: 		if (has_new_ads_snapshot)
+2072: 		{
+2073: 			axis1_net_distance.sample(ads_snapshot.act_pos_rel[0], ads_snapshot.init_pos[0],
+2074: 				ads_snapshot.attempt_sequence, ads_motion_cycle_valid,
+2075: 				distance_follow_before && guidewire_mode == GuidewireMode::None);
+2076: 			axis6_net_distance.sample(ads_snapshot.act_pos_rel[5], ads_snapshot.init_pos[5],
+2077: 				ads_snapshot.attempt_sequence, ads_motion_cycle_valid,
+2078: 				distance_follow_before && (!single_handle_mode || guidewire_mode == GuidewireMode::Independent) &&
+2079: 				!axis4_forward_request && !axis4_reverse_request);
+2080: 		}
+2081: 
+2082: 		// 9) 根据当前顶层模式构建一帧 refer 和一组气缸指令。
+2083: 		if (!ads_soft_hold_active && !handle_soft_hold_active && !return_ads_fault_hold && !estop_hold_active &&
+2084: 			(control_active || motion_startup_active || emergency_retract_active) && read_plc_state())
+2085: 		{
+2086: 			load_pos_from_actual();
+2087: 			pos[1] = axis2_hold_rel;
+2088: 			pos[6] = axis7_hold_rel;
+2089: 
+2090: 			const DWORD now_ms = GetTickCount();
+2091: 			const double axis1_linear_filtered = axis1_handle_filter.axis0_filtered;
+2092: 			const double axis1_rot_filtered = axis1_handle_filter.axis1_filtered;
+2093: 			const double axis6_linear_filtered = axis6_handle_filter.axis0_filtered;
+2094: 			const double axis6_rot_filtered = axis6_handle_filter.axis1_filtered;
+2095: 
+2096: 			const double axis1_abs = plc_act_pos[0] + plc_init_pos[0]; // 轴1绝对位置(mm)
+2097: 			const double axis3_abs = plc_act_pos[2] + plc_init_pos[2];
+2098: 			const double axis5_abs = plc_act_pos[4] + plc_init_pos[4];
+2099: 			const double axis1_linear_increment_raw_mm =
+2100: 				(axis1_linear_filtered - axis1_prev_linear_filtered) * cfg.k_handle_to_mm * cfg.axis_push_sign;
+2101: 			const double axis1_linear_increment_mm =
+2102: 				(std::abs(axis1_linear_increment_raw_mm) >= cfg.linear_increment_noise_deadband_mm)
+2103: 				? axis1_linear_increment_raw_mm
+2104: 				: 0.0;
+2105: 			const double axis1_directional_increment_mm =
+2106: 				axis1_crawl.window_active
+2107: 				? axis1_linear_increment_mm
+2108: 				: gate_linear_increment_for_mode(axis1_linear_increment_mm, axis1_reverse_pressed);
+2109: 			const bool axis1_directional_increment_active =
+2110: 				std::abs(axis1_directional_increment_mm) > 0.0;
+2111: 			const double axis1_window_left_abs_now = axis1_crawl.start_abs;
+2112: 			const double axis1_window_right_abs_now = axis1_crawl.end_abs;
+2113: 			const double axis1_min_abs = axis1_crawl.min_abs();
+2114: 			const double axis1_max_abs = axis1_crawl.max_abs();
+2115: 			const double axis3_from_left_mm = axis3_abs - plc_leftlimit[2];
+2116: 			const bool axis3_delivery_stop_active =
+2117: 				axis3_from_left_mm <= (cfg.axis3_delivery_stop_from_left_mm + cfg.crawl_arrive_tol_mm);
+2118: 
+2119: 			const double axis6_abs = plc_act_pos[5] + plc_init_pos[5]; // 轴6绝对位置(mm)
+2120: 			const double axis6_linear_increment_raw_mm =
+2121: 				(axis6_linear_filtered - axis6_prev_linear_filtered) * cfg.k_handle_to_mm * cfg.axis_push_sign;
+2122: 			const double axis6_linear_increment_mm =
+2123: 				(std::abs(axis6_linear_increment_raw_mm) >= cfg.linear_increment_noise_deadband_mm)
+2124: 				? axis6_linear_increment_raw_mm
+2125: 				: 0.0;
+2126: 			const double axis6_directional_increment_mm =
+2127: 				axis6_crawl.window_active
+2128: 				? axis6_linear_increment_mm
+2129: 				: gate_linear_increment_for_mode(axis6_linear_increment_mm, axis6_effective_reverse_pressed);
+2130: 			const bool axis6_directional_increment_active =
+2131: 				std::abs(axis6_directional_increment_mm) > 0.0;
+2132: 
+2133: 			// 主从位移实验门控：只认可普通导管递送 axis1 与独立导丝递送 axis6。
+2134: 			// 夹持成立仅是命令保持 150 ms 的实验假设，并不替代物理到位传感器。
+2135: 			const bool tracking_no_return_active =
+2136: 				!planned_return.active() && !axis6_soft_limit_hold;
+2137: 			auto tracking_reason_for = [&](bool forward_mode) -> TrackingInvalidReason
+2138: 			{
+2139: 				if (!forward_mode) return TrackingInvalidReason::NotForwardDelivery;
+2140: 				if (!control_active) return TrackingInvalidReason::ControlInactive;
+2141: 				if (motion_startup_active) return TrackingInvalidReason::StartupActive;
+2142: 				if (estop_hold_active) return TrackingInvalidReason::PlcHold;
+2143: 				if (return_ads_fault_hold) return TrackingInvalidReason::AdsReturnFault;
+2144: 				if (spacing_recovery.active() || spacing_recovery.requested) return TrackingInvalidReason::SpacingRecovery;
+2145: 				if (tracking_manual_cylinder_override) return TrackingInvalidReason::ManualCylinderOverride;
+2146: 				if (!tracking_no_return_active) return TrackingInvalidReason::CrawlReturnActive;
+2147: 				return TrackingInvalidReason::None;
+2148: 			};
+2149: 			const TrackingInvalidReason axis1_tracking_reason = tracking_reason_for(
+2150: 				single_handle_mode && guidewire_mode == GuidewireMode::None && !axis1_reverse_pressed);
+2151: 			const TrackingInvalidReason axis6_tracking_reason = tracking_reason_for(
+2152: 				guidewire_mode == GuidewireMode::Independent && !axis6_effective_reverse_pressed);
+2153: 			// 先按当前 Follow 的预期夹持状态推进控制；本拍末尾还会按最终命令复核。
+2154: 			const bool axis1_grip_command_active =
+2155: 				cylinder2_cmd == cyl.cyl2_clamp && cylinder1_cmd == cyl.cyl1_open;
+2156: 			const bool axis6_grip_command_expected =
+2157: 				guidewire_mode == GuidewireMode::Independent &&
+2158: 				!planned_return.active() &&
+2159: 				!tracking_manual_cylinder_override;
+2160: 			tracking_controller.update_gate(
+2161: 				DeliveryTrackingAxis::Axis1,
+2162: 				axis1_tracking_reason == TrackingInvalidReason::None,
+2163: 				axis1_grip_command_active,
+2164: 				now_ms,
+2165: 				axis1_abs,
+2166: 				axis1_tracking_reason);
+2167: 			tracking_controller.update_gate(
+2168: 				DeliveryTrackingAxis::Axis6,
+2169: 				axis6_tracking_reason == TrackingInvalidReason::None,
+2170: 				axis6_grip_command_expected,
+2171: 				now_ms,
+2172: 				axis6_abs,
+2173: 				axis6_tracking_reason);
+2174: 			tracking_controller.begin_cycle(
+2175: 				DeliveryTrackingAxis::Axis1,
+2176: 				axis1_input_handle->fJoints2[0],
+2177: 				axis1_linear_filtered,
+2178: 				axis1_linear_increment_raw_mm,
+2179: 				plc_act_pos[0]);
+2180: 			tracking_controller.begin_cycle(
+2181: 				DeliveryTrackingAxis::Axis6,
+2182: 				axis6_input_handle->fJoints2[0],
+2183: 				axis6_linear_filtered,
+2184: 				axis6_linear_increment_raw_mm,
+2185: 				plc_act_pos[5]);
+2186: 			const bool axis1_forward_tracking_mode =
+2187: 				single_handle_mode && guidewire_mode == GuidewireMode::None && !axis1_reverse_pressed;
+2188: 			const bool axis6_forward_tracking_mode =
+2189: 				guidewire_mode == GuidewireMode::Independent && !axis6_effective_reverse_pressed;
+2190: 			const bool axis1_handover_active = axis1_forward_tracking_mode &&
+2191: 				planned_return.active() && planned_return.contains_axis(0);
+2192: 			const bool axis6_handover_active = axis6_forward_tracking_mode &&
+2193: 				planned_return.active() && planned_return.contains_axis(5);
+2194: 			if (axis1_handover_active)
+2195: 			{
+2196: 				// 正向递送坐标朝左为负；换手时只把持续前推转换成正欠账，回拉复位不计入。
+2197: 				tracking_controller.record_handover_forward_increment(
+2198: 					DeliveryTrackingAxis::Axis1,
+2199: 					(std::max)(0.0, -axis1_linear_increment_mm));
+2200: 			}
+2201: 			if (axis6_handover_active)
+2202: 			{
+2203: 				tracking_controller.record_handover_forward_increment(
+2204: 					DeliveryTrackingAxis::Axis6,
+2205: 					(std::max)(0.0, -axis6_linear_increment_mm));
+2206: 			}
+2207: 			const bool tracking_segment_active =
+2208: 				tracking_controller.snapshot(DeliveryTrackingAxis::Axis1).segment_active ||
+2209: 				tracking_controller.snapshot(DeliveryTrackingAxis::Axis6).segment_active;
+2210: 			const DeliveryTrackingAxisSnapshot axis1_tracking_gate_snapshot =
+2211: 				tracking_controller.snapshot(DeliveryTrackingAxis::Axis1);
+2212: 			const DeliveryTrackingAxisSnapshot axis6_tracking_gate_snapshot =
+2213: 				tracking_controller.snapshot(DeliveryTrackingAxis::Axis6);
+2214: 			const bool tracking_handover_or_regrip =
+2215: 				axis1_tracking_reason == TrackingInvalidReason::CrawlReturnActive ||
+2216: 				axis6_tracking_reason == TrackingInvalidReason::CrawlReturnActive ||
+2217: 				axis1_tracking_reason == TrackingInvalidReason::GripSettling ||
+2218: 				axis6_tracking_reason == TrackingInvalidReason::GripSettling ||
+2219: 				axis1_tracking_gate_snapshot.invalid_reason ==
+2220: 					static_cast<int>(TrackingInvalidReason::CrawlReturnActive) ||
+2221: 				axis6_tracking_gate_snapshot.invalid_reason ==
+2222: 					static_cast<int>(TrackingInvalidReason::CrawlReturnActive) ||
+2223: 				axis1_tracking_gate_snapshot.invalid_reason ==
+2224: 					static_cast<int>(TrackingInvalidReason::GripSettling) ||
+2225: 				axis6_tracking_gate_snapshot.invalid_reason ==
+2226: 					static_cast<int>(TrackingInvalidReason::GripSettling);
+2227: 			if (tracking_controller.compensation_enabled() && !tracking_segment_active &&
+2228: 				!tracking_handover_or_regrip)
+2229: 			{
+2230: 				tracking_controller.disable_compensation();
+2231: 				std::cout << "主从位移补偿已关闭：已离开正向递送/换手恢复范围。" << std::endl;
+2232: 			}
+2233: 			struct PlannedReturnEventView
+2234: 			{
+2235: 				bool busy = false;
+2236: 				bool done = false;
+2237: 				bool error = false;
+2238: 				std::uint32_t error_id = 0;
+2239: 				std::uint64_t event_sequence = 0;
+2240: 				std::uint64_t busy_true_sequence = 0;

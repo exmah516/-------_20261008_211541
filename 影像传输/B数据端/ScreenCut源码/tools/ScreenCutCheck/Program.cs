@@ -21,6 +21,7 @@ internal static partial class Program
     private static bool _bandwidthOnly;
     private static bool _legacyBandwidth;
     private static bool _cameraCheckOnly;
+    private static bool _recordingOnly;
     private static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
     private static readonly string Work = Path.Combine(Path.GetTempPath(), "VI.Imaging.Check-" + Guid.NewGuid().ToString("N"));
     private static readonly List<Process> Children = new List<Process>();
@@ -40,6 +41,7 @@ internal static partial class Program
         if (args.Contains("--logging")) return LoggingCheck.Run();
         if (args.Contains("--encoding")) return EncodingCheck.Run();
         _cameraCheckOnly = args.Contains("--camera-check");
+        _recordingOnly = args.Contains("--recording");
         _legacyBandwidth = args.Contains("--legacy-bandwidth");
         _bandwidthOnly = _legacyBandwidth || args.Contains("--bandwidth");
         Directory.CreateDirectory(Work);
@@ -116,6 +118,7 @@ internal static partial class Program
     private static int N(Dictionary<string, object> row, string key) => row.ContainsKey(key) ? Convert.ToInt32(row[key]) : 0;
     private static async Task RunAsync(WebView2 view)
     {
+        if (_recordingOnly) { await RecordingAsync(view); return; }
         if (_cameraCheckOnly) { await CameraWarningCheckAsync(); return; }
         var settings = TestSettings();
         Reject(() => StreamingSettings.Load(new NameValueCollection { ["MasterIp"] = "0.0.0.0" }), "invalid IP rejected");
@@ -143,10 +146,10 @@ internal static partial class Program
         Reject(() => StreamingSettings.Load(new NameValueCollection(), privateIni), "invalid private camera channel rejected");
         File.WriteAllText(Path.Combine(Work, "dsa_screencut.ini"), "screenCutIp=127.0.0.1\nlistenPort0=36661\nwebrtcPort=38889\n", Encoding.UTF8);
         File.WriteAllText(Path.Combine(Work, "hik_cameras.ini"), "[camera1]\nip=127.0.0.1\nport=18000\nusername=ignored\npassword=a=b\n[camera2]\nip=127.0.0.1\n", Encoding.UTF8);
-        Check(StreamSettings.Load(Work)[1].url == "http://127.0.0.1:38889/stream_cam1/whep", "legacy INI IP mapping retained; old SDK port ignored");
+        Check(StreamSettings.Load(Work)[1].url == "http://127.0.0.1:8891/stream_cam1/whep", "master playback uses only local relay; old SDK port ignored");
         File.WriteAllText(Path.Combine(Work, "hik_cameras.ini"), "[camera1]\nip=127.0.0.4\nwebrtcPort=38890\n[camera2]\nip=127.0.0.4\nwebrtcPort=38890\n", Encoding.UTF8);
-        Check(StreamSettings.Load(Work).Select(endpoint => endpoint.url).SequenceEqual(Endpoints(true).Select(endpoint => endpoint.url)),
-            "unchanged master loads independent screenshot and monitor IPs/ports");
+        Check(StreamSettings.LoadRelay(Work).Sources.Select(endpoint => endpoint.url).SequenceEqual(Endpoints(true).Select(endpoint => endpoint.url.Replace("http://", "whep://"))),
+            "master relay loads independent screenshot and monitor IPs/ports");
         File.AppendAllText(Path.Combine(Work, "dsa_screencut.ini"), "streamPath=../invalid\n", Encoding.UTF8);
         Reject(() => StreamSettings.Load(Work), "unsafe stream path rejected");
         await BoundSocketCheckAsync();

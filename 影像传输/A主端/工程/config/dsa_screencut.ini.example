@@ -1,5 +1,12 @@
-; 复制为 dsa_screencut.ini；填写截图电脑的有线 IP，以下仅为示例。
-screenCutIp=192.168.2.20
+; 截图电脑上游 WHEP；主端播放器使用本机中继。
+screenCutIp=192.168.2.27
 webrtcPort=8889
 streamPath=stream_dsa
-; 旧 listenPort*/commandPort*/maxJpegBytes/ecgScreenCutIp 项可保留，但不再使用。
+
+[relay]
+; 主端仅在回环地址监听，不需要对外放行。
+webrtcPort=8891
+mediaPort=8191
+apiPort=9999
+; 相对主端程序目录，也可填写绝对路径。
+recordingRoot=recordings

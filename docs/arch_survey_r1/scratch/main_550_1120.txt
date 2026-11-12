@@ -1,0 +1,572 @@
+介入机器人/B数据端/工程/ADS项目/main.cpp
+550: 	{
+551: 		return planned_return.compatibility_phase_for_axis(axis_index);
+552: 	};
+553: 
+554: 	auto clear_planned_return_ads_command_tracking = [&]()
+555: 	{
+556: 		planned_return.ads_command_purpose = PlannedReturnAdsCommandPurpose::None;
+557: 		planned_return.ads_command_sequence = 0;
+558: 		planned_return.ads_command_submit_ms = 0;
+559: 	};
+560: 	auto planned_return_active_axis_mask = [&]() -> std::uint8_t
+561: 	{
+562: 		std::uint8_t mask = 0;
+563: 		for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
+564: 		{
+565: 			const PlannedReturnLeg& leg = planned_return.legs[leg_index];
+566: 			if (!leg.active) continue;
+567: 			if (leg.axis_index == 0) mask |= 0x01u;
+568: 			else if (leg.axis_index == 5) mask |= 0x02u;
+569: 		}
+570: 		return mask;
+571: 	};
+572: 	auto latch_planned_return_possibly_started = [&](std::uint8_t mask)
+573: 	{
+574: 		for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
+575: 		{
+576: 			PlannedReturnLeg& leg = planned_return.legs[leg_index];
+577: 			const std::uint8_t axis_mask = leg.axis_index == 0 ? 0x01u :
+578: 				(leg.axis_index == 5 ? 0x02u : 0x00u);
+579: 			if ((mask & axis_mask) != 0) leg.possibly_started = true;
+580: 		}
+581: 	};
+582: 	auto submit_planned_return_ads_command = [&](AdsPlannedReturnOperation operation,
+583: 		PlannedReturnAdsCommandPurpose purpose,
+584: 		bool replace_pending) -> bool
+585: 	{
+586: 		if (planned_return.leg_count <= 0) return false;
+587: 		if (!replace_pending && planned_return.ads_command_sequence != 0) return false;
+588: 
+589: 		AdsPlannedReturnCommand command{};
+590: 		command.operation = operation;
+591: 		for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
+592: 		{
+593: 			const PlannedReturnLeg& leg = planned_return.legs[leg_index];
+594: 			if (!leg.active || (leg.axis_index != 0 && leg.axis_index != 5)) return false;
+595: 			AdsPlannedReturnLegCommand& command_leg = command.legs[command.leg_count++];
+596: 			command_leg.axis_index = leg.axis_index;
+597: 			command_leg.target_abs = leg.target_abs;
+598: 			const bool is_axis1 = leg.axis_index == 0;
+599: 			command_leg.velocity = is_axis1
+600: 				? cfg.axis1_return_velocity_mm_s : cfg.axis6_return_velocity_mm_s;
+601: 			command_leg.acc = is_axis1
+602: 				? cfg.axis1_return_acc_mm_s2 : cfg.axis6_return_acc_mm_s2;
+603: 			command_leg.dec = is_axis1
+604: 				? cfg.axis1_return_dec_mm_s2 : cfg.axis6_return_dec_mm_s2;
+605: 			command_leg.jerk = is_axis1
+606: 				? cfg.axis1_return_jerk_mm_s3 : cfg.axis6_return_jerk_mm_s3;
+607: 		}
+608: 
+609: 		const std::uint64_t sequence = ads_communication.submit_planned_return_command(command);
+610: 		if (sequence == 0) return false;
+611: 		planned_return.ads_command_purpose = purpose;
+612: 		planned_return.ads_command_sequence = sequence;
+613: 		planned_return.ads_command_submit_ms = GetTickCount64();
+614: 		return true;
+615: 	};
+616: 	enum class PlannedReturnAdsPoll : unsigned char
+617: 	{
+618: 		Pending,
+619: 		Success,
+620: 		Failure
+621: 	};
+622: 	auto poll_planned_return_ads_command = [&]() -> PlannedReturnAdsPoll
+623: 	{
+624: 		if (planned_return.ads_command_sequence == 0) return PlannedReturnAdsPoll::Failure;
+625: 		bool completed = false;
+626: 		bool success = false;
+627: 		std::uint8_t possibly_started_mask = 0;
+628: 		if (!ads_communication.planned_return_command_result(
+629: 			planned_return.ads_command_sequence,
+630: 			completed,
+631: 			success,
+632: 			possibly_started_mask))
+633: 		{
+634: 			if (planned_return.ads_command_purpose == PlannedReturnAdsCommandPurpose::Commit)
+635: 			{
+636: 				// 结果槽不可判定时，不能证明Req没有到达PLC；按全部任务腿保守锁存。
+637: 				latch_planned_return_possibly_started(planned_return_active_axis_mask());
+638: 			}
+639: 			return PlannedReturnAdsPoll::Failure;
+640: 		}
+641: 		if (!completed) return PlannedReturnAdsPoll::Pending;
+642: 		if (!success &&
+643: 			planned_return.ads_command_purpose == PlannedReturnAdsCommandPurpose::Commit)
+644: 		{
+645: 			latch_planned_return_possibly_started(possibly_started_mask);
+646: 		}
+647: 		return success ? PlannedReturnAdsPoll::Success : PlannedReturnAdsPoll::Failure;
+648: 	};
+649: 	auto planned_return_ads_command_timed_out = [&](ULONGLONG now_ms) -> bool
+650: 	{
+651: 		return planned_return.ads_command_sequence != 0 &&
+652: 			planned_return.ads_command_submit_ms != 0 &&
+653: 			(now_ms - planned_return.ads_command_submit_ms) >=
+654: 			cfg.planned_return_ack_timeout_ms;
+655: 	};
+656: 	auto reset_planned_return = [&]()
+657: 	{
+658: 		planned_return.reset();
+659: 		dual_handoff.reset();
+660: 		axis1_fast_return = false;
+661: 		axis6_fast_retract = false;
+662: 	};
+663: 	// 仅在明确接管或 PLC 故障时取消；短暂通信保持由原回退协调器继续确认和交接。
+664: 	auto cancel_active_return_motion = [&](bool clear_plc_requests) -> bool
+665: 	{
+666: 		dual_handoff.reset();
+667: 		const bool had_active_return = planned_return.active();
+668: 		if (!had_active_return) return true;
+669: 		clear_axis1_delivery_mapping();
+670: 
+671: 		const PlannedReturnPhase interrupted_phase = planned_return.phase;
+672: 		const bool handoff_clear_already_applied =
+673: 			(interrupted_phase == PlannedReturnPhase::AwaitHandoffApplied ||
+674: 				interrupted_phase == PlannedReturnPhase::PostHandoffClampSettle) &&
+675: 			planned_return.handoff_generation != 0 &&
+676: 			ads_communication.applied_motion_output_generation() >=
+677: 			planned_return.handoff_generation;
+678: 		if (handoff_clear_already_applied)
+679: 		{
+680: 			// 交接代次成功意味着本任务Req=FALSE、实际位置保持和夹爪恢复
+681: 			// 已在同一次Sum Write中写入；取消链不得再等待一个不会发生的重复通知。
+682: 			planned_return.completion_clear_confirmed = true;
+683: 		}
+684: 		const bool plc_request_can_be_active = clear_plc_requests &&
+685: 			interrupted_phase != PlannedReturnPhase::ClampSettle &&
+686: 			interrupted_phase != PlannedReturnPhase::PostHandoffClampSettle &&
+687: 			!planned_return.completion_clear_confirmed;
+688: 
+689: 		axis1_fast_return = false;
+690: 		axis6_fast_retract = false;
+691: 		load_pos_from_actual();
+692: 		clear_planned_return_ads_command_tracking();
+693: 		bool clear_submitted = true;
+694: 		if (plc_request_can_be_active)
+695: 		{
+696: 			clear_submitted = submit_planned_return_ads_command(
+697: 				AdsPlannedReturnOperation::Clear,
+698: 				PlannedReturnAdsCommandPurpose::CancelClear,
+699: 				true);
+700: 		}
+701: 		planned_return.reset();
+702: 		return clear_submitted;
+703: 	};
+704: 
+705: 	auto axis6_from_left_mm = [&](double axis6_abs) -> double
+706: 	{
+707: 		return axis6_abs - plc_leftlimit[5];
+708: 	};
+709: 	auto axis6_target_exceeds_soft_limit = [&](double target_abs) -> bool
+710: 	{
+711: 		return axis6_from_left_mm(target_abs) >
+712: 			(cfg.axis6_soft_limit_from_left_mm + 1e-6);
+713: 	};
+714: 	auto engage_axis6_soft_limit_hold = [&](double target_abs,
+715: 		Axis6SoftLimitReason reason,
+716: 		const char* source)
+717: 	{
+718: 		// 实际位置越限的冻结优先级高于任何预测原因，避免同一拍的
+719: 		// axis1 联动检查覆盖 ActualPosition，下一拍误把真实越限解锁。
+720: 		if (axis6_soft_limit_reason == Axis6SoftLimitReason::ActualPosition &&
+721: 			reason != Axis6SoftLimitReason::ActualPosition)
+722: 		{
+723: 			axis6_soft_limit_hold = true;
+724: 			return;
+725: 		}
+726: 		axis6_soft_limit_hold = true;
+727: 		axis6_soft_limit_reason = reason;
+728: 		axis6_soft_limit_blocked_target_from_left_mm = axis6_from_left_mm(target_abs);
+729: 		const bool new_warning = !axis6_soft_limit_warning_active ||
+730: 			axis6_soft_limit_warning_reason != reason;
+731: 		if (new_warning)
+732: 		{
+733: 			axis6_soft_limit_warning_active = true;
+734: 			axis6_soft_limit_warning_reason = reason;
+735: 			// 预测或实际越限时精确取消当前统一回退任务，避免PLC继续接受超限目标。
+736: 			if (planned_return.active())
+737: 			{
+738: 				(void)cancel_active_return_motion(true);
+739: 			}
+740: 		}
+741: 		axis1_fast_return = false;
+742: 		axis6_fast_retract = false;
+743: 		clear_force_output();
+744: 		if (new_warning)
+745: 		{
+746: 			std::cout << "警告：axis6 软件限位阻断（" << source
+747: 				<< "，目标距左限位 " << axis6_soft_limit_blocked_target_from_left_mm
+748: 				<< " mm > " << cfg.axis6_soft_limit_from_left_mm
+749: 				<< " mm）。本拍不下发越限运动；松手、改变模式或回到安全窗口后重新评估。" << std::endl;
+750: 		}
+751: 	};
+752: 
+753: 
+754: 
+755: 	startup_smoothing_bypass = false;
+756: 
+757: 	std::cout << "力反馈：关闭，可由主端切换。" << std::endl;
+758: 
+759: 	auto zero_force_sensor_impl = [&](const char* source) -> bool
+760: 	{
+761: 		// 零点使用连续 3 帧 ADS 力数据平均值，避免单帧抖动进入零点。
+762: 		std::uint64_t after_sequence = ads_snapshot_sequence;
+763: 		double sums[5] = {};
+764: 		for (int i = 0; i < 3; ++i)
+765: 		{
+766: 			AdsFastSnapshot snapshot{};
+767: 			if (!ads_communication.wait_for_snapshot(after_sequence, 500, snapshot) || !snapshot.force_valid)
+768: 			{
+769: 				std::cout << source << "零点采集失败：ADS 连续 3 帧数据不完整。" << std::endl;
+770: 				return false;
+771: 			}
+772: 			after_sequence = snapshot.attempt_sequence;
+773: 			sums[0] += static_cast<double>(snapshot.fn_1_value) / 1000.0;
+774: 			sums[1] += static_cast<double>(snapshot.ft_1_value) / 1000.0;
+775: 			sums[2] += static_cast<double>(snapshot.fn_2_value) / 1000.0;
+776: 			sums[3] += static_cast<double>(snapshot.ft_2_value) / 1000.0;
+777: 			sums[4] += snapshot.act_pos_rel[1];
+778: 		}
+779: 		ads_snapshot_sequence = after_sequence;
+780: 		cal_state.f_zero = sums[0] / 3.0;
+781: 		cal_state.ft_zero = sums[1] / 3.0;
+782: 		cal_state.fn_2_zero = sums[2] / 3.0;
+783: 		cal_state.ft_2_zero = sums[3] / 3.0;
+784: 		cal_state.theta0_deg = sums[4] / 3.0;
+785: 		cal_state.zeroed = true;
+786: 		ff.reset();
+787: 		clear_force_output();
+788: 		std::cout << source << "力传感器零点已采集（ADS 连续 3 帧平均）：ft_zero=" << cal_state.ft_zero
+789: 			<< " V, f_zero=" << cal_state.f_zero << " V"
+790: 			<< ", fn_2_zero=" << cal_state.fn_2_zero << " V"
+791: 			<< ", ft_2_zero=" << cal_state.ft_2_zero << " V"
+792: 			<< ", axis2/theta0=" << cal_state.theta0_deg << " deg" << std::endl;
+793: 		return true;
+794: 	};
+795: 	// Zenoh 服务据此确认显式或首次开启前的零点采集结果。
+796: 	std::uint32_t remote_force_zero_ok_count = 0;
+797: 	std::uint32_t remote_force_zero_fail_count = 0;
+798: 	auto zero_force_sensor = [&](const char* source) -> bool
+799: 	{
+800: 		const bool zero_ok = zero_force_sensor_impl(source);
+801: 		if (zero_ok) ++remote_force_zero_ok_count;
+802: 		else ++remote_force_zero_fail_count;
+803: 		return zero_ok;
+804: 	};
+805: 
+806: 	bool initial_sync_done = false;
+807: 	bool plc_app_name_read = false;
+808: 	ULONGLONG handle1_next_retry_ms = 0;
+809: 	ULONGLONG handle6_next_retry_ms = 0;
+810: 	bool handle_soft_hold_active = true;
+811: 	bool connection_hold_active_prev = true;
+812: 
+813: 	enum class CylinderManualMode : unsigned char
+814: 	{
+815: 		Automatic,
+816: 		Open,
+817: 		Closed,
+818: 		Position
+819: 	};
+820: 	CylinderManualMode cylinder_manual_mode[4] = {
+821: 		CylinderManualMode::Automatic,
+822: 		CylinderManualMode::Automatic,
+823: 		CylinderManualMode::Automatic,
+824: 		CylinderManualMode::Automatic
+825: 	};
+826: 	unsigned short cylinder_manual_position[4] = {};
+827: 	unsigned short cylinder_manual_restore[4] = {};
+828: 	std::uint8_t cylinder_manual_written_mask = 0;
+829: 	// 手动电缸只用于调试。自动运动开始接管时必须撤销全部覆盖，避免末尾写入压住换手状态机命令。
+830: 	auto clear_cylinder_manual_overrides = [&]()
+831: 	{
+832: 		cylinder_manual_written_mask = 0;
+833: 		for (int cylinder_index = 0; cylinder_index < 4; ++cylinder_index)
+834: 		{
+835: 			if (cylinder_manual_mode[cylinder_index] != CylinderManualMode::Automatic)
+836: 			{
+837: 				cylinder_manual_mode[cylinder_index] = CylinderManualMode::Automatic;
+838: 			}
+839: 		}
+840: 	};
+841: 	auto prepare_cylinder_manual_override = [&](int index, bool capture_plc, unsigned short automatic_value) -> bool
+842: 	{
+843: 		const auto bit = static_cast<std::uint8_t>(1u << index);
+844: 		if ((cylinder_manual_written_mask & bit) != 0) return true;
+845: 		unsigned short original = automatic_value;
+846: 		if (capture_plc)
+847: 		{
+848: 			const char* symbols[] = { AdsSymbol::cylinder1_value, AdsSymbol::cylinder2_value,
+849: 				AdsSymbol::cylinder3_value, AdsSymbol::cylinder4_value };
+850: 			if (!ads_communication.read(symbols[index], sizeof(original), &original, 100) || original > 2000)
+851: 			{
+852: 				std::cout << "电缸位置请求已拒绝：无法读取有效原位置。" << std::endl;
+853: 				return false;
+854: 			}
+855: 		}
+856: 		cylinder_manual_restore[index] = original;
+857: 		cylinder_manual_written_mask |= bit;
+858: 		return true;
+859: 	};
+860: 	bool vis_reverse_override_active = false;
+861: 	bool vis_reverse_override_value = false;
+862: 	int vis_reverse_override_target = 0;
+863: 	enum class ModeSelection : int
+864: 	{
+865: 		None = 0,
+866: 		CatheterDelivery = 1,
+867: 		CatheterRetraction = 2,
+868: 		GuidewireDelivery = 3,
+869: 		GuidewireRetraction = 4,
+870: 	};
+871: 	ModeSelection pending_mode_selection = ModeSelection::None;
+872: 	bool spacing_recovery_button_pressed_prev = false;
+873: 
+874: 	auto apply_mode_selection = [&](ModeSelection selection)
+875: 	{
+876: 		clear_axis1_delivery_mapping();
+877: 		if (single_handle_mode && selection == ModeSelection::CatheterDelivery)
+878: 		{
+879: 			// 每次回到普通导管正向递送段都重新启用前10 mm映射。
+880: 			arm_axis1_delivery_mapping();
+881: 		}
+882: 		const bool guidewire =
+883: 			selection == ModeSelection::GuidewireDelivery ||
+884: 			selection == ModeSelection::GuidewireRetraction;
+885: 		const bool reverse =
+886: 			selection == ModeSelection::CatheterRetraction ||
+887: 			selection == ModeSelection::GuidewireRetraction;
+888: 		if (single_handle_mode)
+889: 		{
+890: 			single_handle_requested_mode = guidewire ? GuidewireMode::Independent : GuidewireMode::None;
+891: 		}
+892: 		clear_cylinder_manual_overrides();
+893: 		vis_reverse_override_active = single_handle_mode;
+894: 		vis_reverse_override_target = guidewire ? 1 : 0;
+895: 		vis_reverse_override_value = reverse;
+896: 	};
+897: 
+898: 	auto request_mode_selection = [&](ModeSelection selection, const char* source)
+899: 	{
+900: 		if (spacing_recovery.active() || spacing_recovery.requested)
+901: 		{
+902: 			pending_mode_selection = selection;
+903: 			spacing_recovery.requested = false;
+904: 			std::cout << source << "：正在退出屈曲恢复并重同步，随后切换目标模式。" << std::endl;
+905: 			return;
+906: 		}
+907: 		const bool automatic_handoff_active = planned_return.active();
+908: 		if (automatic_handoff_active)
+909: 		{
+910: 			std::cout << source << "：模式/方向切换已忽略，请等待当前换手完成。"
+911: 				<< std::endl;
+912: 			return;
+913: 		}
+914: 		pending_mode_selection = ModeSelection::None;
+915: 		apply_mode_selection(selection);
+916: 	};
+917: 
+918: 	struct PendingStartupParams {
+919: 		double axis1_from_left_mm = 0.0;
+920: 		double axis3_from_left_mm = 0.0;
+921: 		double axis5_from_left_mm = 0.0;
+922: 		double axis6_from_left_mm = 0.0;
+923: 		double axis2_deg = 0.0;
+924: 		double axis7_deg = 0.0;
+925: 		double speed_scale = 0.0;
+926: 	} pending_startup;
+927: 	double pending_selfcheck_target[7] = { 96.0, 0.0, 500.0, 0.0, 530.0, 580.0, 0.0 };
+928: 	unsigned int pending_selfcheck_axes = 0;
+929: 	bool selfcheck_command_error = false;
+930: 	bool selfcheck_start_pending = false;
+931: 	pending_startup.axis1_from_left_mm = startup.final_axis1_from_left_mm;
+932: 	pending_startup.axis3_from_left_mm = startup.final_axis3_from_left_mm;
+933: 	pending_startup.axis5_from_left_mm = startup.final_axis5_from_left_mm;
+934: 	pending_startup.axis6_from_left_mm = startup.final_axis6_from_left_mm;
+935: 	pending_startup.speed_scale = cfg.startup_motion_speed_scale;
+936: 	bool tracking_manual_cylinder_override = false;
+937: 	ads_snapshot_sequence = 0;
+938: 	std::uint64_t handled_plc_restart_count = 0;
+939: 	std::uint64_t handled_reconnect_count = 0;
+940: 	bool ads_soft_hold_active = true;
+941: 	bool plc_restart_recovery_latched = false;
+942: 	std::vector<AdsFastSnapshot> drained_ads_snapshots;
+943: 	struct HandleRecordSnapshot
+944: 	{
+945: 		std::int64_t qpc_ticks = 0;
+946: 		bool axis1_valid = false;
+947: 		bool axis6_valid = false;
+948: 	};
+949: 	std::deque<HandleRecordSnapshot> handle_record_history;
+950: 	LARGE_INTEGER vis_qpc_frequency{};
+951: 	QueryPerformanceFrequency(&vis_qpc_frequency);
+952: 	std::int64_t next_vis_publish_qpc = 0;
+953: 	ExperimentStartInfo recording_info{};
+954: 	recording_info.axis1_handle_serial = serial_axis1_handle;
+955: 	recording_info.axis6_handle_serial = serial_axis6_handle;
+956: 	recording_info.single_handle_mode = single_handle_mode;
+957: 	if (experiment_recorder.start("auto", recording_info))
+958: 		std::cout << "实验记录默认开启：records/日期/时间_auto，退出程序时保存完成。" << std::endl;
+959: 	else
+960: 		std::cerr << "实验记录启动失败，错误码：" << static_cast<int>(experiment_recorder.snapshot().error) << std::endl;
+961: 	auto record_experiment_event = [&](ExperimentEventCode code, int value)
+962: 	{
+963: 		(void)experiment_recorder.enqueue_event(code, value, experiment_recorder.clock().now_qpc());
+964: 	};
+965: 
+966: 	while (true)
+967: 	{
+968: 		AdsFastSnapshot ads_snapshot{};
+969: 		const bool has_new_ads_snapshot = ads_communication.wait_for_snapshot(
+970: 			ads_snapshot_sequence, ads_snapshot_wait_timeout_ms, ads_snapshot);
+971: 		if (has_new_ads_snapshot)
+972: 		{
+973: 			ads_snapshot_sequence = ads_snapshot.attempt_sequence;
+974: 			if (ads_snapshot.position_valid)
+975: 			{
+976: 				(void)read_plc_state();
+977: 			}
+978: 		}
+979: 		ads_communication.drain_snapshots(drained_ads_snapshots);
+980: 		const AdsCommunicationStats ads_stats = ads_communication.stats();
+981: 		const AdsEventState ads_events = ads_communication.event_state();
+982: 		if (pending_return_error_axis >= 0)
+983: 		{
+984: 			std::uint64_t error_id_sequence = 0;
+985: 			std::uint32_t error_id = 0;
+986: 			if (pending_return_error_axis == 0)
+987: 			{
+988: 				error_id_sequence = ads_events.axis1_return_last_nonzero_error_id_sequence;
+989: 				error_id = ads_events.axis1_return_last_nonzero_error_id;
+990: 			}
+991: 			else if (pending_return_error_axis == 5)
+992: 			{
+993: 				error_id_sequence = ads_events.axis6_return_last_nonzero_error_id_sequence;
+994: 				error_id = ads_events.axis6_return_last_nonzero_error_id;
+995: 			}
+996: 			if (error_id != 0 && error_id_sequence >= pending_return_error_event_sequence)
+997: 			{
+998: 				std::cout << "axis" << (pending_return_error_axis + 1)
+999: 					<< " 计划回退最终错误码: " << error_id << std::endl;
+1000: 				pending_return_error_axis = -1;
+1001: 				pending_return_error_event_sequence = 0;
+1002: 				pending_return_error_deadline_ms = 0;
+1003: 			}
+1004: 			else if (pending_return_error_deadline_ms != 0 &&
+1005: 				GetTickCount64() >= pending_return_error_deadline_ms)
+1006: 			{
+1007: 				pending_return_error_axis = -1;
+1008: 				pending_return_error_event_sequence = 0;
+1009: 				pending_return_error_deadline_ms = 0;
+1010: 			}
+1011: 		}
+1012: 		// 断线清空的是通信缓存，只有新鲜 PLC 快照才能改变已确认的自检状态。
+1013: 		const bool ads_self_check_valid = has_new_ads_snapshot && ads_snapshot.position_valid &&
+1014: 			ads_stats.state == AdsConnectionState::Running;
+1015: 		if (ads_self_check_valid) self_check_done = ads_snapshot.self_check_done;
+1016: 		if (ads_events.selfcheck_status == 2 || ads_events.selfcheck_status == 0 ||
+1017: 			ads_events.selfcheck_status == 3 ||
+1018: 			ads_stats.state != AdsConnectionState::Running)
+1019: 			selfcheck_start_pending = false;
+1020: 		if (ads_events.selfcheck_status == 2 || self_check_done)
+1021: 			selfcheck_command_error = false;
+1022: 		handle_reinit_req = ads_events.handle_reinit_req;
+1023: 		estop_hold_req = ads_events.estop_hold_req;
+1024: 		std::ostringstream plc_estop_diagnostic;
+1025: 		if (estop_hold_req && !estop_hold_active)
+1026: 		{
+1027: 			// 先保存取消操作会清除的回退现场；这些是主机缓存，不是同一扫描的PLC锁存值。
+1028: 			plc_estop_diagnostic.precision(12);
+1029: 			plc_estop_diagnostic << "[PLC-ESTOP] tick_ms=" << GetTickCount64()
+1030: 				<< " build=" << diagnostic_build << " " << __DATE__ << " " << __TIME__
+1031: 				<< " return_phase=" << static_cast<int>(planned_return.phase)
+1032: 				<< " return_mode=" << static_cast<int>(planned_return.mode)
+1033: 				<< " legs=" << planned_return.leg_count << " reverse_prev1/6=" << axis1_reverse_pressed_prev << "/" << axis6_effective_reverse_prev
+1034: 				<< " clamp_stage=" << static_cast<int>(planned_return.clamp_stage) << " restore_stage=" << static_cast<int>(planned_return.restore_stage)
+1035: 				<< " snapshot_seq=" << ads_snapshot_sequence << " new_snapshot=" << has_new_ads_snapshot
+1036: 				<< " position_valid=" << ads_snapshot.position_valid << " age_us=" << ads_stats.latest_snapshot_age_us
+1037: 				<< " host_timeout=" << ads_snapshot.host_comm_timeout << "/" << ads_events.host_comm_timeout
+1038: 				<< " axis6_busy/done/error/id=" << ads_events.axis6_return_busy << "/"
+1039: 				<< ads_events.axis6_return_done << "/" << ads_events.axis6_return_error << "/" << ads_events.axis6_return_error_id;
+1040: 			for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
+1041: 			{
+1042: 				const auto& leg = planned_return.legs[leg_index];
+1043: 				plc_estop_diagnostic << " axis=" << leg.axis_index + 1 << " target_abs=" << leg.target_abs
+1044: 					<< " started=" << leg.started << " done=" << leg.done
+1045: 					<< " actual_abs=" << ads_snapshot.act_pos_rel[leg.axis_index] + ads_snapshot.init_pos[leg.axis_index]
+1046: 					<< " refer_abs=" << pos[leg.axis_index] + plc_init_pos[leg.axis_index];
+1047: 			}
+1048: 			plc_estop_diagnostic << " last_ads_failure_seq=" << ads_stats.diagnostic_sequence
+1049: 				<< " failure_tick_ms=" << ads_stats.diagnostic_tick_ms << "\n";
+1050: 		}
+1051: 		if (ads_stats.reconnect_count != handled_reconnect_count)
+1052: 		{
+1053: 			handled_reconnect_count = ads_stats.reconnect_count;
+1054: 			axis1_net_distance.set_following(false);
+1055: 			axis6_net_distance.set_following(false);
+1056: 			ads_communication.request_coordinate_refresh();
+1057: 			ads_communication.request_watchdog_recovery();
+1058: 			if (spacing_recovery.phase != SpacingRecoveryPhase::ExitSync) spacing_recovery.reset();
+1059: 			tracking_controller.disable_compensation();
+1060: 			std::cout << "ADS 重连：保留原回退任务与方向，按 PLC 当前状态继续确认和交接。" << std::endl;
+1061: 		}
+1062: 		// 运动控制只依赖位置快照；力数据质量单独由 force_valid 传给力反馈和记录器。
+1063: 		const bool ads_motion_cycle_valid = has_new_ads_snapshot && ads_snapshot.position_valid &&
+1064: 			ads_stats.state == AdsConnectionState::Running &&
+1065: 			self_check_done && ads_events.handle_reinit_done &&
+1066: 			!ads_snapshot.host_comm_timeout && !ads_events.host_comm_timeout;
+1067: 		if (has_new_ads_snapshot && ads_snapshot.position_valid &&
+1068: 			ads_stats.state == AdsConnectionState::Running && !has_self_check_flag)
+1069: 		{
+1070: 			// 首个有效快照即确认自检状态，等待按键期间不得进入启动准备。
+1071: 			has_self_check_flag = true;
+1072: 			last_self_check_done = self_check_done;
+1073: 			if (!self_check_done) control_active = false;
+1074: 			startup.loading_ready_symbol_available = true;
+1075: 			startup.loading_ready_plc = ads_events.startup_loading_ready;
+1076: 		}
+1077: 		const ULONGLONG loop_now_ms = GetTickCount64();
+1078: 
+1079: 		// 启动阶段未锁定模式时持续重试
+1080: 		if (!handle_startup_locked)
+1081: 		{
+1082: 			if (loop_now_ms >= handle1_next_retry_ms)
+1083: 			{
+1084: 				handle1_next_retry_ms = loop_now_ms + 1000;
+1085: 				axis1_handle_ready = handle_axis1.init();
+1086: 			}
+1087: 			if (loop_now_ms >= handle6_next_retry_ms)
+1088: 			{
+1089: 				handle6_next_retry_ms = loop_now_ms + 1000;
+1090: 				axis6_handle_ready = handle_axis6.init();
+1091: 			}
+1092: 			if (axis1_handle_ready || axis6_handle_ready)
+1093: 			{
+1094: 				bool allow_lock = true;
+1095: 				if (!(axis1_handle_ready && axis6_handle_ready))
+1096: 				{
+1097: 					if (remote_single_handle_since_ms == 0) remote_single_handle_since_ms = loop_now_ms;
+1098: 					allow_lock = (loop_now_ms - remote_single_handle_since_ms) >= remote_single_handle_grace_ms;
+1099: 				}
+1100: 				else
+1101: 				{
+1102: 					remote_single_handle_since_ms = 0;
+1103: 				}
+1104: 				if (allow_lock)
+1105: 				{
+1106: 					lock_handle_mode(axis1_handle_ready, axis6_handle_ready);
+1107: 					update_handle_context();
+1108: 				}
+1109: 			}
+1110: 			else
+1111: 			{
+1112: 				remote_single_handle_since_ms = 0;
+1113: 			}
+1114: 		}
+1115: 		else
+1116: 		{
+1117: 			if (!handle_axis1.is_open() && loop_now_ms >= handle1_next_retry_ms)
+1118: 			{
+1119: 				handle1_next_retry_ms = loop_now_ms + 1000;
+1120: 				if (handle_axis1.init())

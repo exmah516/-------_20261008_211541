@@ -1,4 +1,5 @@
 using Microsoft.Win32.SafeHandles;
+using VI.Imaging;
 using System;
 using System.Diagnostics;
 using System.Drawing;
@@ -210,7 +211,7 @@ namespace ScreenCut
 
         private Process StartEncoder(Rectangle region, bool testPattern)
         {
-            _encoderJob = _encoderJob ?? SharedRelay.CreateKillOnCloseJob();
+            _encoderJob = _encoderJob ?? ProcessJob.CreateKillOnCloseJob();
             const string filename = "ffmpeg.exe";
             var p = new Process { StartInfo = new ProcessStartInfo(StreamingSettings.FindRuntime(filename), _settings.FfmpegArguments(region, testPattern)) {
                 UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = _relay.WorkDirectory,
@@ -221,7 +222,7 @@ namespace ScreenCut
             try
             {
                 if (!p.Start()) throw new IOException("无法启动 " + filename);
-                SharedRelay.Attach(_encoderJob, p);
+                ProcessJob.Attach(_encoderJob, p);
                 p.BeginErrorReadLine(); p.BeginOutputReadLine();
                 return p;
             }

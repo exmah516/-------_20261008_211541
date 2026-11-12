@@ -1,14 +1,12 @@
-; 复制为 hik_cameras.ini；填写监控电脑的有线 IP，以下仅为示例。
-; 此处不是实体摄像头 IP；凭据在监控端 config/hik_cameras.ini。
+; 主端中继从监控电脑拉流；相机凭据保留在监控端。
 [camera1]
 name=监控 1
-ip=192.168.2.30
+ip=192.168.60.1
 webrtcPort=8890
 streamPath=stream_cam1
 
 [camera2]
 name=监控 2
-ip=192.168.2.30
+ip=192.168.60.1
 webrtcPort=8890
 streamPath=stream_cam2
-; 旧 port/username/password/channel/stream 项可保留，主端不再用它们登录海康 SDK。

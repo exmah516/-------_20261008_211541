@@ -1,10 +1,9 @@
 using Microsoft.Win32.SafeHandles;
 using System;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
-using System.Runtime.InteropServices;
+using VI.Imaging;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
@@ -35,7 +34,7 @@ namespace ScreenCut
                     InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
                 Directory.CreateDirectory(WorkDirectory, acl);
                 _gate = new Mutex(false, key + ".start");
-                try { _job = CreateKillOnCloseJob(key + ".relay"); }
+                try { _job = ProcessJob.CreateKillOnCloseJob(key + ".relay"); }
                 catch { _gate.Dispose(); throw; }
             }
             _configPath = Path.Combine(WorkDirectory, "mediamtx.yml");
@@ -59,7 +58,7 @@ namespace ScreenCut
                         UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = WorkDirectory
                     }))
                     {
-                        Attach(_job, media);
+                        ProcessJob.Attach(_job, media);
                     }
                     state = State();
                 }
@@ -114,63 +113,6 @@ namespace ScreenCut
             _job.Dispose(); _gate.Dispose(); _http.Dispose();
         }
 
-        private Accounting State()
-        {
-            if (!QueryInformationJobObject(_job, 1, out var state, Marshal.SizeOf<Accounting>(), IntPtr.Zero)) throw new Win32Exception();
-            return state;
-        }
-
-        internal static SafeFileHandle CreateKillOnCloseJob(string name = null)
-        {
-            var job = CreateJobObject(IntPtr.Zero, name);
-            try
-            {
-                if (job.IsInvalid) throw new Win32Exception();
-                var limits = new ExtendedLimits { Basic = new BasicLimits { Flags = 0x2000 } };
-                if (!SetInformationJobObject(job, 9, ref limits, Marshal.SizeOf<ExtendedLimits>())) throw new Win32Exception();
-                return job;
-            }
-            catch { job.Dispose(); throw; }
-        }
-
-        internal static void Attach(SafeFileHandle job, Process process)
-        {
-            if (AssignProcessToJobObject(job, process.Handle)) return;
-            var error = new Win32Exception();
-            if (!process.HasExited) process.Kill();
-            throw error;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct BasicLimits
-        {
-            public long ProcessTime, JobTime;
-            public uint Flags;
-            public UIntPtr MinWorkingSet, MaxWorkingSet;
-            public uint ActiveProcessLimit;
-            public UIntPtr Affinity;
-            public uint PriorityClass, SchedulingClass;
-        }
-        [StructLayout(LayoutKind.Sequential)]
-        private struct ExtendedLimits
-        {
-            public BasicLimits Basic;
-            public ulong ReadOps, WriteOps, OtherOps, ReadBytes, WriteBytes, OtherBytes;
-            public UIntPtr ProcessMemory, JobMemory, PeakProcessMemory, PeakJobMemory;
-        }
-        [StructLayout(LayoutKind.Sequential)]
-        private struct Accounting
-        {
-            public long UserTime, KernelTime, PeriodUserTime, PeriodKernelTime;
-            public uint PageFaults, Total, Active, Terminated;
-        }
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        private static extern SafeFileHandle CreateJobObject(IntPtr attributes, string name);
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool SetInformationJobObject(SafeFileHandle job, int kind, ref ExtendedLimits limits, int size);
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool QueryInformationJobObject(SafeFileHandle job, int kind, out Accounting state, int size, IntPtr returnLength);
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool AssignProcessToJobObject(SafeFileHandle job, IntPtr process);
+        private ProcessJob.Accounting State() => ProcessJob.State(_job);
     }
 }
