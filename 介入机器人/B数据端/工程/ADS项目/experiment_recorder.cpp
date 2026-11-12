@@ -914,7 +914,6 @@ void ExperimentRecorder::write_session_json(bool final, const std::string& stop_
 	json << "  \"motion_rate_hz\": " << kMotionRecordRateHz << ",\n";
 	json << "  \"axis1_handle_serial\": " << start_info_.axis1_handle_serial << ",\n";
 	json << "  \"axis6_handle_serial\": " << start_info_.axis6_handle_serial << ",\n";
-	json << "  \"single_handle_mode\": " << (start_info_.single_handle_mode ? "true" : "false") << ",\n";
 	json << "  \"force_writer_dropped\": " << force_writer_.dropped_count() << ",\n";
 	json << "  \"motion_writer_dropped\": " << motion_writer_.dropped_count() << ",\n";
 	json << "  \"events_writer_dropped\": " << events_writer_.dropped_count() << ",\n";

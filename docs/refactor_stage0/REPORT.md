@@ -29,3 +29,11 @@ R2-8 的51条原断言已复制到 tools/refactor_baseline/behavior_probes.cpp�
 运行：python tools/refactor_baseline/run.py；python tools/refactor_baseline/run_behavior_probes.py；node 介入机器人/B数据端/工程/ADS项目/tools/run_offline_tests.cjs all <日志目录>。
 
 早期 c986d50 只保存现有套件清单；本节的完整黄金提交才完成逐拍基线。草稿黄金留在 scratch，未作为正式预期值提交。
+
+## 3. 逐组删除记录
+
+### 3.1.1 单手柄
+
+已确认：删除启动单柄锁定/3秒等待、重映射、单柄跟随、换向保护、ModeSelection及保存还原、相关内部命令RequestModeSwitch/SetReverseMode。输入固定587→轴1、582→轴6；缺任何一柄仍走原双柄保持。实验会话的single_handle_mode元数据也删除。
+
+34场景/27,197拍逐值相等（logs/delete1/result.json），11个保留测试程序通过（logs/delete1_tests.log）。R2-8原51条中仅删除单柄分支的4条断言，47条保留断言通过（logs/delete1_probes.log）。删除dual_control_test的test_single_mapping_mirror、main_recovery_test的一条单柄恢复断言；B6与恢复双柄断言保留。抽取边界改用仍存在的片段。

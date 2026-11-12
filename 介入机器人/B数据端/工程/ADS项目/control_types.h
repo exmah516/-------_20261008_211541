@@ -408,11 +408,6 @@ struct SpacingRecoveryState
 	double moved_mm = 0.0;
 	double remaining_mm = 0.0;
 	bool limit_logged = false;
-	// 单手柄调试退出时使用；双手柄方向始终以当前B6电平为准。
-	int restore_mode_selection = 1;
-	bool restore_vis_reverse_override_active = false;
-	bool restore_vis_reverse_override_value = false;
-	int restore_vis_reverse_override_target = 0;
 
 	bool active() const
 	{
@@ -429,10 +424,6 @@ struct SpacingRecoveryState
 		moved_mm = 0.0;
 		remaining_mm = 0.0;
 		limit_logged = false;
-		restore_mode_selection = 1;
-		restore_vis_reverse_override_active = false;
-		restore_vis_reverse_override_value = false;
-		restore_vis_reverse_override_target = 0;
 	}
 };
 

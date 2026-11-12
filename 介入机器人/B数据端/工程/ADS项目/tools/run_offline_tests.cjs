@@ -35,23 +35,22 @@ if (selected === 'all' || selected === 'dual') {
     const source = read('main.cpp'), header = read('control_types.h'), sync = read('motion_sync.cpp');
     const parts = {
         axis4_speed: between(source,'\tconstexpr double axis4_coupled_axis6_speed_mm_s =','\n'),
-        motion: between(source,'\t\t\t\tconst double tol = cfg.crawl_arrive_tol_mm;','\n\t\t\t}\n\t\t\telse\n\t\t\t{\n\t\t\t\t// 常规导管模式：'),
+        motion: between(source,'\t\t\t\tconst double tol = cfg.crawl_arrive_tol_mm;','\n\t\t\t}\n\n\t\t\tif (!axis6_soft_limit_hold'),
         cancel: between(source,'\t\tif ((planned_return.active() || dual_handoff.active()) &&','\t\t// 正式控制阶段：'),
         axis4_pause: between(source,'\t\tconst bool axis4_paused_by_axis6 =','\t\tads_output.axis4_forward_req'),
         mapping_helpers: between(source,'\tauto clear_axis1_delivery_mapping =','\tauto apply_axis1_mirror_from_abs ='),
         mapping_begin: between(source,'\t\t\t\t// 双手柄仅轴6换手时','\t\t\t\tplanned_return.phase_t0_ms'),
-        single_mapping: between(source,'\t\t\t\t\t// 计划回退完成后，映射只作用于', '\t\t\t\t\tconst double axis1_effective_delta_axis_mm'),
         mapping_guard: between(source,'\t\tif (guidewire_mode != GuidewireMode::None ||','\t\t// 恢复键只登记请求'),
         mapping_complete: between(source,'\t\t\t\t\t\t\tif (planned_return.mode == PlannedReturnMode::CatheterDelivery ||', '\t\t\t\t\t\t\treset_planned_return();'),
         windows: between(sync,'\tdouble from_left_to_abs','\tvoid lock_axis6_window_from_current'),
         target_safety: between(source,'\t\t\tauto planned_return_targets_safe =','\t\t\tauto rebase_planned_return ='),
         recovery_type: between(header,'enum class SpacingRecoveryPhase','// 启动准备是在'),
         handoff_type: between(header,'struct DualHandoffRequest','enum class SpacingRecoveryPhase'),
-        mode: between(source,'\tbool vis_reverse_override_active =','\n\tauto request_mode_selection'),
+        mode: between(source,'\tbool spacing_recovery_button_pressed_prev =','\n\tstruct PendingStartupParams'),
         direction: between(source,'\t\t// 换手/屈曲恢复期间冻结方向','\t\tconst bool startup_sequence_active'),
         save: between(source,'\t\tif (spacing_recovery_button_press_edge)','\t\t// 该映射只属于'),
-        exit: between(source,'\t\t\t\tconst ModeSelection restore_selection =','\t\t\t\tstd::cout << "屈曲恢复退出后'),
-        switch: between(source,'\t\tif (!single_handle_mode && axis1_reverse_pressed != axis1_reverse_pressed_prev)','\t\t// 单手柄调试保留'),
+        exit: between(source,'\t\t\t\tconst double recovered_axis3_from_left_mm =','\t\t\t\tstd::cout << "屈曲恢复退出后'),
+        switch: between(source,'\t\tif (axis1_reverse_pressed != axis1_reverse_pressed_prev)','\t\taxis1_reverse_pressed_prev ='),
         filter: between(header,'struct HandleFilterState','struct ControlConfig')
     };
     const fields = new Set([...((parts.motion+parts.windows).matchAll(/cfg(?:\.|->)(\w+)/g))].map(m=>m[1]));
@@ -113,7 +112,7 @@ if (selected === 'all' || selected === 'cylinder') {
         changed: between(ads, '\tbool same_discrete_output', '\tint planned_return_axis_slot'),
         write: between(ads, '\t\tif (output.cylinder_valid)', '\t\tappend(fast_write_handles_[kWriteCylinder5Press]'),
         clear: between(source, '\tauto clear_cylinder_manual_overrides =', '\tauto prepare_cylinder_manual_override ='),
-        prepare: between(source, '\tauto prepare_cylinder_manual_override =', '\tbool vis_reverse_override_active ='),
+        prepare: between(source, '\tauto prepare_cylinder_manual_override =', '\tbool spacing_recovery_button_pressed_prev ='),
         gates: between(source, '\t\tbool cylinder5_req =', '\t\t// 记录器直接消费'),
         output: between(source, '\t\tads_output.cylinder[0] =', '\t\tconst bool axis4_paused_by_axis6 =')
     };

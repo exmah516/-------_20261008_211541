@@ -46,7 +46,6 @@ struct ExperimentStartInfo
 {
 	std::uint32_t axis1_handle_serial = 0;
 	std::uint32_t axis6_handle_serial = 0;
-	bool single_handle_mode = false;
 };
 
 class SessionClock

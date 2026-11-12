@@ -115,10 +115,7 @@ int main() {
     f.recover();
     check(f.ads_soft_hold_active, "failed coordinate rebase keeps input output gated");
     motion_sync::ok = true;
-    f.single_handle_mode = true;
     f.recover();
-    check(!f.ads_soft_hold_active && motion_sync::axis6_calls == 1,
-          "single-handle recovery keeps the current independent mode");
     f.start();
     check(f.control_active && f.guidewire_mode == GuidewireMode::Independent && f.axis6_window_locked,
           "repeated start preserves a previously completed stable mode");

@@ -348,7 +348,6 @@ static void test_direction_and_recovery() {
 #include "direction.inc"
 #include "save.inc"
         require(axis1_reverse_pressed==axis6_effective_reverse_pressed,"both chains use same B6 direction");
-        require(requested_guidewire_mode==GuidewireMode::None,"dual handles cannot select control object");
         return axis1_reverse_pressed;
     };
     auto exit_recovery=[&]() {
@@ -357,7 +356,6 @@ static void test_direction_and_recovery() {
         bool axis1_push_rearm_after_hold=true,control_active=false;
 #include "exit.inc"
         require(!spacing_recovery.active() && control_active,"recovery exits without restarting control");
-        require(!vis_reverse_override_active,"recovery cannot latch dual-handle direction");
     };
     for (int repeat=0;repeat<3;++repeat) {
         for (int bits : {0,1,3,2,0,2,3,1,0})
@@ -783,27 +781,9 @@ static void test_lead_across_handoffs() {
     }
 }
 
-static void test_single_mapping_mirror() {
-    Config cfg;
-    bool axis1_delivery_mapping_active=false;
-    double axis1_delivery_mapping_progress_mm=0,axis1_delivery_mapping_applied_extra_mm=0;
-#include "mapping_helpers.inc"
-    arm_axis1_delivery_mapping();
-    bool axis1_reverse_pressed=false;
-    double axis1_nominal_forward_mm=5,axis1_cmd_abs=25;
-    double axis3_base_rel=90,axis5_base_rel=100;
-    auto constrain_axis1_follow_cmd_abs=[](double x){return std::clamp(x,5.0,30.0);};
-#include "single_mapping.inc"
-    require(close(axis1_cmd_abs,24)&&close(axis5_base_rel+axis1_cmd_abs-30,95),
-            "保留的单手柄分支也仅让轴1先行");
-    clear_axis1_delivery_mapping();
-    require(close(axis5_base_rel+axis1_cmd_abs-30,95),"单手柄清除先行进度不会让镜像目标跳变");
-}
-
 int main() {
     test_axis4_direction_independence();
     test_lead_across_handoffs();
-    test_single_mapping_mirror();
     test_post_return_lead();
     test_lead_lifecycle();
     test_pending_guards();

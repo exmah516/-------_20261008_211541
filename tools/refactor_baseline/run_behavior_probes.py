@@ -32,14 +32,13 @@ def extract(name, filename, start, end):
 extract('types', 'control_types.h', 'struct ControlConfig', '// 启动准备是在')
 extract('mapping_helpers', 'main.cpp', '\tauto clear_axis1_delivery_mapping =', '\tauto apply_axis1_mirror_from_abs =')
 extract('connection', 'main.cpp', '\t\tconst bool connection_hold_active =', '\t\tif (!initial_sync_done)')
-extract('button', 'main.cpp', '\t\tconst bool spacing_recovery_button_pressed =', '\t\tif (pending_mode_selection')
+extract('button', 'main.cpp', '\t\tconst bool spacing_recovery_button_pressed =', '\t\t// 换手/屈曲恢复期间冻结方向')
 extract('save', 'main.cpp', '\t\tif (spacing_recovery_button_press_edge)', '\t\t// 该映射只属于')
 extract('mapping_guard', 'main.cpp', '\t\tif (guidewire_mode != GuidewireMode::None ||', '\t\t// 恢复键只登记请求')
 extract('entry', 'main.cpp', '\t\t\tauto calculate_spacing_recovery_remaining =', '\t\t\tif (emergency_retract_active)')
 extract('action', 'main.cpp', '\t\t\telse if (spacing_recovery.active())', '\t\t\telse if (motion_startup_active)')
 extract('exit', 'main.cpp', '\t\tconst DWORD spacing_recovery_exit_elapsed_ms =', '\t\tconst bool axis4_manual_error_now =')
 extract('dual_mapping', 'main.cpp', '\t\t\t\t// g约束始终使用轴3/5的名义增量', '\t\t\t\tconst double g_now =')
-extract('single_mapping', 'main.cpp', '\t\t\t\t\tdouble axis1_mapping_extra_requested_mm =', '\t\t\t\t\tconst double axis1_effective_delta_axis_mm')
 (BUILD/'behavior_extractions.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
 
 vswhere = Path(os.environ['ProgramFiles(x86)']) / 'Microsoft Visual Studio/Installer/vswhere.exe'

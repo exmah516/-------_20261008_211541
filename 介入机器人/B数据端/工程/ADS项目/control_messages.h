@@ -155,10 +155,8 @@ enum class VisCommandType : int
 	None = 0,
 	SetCylinderManualOpen = 1,
 	SetCylinderManualClosed = 2,
-	RequestModeSwitch = 3,
 	ZeroForceSensor = 4,
 	ToggleForceFeedback = 5,
-	SetReverseMode = 6,
 	// 7 为已删除的旧力记录命令，保留数值空洞。
 	SetStartupAxisPos = 8,
 	SetStartupAxisDeg = 9,

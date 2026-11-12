@@ -73,18 +73,6 @@ struct Fixture {
         plc_act_pos[0]=cmd1;
         return nominal == 0 ? 0 : cmd1_start-cmd1-nominal;
     }
-    double forward_single(double nominal) {
-        const bool ignored = false;
-        (void)ignored;
-        const double axis1_nominal_forward_mm=nominal;
-        double axis1_cmd_abs=axis1_follow_cmd_abs-nominal;
-        const double nominal_target=axis1_cmd_abs;
-        auto constrain_axis1_follow_cmd_abs=[](double v) { return std::clamp(v,5.0,30.0); };
-#include "single_mapping.inc"
-        axis1_follow_cmd_abs=axis1_cmd_abs;
-        plc_act_pos[0]=axis1_cmd_abs;
-        return nominal_target-axis1_cmd_abs;
-    }
     void tick(unsigned char buttons, bool hold, double increment=0, DWORD dt=10) {
         tick_ms+=dt;
         handle_soft_hold_active=hold;
@@ -212,16 +200,16 @@ int main() {
         check(f.spacing_recovery.phase==SpacingRecoveryPhase::Idle&&f.sync_attempts==2,"next valid cycle retries sync");
         std::cout << "SCENARIO 2C PASS sync_failure_retry=1 ExitSync_hold_preserved=1\n";
     }
-    for(bool single : {false,true}) {
+    for(bool single : {false}) {
         Fixture f;f.single_handle_mode=single;f.arm();
-        const double extra=single?f.forward_single(4):f.forward_dual(4);
+        const double extra=f.forward_dual(4);
         check(equal(extra,0.8)&&equal(f.axis1_delivery_mapping_progress_mm,4),"4mm nominal applies 0.8mm extra");
         check(f.axis1_delivery_mapping_active,"mapping was active halfway");
         f.tick(0,true);
         check(!f.axis1_delivery_mapping_active&&equal(f.axis1_delivery_mapping_progress_mm,0)&&
               equal(f.axis1_delivery_mapping_applied_extra_mm,0),"short hold clears all lead state");
         f.tick(0,false);
-        const double after=single?f.forward_single(1):f.forward_dual(1);
+        const double after=f.forward_dual(1);
         check(equal(after,0)&&!f.axis1_delivery_mapping_active,"continued push has no remaining lead");
         std::cout << "SCENARIO 3 PASS mode="<<(single?"single":"dual")<<" before_progress=4 before_extra=0.8 after_extra="<<after<<"\n";
     }
