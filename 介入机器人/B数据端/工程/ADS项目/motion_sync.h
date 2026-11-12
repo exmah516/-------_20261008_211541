@@ -23,26 +23,11 @@ namespace motion_sync
 		double axis5_abs,
 		double& window_start_abs,
 		double& window_end_abs);
-	void lock_axis6_window_from_current(AppContext& ctx);
-	void apply_locked_axis6_window(AppContext& ctx);
-	bool rebuild_axis6_window_from_axis5(AppContext& ctx, bool log_result);
-
-	// 连接恢复时必须传 false，使用当前反馈重建旋转基准；业务换手保持默认语义。
-	bool sync_axis1(AppContext& ctx, int samples, bool preserve_rotation_targets = true);
 	// 计划回退交接专用：使用当前100 Hz位置快照和已滤波手柄值重建内存基准，
 	// 不轮询手柄、不等待、不直接写ADS。
 	bool rebase_axis1_after_return(AppContext& ctx);
-	// 独立导丝回退交接：仅消费当前PLC快照内存和axis6已滤波手柄值，
-	// 重建axis6/7基准并保留入模时锁定的axis6窗口。
-	bool rebase_axis6_after_return(AppContext& ctx);
 	// 双手柄同时控制的换手交接：两条链路基准一并重建，不轮询手柄、不等待、不直接写ADS。
 	bool rebase_dual_after_return(AppContext& ctx);
-	bool sync_axis6(
-		AppContext& ctx,
-		int samples,
-		bool rebuild_window,
-		bool log_window_rebuild,
-		bool preserve_rotation_targets = true);
 	bool sync_all(AppContext& ctx, int samples);
 
 	void capture_axis1_follow_baseline(AppContext& ctx);

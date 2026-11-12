@@ -43,7 +43,6 @@ struct Fixture {
     PlannedReturnCoordinator planned_return;
     DualHandoffRequest dual_handoff;
     SpacingRecoveryState spacing_recovery;
-    GuidewireMode guidewire_mode=GuidewireMode::None;
     struct { bool completed=true; StartupPhase phase=StartupPhase::Done; bool is_active() const { return false; } } startup;
     struct {
         std::uint64_t applied=0,motion_applied=0;

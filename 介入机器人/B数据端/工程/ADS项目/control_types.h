@@ -103,8 +103,6 @@ struct ControlConfig
 	// 双手柄与单手柄调试均使用 g = 1～33 mm。
 	double catheter_axis6_window_size_mm = 32.0;
 	double catheter_axis6_window_min_gap_from_axis5_mm = 1.0;
-	double guidewire_axis6_window_size_mm = 32.0;
-	double guidewire_axis6_window_min_gap_from_axis5_mm = 1.0;
 	// 主动换手使用固定间距目标。
 	double axis6_active_delivery_gap_mm = 28.0;
 	double axis6_active_retraction_gap_mm = 6.0;
@@ -128,7 +126,6 @@ struct ControlConfig
 	double axis56_ready_gap_mm = 15.0;
 	double axis3_delivery_stop_from_left_mm = 20.0;
 	double axis3_delivery_release_hysteresis_mm = 2.0;
-	double guidewire_entry_axis6_from_left_max_mm = 667.0;
 	// 单/双手柄导管正向递送中，axis1 每次计划回退后前 10 mm 名义输入额外前进 2 mm。
 	// 0 表示关闭；UI 与内部均限制在 [0, 5] mm。
 	double axis1_post_return_lead_mm = 2.0;
@@ -217,14 +214,6 @@ struct CylinderPreset
 	unsigned short cyl4_follow_release = 100;
 };
 
-enum class GuidewireMode
-{
-	None,
-	Independent
-};
-
-// 双手柄与单手柄调试共用的计划回退生命周期。Follow 仍由各轴现有逻辑计算，
-// 这里只管理触发后的夹爪稳定、PLC握手和非阻塞交接。
 enum class PlannedReturnPhase : unsigned char
 {
 	Idle,
@@ -241,23 +230,15 @@ enum class PlannedReturnPhase : unsigned char
 
 enum class PlannedReturnMode : unsigned char
 {
-	None,
-	CatheterDelivery,
-	CatheterRetraction,
-	GuidewireDelivery,
-	GuidewireRetraction,
-	Dual // 双手柄共用递送/撤出方向，执行轴集合由本次触发决定
+	None = 0,
+	Dual = 5
 };
 
 enum class PlannedReturnRebaseScope : unsigned char
 {
-	Axis1,
-	Axis6,
-	Both
+	Both = 2
 };
 
-// 统一换手通过通信线程异步提交的 ADS 批量命令用途。
-// 状态机只保存序号并轮询完成结果，主控制线程不等待 ADS 调用。
 enum class PlannedReturnAdsCommandPurpose : unsigned char
 {
 	None,
@@ -296,7 +277,7 @@ struct PlannedReturnCoordinator
 {
 	PlannedReturnPhase phase = PlannedReturnPhase::Idle;
 	PlannedReturnMode mode = PlannedReturnMode::None;
-	PlannedReturnRebaseScope rebase_scope = PlannedReturnRebaseScope::Axis1;
+	PlannedReturnRebaseScope rebase_scope = PlannedReturnRebaseScope::Both;
 	PlannedReturnLeg legs[2];
 	int leg_count = 0;
 	unsigned int retry_count = 0;
@@ -716,7 +697,6 @@ struct AppContext
 	std::int64_t plc_snapshot_qpc_ticks = 0;
 
 	// 模式与状态机。
-	GuidewireMode* guidewire_mode = nullptr;
 	bool* dual_reverse = nullptr;
 	CrawlState* axis1_crawl = nullptr;
 	CrawlState* axis6_crawl = nullptr;
@@ -741,12 +721,5 @@ struct AppContext
 	double* axis6_prev_abs_for_trigger = nullptr;
 	bool* axis1_prev_abs_valid = nullptr;
 	bool* axis6_prev_abs_valid = nullptr;
-	double* independent_axis1_hold_rel = nullptr;
-	double* independent_axis2_hold_rel = nullptr;
-	double* independent_axis3_hold_rel = nullptr;
-	double* independent_axis5_hold_rel = nullptr;
-	bool* axis6_window_locked = nullptr;
-	double* axis6_locked_window_start_abs = nullptr;
-	double* axis6_locked_window_end_abs = nullptr;
 	bool* startup_smoothing_bypass = nullptr;
 };

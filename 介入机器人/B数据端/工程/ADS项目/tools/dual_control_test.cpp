@@ -153,11 +153,7 @@ static void test_windows() {
             close(motion_sync::axis1_window_right_abs(ctx),130),"axis1 retraction uses same 5 to 30 window");
     motion_sync::calculate_axis6_window_from_axis5_abs(ctx,915,lo,hi);
     require(close(lo,1116) && close(hi,1148),"wire retraction uses same 1 to 33 gap");
-    ctx.dual_reverse=nullptr;
-    require(close(motion_sync::axis6_window_size_mm(ctx),32),"single-handle helper compatibility");
-    mode=GuidewireMode::Independent;
-    motion_sync::calculate_axis6_window_from_axis5_abs(ctx,915,lo,hi);
-    require(close(lo,1116) && close(hi,1148),"legacy wire helper uses same gap bounds");
+
 }
 
 static void test_passive_targets() {

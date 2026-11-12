@@ -23,7 +23,7 @@ def between(text, start, end):
 parts = {
     'motion': between(source, '\t\t\t\tconst double tol = cfg.crawl_arrive_tol_mm;',
                       '\n\t\t\t}\n\n\t\t\tif (!axis6_soft_limit_hold'),
-    'windows': between(sync, '\tdouble from_left_to_abs', '\tvoid lock_axis6_window_from_current'),
+    'windows': between(sync, '\tdouble from_left_to_abs', '\tbool rebase_axis1_after_return'),
     'target_safety': between(source, '\t\t\tauto planned_return_targets_safe =', '\t\t\tauto rebase_planned_return ='),
     'recovery_type': between(header, 'enum class SpacingRecoveryPhase', '// 启动准备是在'),
     'mode': between(source, '\tbool spacing_recovery_button_pressed_prev =', '\n\tstruct PendingStartupParams'),

@@ -28,7 +28,6 @@ struct Fixture {
     CylinderPreset cyl;
     PlannedReturnCoordinator planned_return;
     SpacingRecoveryState spacing_recovery;
-    GuidewireMode guidewire_mode=GuidewireMode::None;
     struct { bool completed=true; StartupPhase phase=StartupPhase::Done; } startup;
     struct { void disable_compensation() {} } tracking_controller;
     bool control_active=true, initial_sync_done=true;

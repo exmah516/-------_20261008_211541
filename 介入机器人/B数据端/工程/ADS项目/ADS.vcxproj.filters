@@ -27,10 +27,7 @@
     <ClCompile Include="motion_sync.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="guidewire_mode.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="force_feedback.cpp">
+<ClCompile Include="force_feedback.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="startup_sequence.cpp">
@@ -71,10 +68,7 @@
     <ClInclude Include="motion_sync.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="guidewire_mode.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="force_feedback.h">
+<ClInclude Include="force_feedback.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="startup_sequence.h">

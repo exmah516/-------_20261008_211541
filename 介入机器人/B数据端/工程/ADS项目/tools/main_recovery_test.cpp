@@ -108,8 +108,6 @@ int main() {
     f.recover();
     check(!f.ads_soft_hold_active && motion_sync::dual_calls == 1 && motion_sync::axis1_calls == 0,
           "dual-handle recovery rebases both handles together");
-    check(f.control_active && f.guidewire_mode == GuidewireMode::Independent && f.axis6_window_locked,
-          "recovered control keeps the selected mode without explicit restart");
     f.ads_soft_hold_active = true;
     motion_sync::ok = false;
     f.recover();
@@ -117,8 +115,6 @@ int main() {
     motion_sync::ok = true;
     f.recover();
     f.start();
-    check(f.control_active && f.guidewire_mode == GuidewireMode::Independent && f.axis6_window_locked,
-          "repeated start preserves a previously completed stable mode");
 
     Fixture waiting;
     waiting.control_active = false;

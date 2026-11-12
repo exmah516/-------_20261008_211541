@@ -1,0 +1,589 @@
+dual_control_test.cpp
+PASS axis4 independent direction, merged targets, lag/speed gates, repeated handoffs and soft limits
+PASS dual-handle 2mm lead, mirror continuity, gap limits and handoff speed gate
+PASS lag, stop-input, mirror lag, passive handoff, reversal and 0.5mm/s cases
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+全局方向：撤出。
+PASS 13500 boundary/input combinations
+PASS 122276 assertions; production motion/windows/B6/recovery branches
+main_recovery_test.cpp
+PASS: missing handles cannot report a rebuilt baseline while connection hold is still active
+PASS: repeated start leaves an active return and its baseline untouched
+PASS: fresh ADS releases the snapshot gate without rebasing an unfinished return
+PASS: disconnect cache reset does not masquerade as PLC self-check falling edge
+PASS: a transient snapshot loss does not cancel the selected control mode
+ADS 快照恢复：实际位置与手柄基准已重建。
+PASS: dual-handle recovery rebases both handles together
+PASS: failed coordinate rebase keeps input output gated
+ADS 快照恢复：实际位置与手柄基准已重建。
+开始控制被拒绝：当前不在已自检待机状态或 ADS 未就绪。
+PASS: start cannot bypass ADS hold
+开始控制被拒绝：当前不在已自检待机状态或 ADS 未就绪。
+PASS: missing handle samples do not start control
+PASS: failed rebase is retried without activating control
+PASS: fresh ADS and handles recover the completed control without a manual resume latch
+开始控制被拒绝：当前不在已自检待机状态或 ADS 未就绪。
+PASS: confirmed incomplete PLC preparation still blocks control
+开始控制被拒绝：当前不在已自检待机状态或 ADS 未就绪。
+PASS: a return fault is not bypassed by communication recovery
+PASS: fresh startup does not auto-select control
+PASS: R3 ADS recovery reason is separate
+手柄587采样间隔 1600 ms 后重建；：实际位置与手柄基准已重建。
+PASS: R3 sample-gap reason includes physical handle and milliseconds
+连接保持结束：实际位置与手柄基准已重建。
+PASS: R3 connection-hold end has its own reason
+return_recovery_test.cpp
+计划回退运动报错，错误码: 17510。已停止上位机运动控制，并异步清Req、等待PLC受控停稳。
+连接保持激活：source=ADS; 保留回退任务，等待有效快照与手柄采样，清零力反馈。
+ADS 重连：保留原回退任务与方向，按 PLC 当前状态继续确认和交接。
+连接保持激活：source=ADS; 保留回退任务，等待有效快照与手柄采样，清零力反馈。
+ADS 重连：保留原回退任务与方向，按 PLC 当前状态继续确认和交接。
+连接保持激活：source=ADS; 保留回退任务，等待有效快照与手柄采样，清零力反馈。
+ADS 重连：保留原回退任务与方向，按 PLC 当前状态继续确认和交接。
+连接保持激活：source=ADS; 保留回退任务，等待有效快照与手柄采样，清零力反馈。
+ADS 重连：保留原回退任务与方向，按 PLC 当前状态继续确认和交接。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0 mm。
+PASS 110 assertions; return/recovery crossover in both directions and dual-leg returns
+main_recovery_tests.cpp
+计划回退请求确认超时。已停止上位机运动控制，并异步清Req、等待PLC受控停稳。
+回退故障已恢复：计划回退请求确认超时
+计划回退已从当前位置重新规划，自动续做一次。
+计划回退运动报错，错误码: 17510。已停止上位机运动控制，并异步清Req、等待PLC受控停稳。
+回退故障已恢复：计划回退运动报错
+计划回退执行超时。已停止上位机运动控制，并异步清Req、等待PLC受控停稳。
+回退故障已恢复：计划回退执行超时
+计划回退已从当前位置重新规划，自动续做一次。
+计划回退运动报错，错误码: 17510。已停止上位机运动控制，并异步清Req、等待PLC受控停稳。
+回退故障已恢复：计划回退运动报错
+计划回退运动报错，错误码: 17510。已停止上位机运动控制，并异步清Req、等待PLC受控停稳。
+回退故障已恢复：计划回退运动报错
+计划回退已从当前位置重新规划，自动续做一次。
+计划回退运动报错，错误码: 17510。已停止上位机运动控制，并异步清Req、等待PLC受控停稳。
+回退故障已恢复：计划回退运动报错
+安全重试前清除PLC请求失败。已停止上位机运动控制，并异步清Req、等待PLC受控停稳。
+回退故障已恢复：安全重试前清除PLC请求失败
+计划回退已从当前位置重新规划，自动续做一次。
+计划回退运动报错，错误码: 17510。已停止上位机运动控制，并异步清Req、等待PLC受控停稳。
+回退故障已恢复：计划回退运动报错
+PLC 急停状态：开启。
+PLC 急停状态：解除。
+回退故障已恢复：本体急停打断回退
+计划回退已从当前位置重新规划，自动续做一次。
+PLC 急停状态：开启。
+PLC 急停状态：解除。
+回退故障已恢复：本体急停打断回退
+计划回退已从当前位置重新规划，自动续做一次。
+计划回退续做未通过原目标安全校验，已恢复当前位置控制。
+PASS V1/V2 extracted main recovery/continuation branches
+homing_record_events_tests.cpp
+PASS V11 extracted main record event rules checks=13
+homing_restore_ack_tests.cpp
+ADS 目标 PLC 应用: RobotPLC
+寻参已复用
+ADS 目标 PLC 应用: RobotPLC
+寻参已复用
+ADS 目标 PLC 应用: RobotPLC
+拒绝复用寻参：PLC原因码 2
+ADS 目标 PLC 应用: RobotPLC
+PASS V11 extracted restore acknowledgement checks=10
+cylinder_manual_test.cpp
+电缸位置请求已拒绝：无法读取有效原位置。
+PASS 71 assertions; independent cylinders, saved values, output masks and PLC/automatic ownership gates
+ads_diagnostics_test.cpp
+plc_io.cpp
+正在生成代码...
+PASS: resolve production symbol tables
+PASS: normal 1000/1000 output succeeds
+PASS: enqueue two-leg prepare
+PASS: production prepare writes both targets
+PASS: production commit writes both requests
+PASS: queue-only item failure preserves core communication
+PASS: failed prepare cannot become successful
+PASS: item error and symbol preserved
+PASS: heartbeat write failure invalidates core cycle
+PASS: heartbeat failure classified as SUM_WRITE
+PASS: transport timeout invalidates core cycle
+PASS: uncertain commit retains both possibly-started bits
+PASS: commit context retained with timeout
+PASS: success cannot erase captured failure
+PASS: valid snapshot accepted
+PASS: direct/fallback snapshot reads velocity
+PASS: axis 1/3/5/6 signed velocities map to their own snapshot fields
+PASS: control reads position and velocity from same published snapshot
+PASS: nonfinite velocity rejects motion snapshot
+PASS: invalid velocity cannot reach motion control
+PASS: nonfinite velocity rejects motion snapshot
+PASS: invalid velocity cannot reach motion control
+PASS: nonfinite velocity rejects motion snapshot
+PASS: invalid velocity cannot reach motion control
+PASS: nonfinite velocity rejects motion snapshot
+PASS: invalid velocity cannot reach motion control
+PASS: direct/fallback snapshot reads velocity
+PASS: axis 1/3/5/6 signed velocities map to their own snapshot fields
+PASS: control reads position and velocity from same published snapshot
+PASS: nonfinite velocity rejects motion snapshot
+PASS: invalid velocity cannot reach motion control
+PASS: nonfinite velocity rejects motion snapshot
+PASS: invalid velocity cannot reach motion control
+PASS: nonfinite velocity rejects motion snapshot
+PASS: invalid velocity cannot reach motion control
+PASS: nonfinite velocity rejects motion snapshot
+PASS: invalid velocity cannot reach motion control
+PASS: startup compatibility read maps all four velocities
+PASS: read timeout invalidates snapshot
+PASS: read timeout distinguished from write timeout
+PASS: three stalled PLC samples identified
+PASS: nonfinite position identified
+[ADS-STATE] 0 -> 5 reason=PLC_TIME_REGRESSED: cycle=2 dc_time=20000000 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: regressed PLC task identified
+PASS: disconnect clears self-check cache without a PLC self-check restart
+PASS: published snapshot retains its own confirmed self-check state after cache reset
+PASS: disconnect cleanup preserves evidence
+PASS: both connection failures remain failures
+PASS: fallback failure cannot erase primary connection error
+PASS: missing return symbol prevents readiness before first return
+PASS: missing symbol failure preserves variable name
+PASS: reconnection reloads actual PLC self-check instead of retaining cleared cache
+PASS: two-byte PLC state notification is accepted
+PASS: wrong-size state notification is rejected
+PASS: V3 start production fast and slow threads
+[ADS-STATE] 0 -> 1 reason=建立ADS连接 target=offline:851 timeout_ms=300
+[ADS-STATE] 1 -> 2 reason=完整ADS读写成功 target=offline:851 timeout_ms=300
+PASS: V3 first full cycle Running
+[ADS-STATE] 2 -> 3 reason=SUM_READ: injected single read failure target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: V3 exactly one failed snapshot enters SoftHold
+[ADS-STATE] 3 -> 2 reason=完整ADS读写成功 target=offline:851 timeout_ms=300
+PASS: V3 single failed cycle preserves queued return
+PASS: V3 one failed cycle preserves low-frequency request without CloseComm
+[ADS-STATE] 2 -> 3 reason=SUM_READ: injected read timeout code=1861 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: V3 failure enters SoftHold
+PASS: V3 short failure preserves return queue and connection
+PASS: V3 SoftHold preserves low-frequency queue beyond API timeout
+[ADS-STATE] 3 -> 2 reason=完整ADS读写成功 target=offline:851 timeout_ms=300
+PASS: V3 complete successful cycle restores Running
+PASS: V3 queued return succeeds after short failure
+PASS: V3 queued low-frequency request succeeds after short failure
+[ADS-STATE] 2 -> 3 reason=SUM_READ: injected read timeout code=1861 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: V3 failure enters SoftHold
+PASS: V3 short failure preserves return queue and connection
+PASS: V3 SoftHold preserves low-frequency queue beyond API timeout
+[ADS-STATE] 3 -> 2 reason=完整ADS读写成功 target=offline:851 timeout_ms=300
+PASS: V3 complete successful cycle restores Running
+PASS: V3 queued return succeeds after short failure
+PASS: V3 queued low-frequency request succeeds after short failure
+[ADS-STATE] 2 -> 3 reason=SUM_READ: injected read timeout code=1861 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: V3 failure enters SoftHold
+[ADS-STATE] 3 -> 4 reason=SUM_READ: injected read timeout code=1861 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+[ADS-STATE] 4 -> 3 reason=SUM_READ: injected read timeout code=1861 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: V3 1.2s failure closes communication and fails queue
+[ADS-STATE] 3 -> 2 reason=完整ADS读写成功 target=offline:851 timeout_ms=300
+PASS: V3 complete successful cycle restores Running
+PASS: V3 disconnected low-frequency request fails
+[ADS-STATE] 2 -> 3 reason=SUM_WRITE: injected write timeout code=1861 planned_operation=none legs=0 clear_mask=0 transport_ok=0 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: V3 failure enters SoftHold
+PASS: V3 short failure preserves return queue and connection
+PASS: V3 SoftHold preserves low-frequency queue beyond API timeout
+[ADS-STATE] 3 -> 2 reason=完整ADS读写成功 target=offline:851 timeout_ms=300
+PASS: V3 complete successful cycle restores Running
+PASS: V3 queued return succeeds after short failure
+PASS: V3 queued low-frequency request succeeds after short failure
+[ADS-STATE] 2 -> 3 reason=SUM_WRITE: injected write timeout code=1861 planned_operation=none legs=0 clear_mask=0 transport_ok=0 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: V3 failure enters SoftHold
+PASS: V3 short failure preserves return queue and connection
+PASS: V3 SoftHold preserves low-frequency queue beyond API timeout
+[ADS-STATE] 3 -> 2 reason=完整ADS读写成功 target=offline:851 timeout_ms=300
+PASS: V3 complete successful cycle restores Running
+PASS: V3 queued return succeeds after short failure
+PASS: V3 queued low-frequency request succeeds after short failure
+[ADS-STATE] 2 -> 3 reason=SUM_WRITE: injected write timeout code=1861 planned_operation=none legs=0 clear_mask=0 transport_ok=0 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: V3 failure enters SoftHold
+[ADS-STATE] 3 -> 4 reason=SUM_WRITE: injected write timeout code=1861 planned_operation=none legs=0 clear_mask=0 transport_ok=0 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+[ADS-STATE] 4 -> 3 reason=SUM_WRITE: injected write timeout code=1861 planned_operation=none legs=0 clear_mask=0 transport_ok=0 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: V3 1.2s failure closes communication and fails queue
+[ADS-STATE] 3 -> 2 reason=完整ADS读写成功 target=offline:851 timeout_ms=300
+PASS: V3 complete successful cycle restores Running
+PASS: V3 disconnected low-frequency request fails
+PASS: V3 low-frequency mock blocks for2s
+PASS: V3 blocked low-frequency operation completes
+V3 2s block: fast_snapshot_delta=200 heartbeat_delta=200 rtt_us=18
+PASS: V3 low-frequency blocking cannot block fast snapshot or heartbeat
+[ADS-STATE] 2 -> 0 reason=通信线程已停止 target=offline:851 timeout_ms=300
+remote_handle_test.cpp
+手柄.cpp
+正在生成代码...
+PASS: physical serial numbers map to distinct slots
+PASS: missing samples and unknown serial numbers cannot open a handle
+PASS: an unopened handle cannot send force
+已接入远程手柄（物理 SN 582）。
+已接入远程手柄（物理 SN 587）。
+PASS: fresh samples open both remote handles
+PASS: sampling keeps buttons, encoders, joints and velocities isolated by serial number
+PASS: unknown serial number stays rejected while valid slots exist
+PASS: force and torque are returned through the matching bridge slot
+PASS: second handle force is isolated and its axis is clamped
+PASS: negative force axis is clamped to zero
+PASS: default force uses axis zero
+PASS: a 500 ms network gap does not disconnect the remote handle
+PASS: stale sample velocity is not repeated during the gap
+PASS: 500 ms gap retains the existing baseline
+PASS: a sample older than 5 seconds is still rejected per handle
+PASS: close clears the handle cache and force without touching the other handle
+PASS: an expired sample cannot reopen the handle
+PASS: an explicitly invalid sample cannot reopen the handle
+已接入远程手柄（物理 SN 582）。
+PASS: a fresh sample allows reconnection
+PASS: invalid=false preserves the latest valid sample and its timestamp
+已接入远程手柄（物理 SN 582）。
+PASS: gap fixture is open
+PASS: 1s/1.6s/4s gap remains connected
+PASS: rebase threshold is strictly greater than 1500ms
+已接入远程手柄（物理 SN 582）。
+PASS: gap fixture is open
+PASS: 1s/1.6s/4s gap remains connected
+PASS: rebase threshold is strictly greater than 1500ms
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: gap rebase waits for500ms continuous samples
+已接入远程手柄（物理 SN 582）。
+PASS: gap fixture is open
+PASS: 1s/1.6s/4s gap remains connected
+PASS: rebase threshold is strictly greater than 1500ms
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: gap rebase waits for500ms continuous samples
+已接入远程手柄（物理 SN 582）。
+PASS: gap fixture is open
+PASS: 6s gap disconnects
+PASS: 6s gap can reconnect without process restart
+PASS: valid sample is present
+PASS: invalid frame cannot refresh receive time
+PASS: R3 invalid frames for0.3s preserve connection and6s disconnect
+PASS: R3 invalid stream never makes cached sample fresh
+PASS: R3 invalid frames for0.3s preserve connection and6s disconnect
+PASS: R3 invalid stream never makes cached sample fresh
+PASS: repeated close keeps output cleared and closed handles cannot reenable force
+PASS: shutdown clears both output slots
+handle_velocity_tests.cpp
+PASS: R3 records all four unmodified received velocities
+PASS: R3 receive-interval joint differences have units per second
+PASS: R3 maxima use absolute magnitude per joint
+PASS: R3 repeated cache is not a new joint speed
+PASS: R3 logging does not change received sample or timestamp
+PASS: R3 logger never changes force output
+PASS: R3 missing sample writes invalid/NaN and preserves maxima
+PASS: R3 asynchronous velocity CSV starts
+[HANDLE-SPEED] SN=582 joint=0 max_abs_received_sdk=3 max_abs_joint_per_s=12.5
+[HANDLE-SPEED] SN=582 joint=1 max_abs_received_sdk=4 max_abs_joint_per_s=25
+[HANDLE-SPEED] SN=587 joint=0 max_abs_received_sdk=5 max_abs_joint_per_s=50
+[HANDLE-SPEED] SN=587 joint=1 max_abs_received_sdk=6 max_abs_joint_per_s=100
+[HANDLE-SPEED] dropped=0 writer_error=0
+PASS: R3 velocity CSV declares both raw and joint-rate columns
+PASS: R3 one second writes 100Hz velocity rows independent of ADS/control
+R3 CSV rows=100 span_ms=1000
+recording_feedback_test.cpp
+experiment_recorder.cpp
+force_feedback.cpp
+手柄.cpp
+正在生成代码...
+已接入远程手柄（物理 SN 582）。
+已接入远程手柄（物理 SN 587）。
+PASS: fixed-count two-layer calibration, exact slopes, torque units, mounted zero, limits, catheter587/wire582 routing, no axial/torque cross-talk.
+PASS: handoff publish remains one-shot and obeys existing motion/fast-return gates.
+实验记录默认开启：records/日期/时间_auto，退出程序时保存完成。
+PASS: recorder actual CSV writes, 100/50 samples, events, validity, NaN, drain, duplicate rejection, schema8, separate sessions, I/O failure.
+已接入远程手柄（物理 SN 582）。
+已接入远程手柄（物理 SN 587）。
+PASS: independent feedback/scales, per-handle handoff hold, 100ms smoothed latch, bidirectional 2mm / 400ms release, 300ms blend, disable/re-enable, invalid samples.
+Offline test artifacts: C:\Users\Sui\AppData\Local\Temp\handoff-offline-K64RWs

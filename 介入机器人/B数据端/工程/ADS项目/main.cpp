@@ -9,7 +9,6 @@
 #include "handle_velocity_recorder.h"
 #include "force_calibration.h"
 #include "force_feedback.h"
-#include "guidewire_mode.h"
 #include "motion_sync.h"
 #include "plc_io.h"
 #include "zenoh_service.h"
@@ -222,16 +221,8 @@ int main()
 	bool axis6_prev_abs_valid = false;
 
 	// 导丝模式缓存：独立模式下冻结导管侧轴位。
-	GuidewireMode guidewire_mode = GuidewireMode::None;
 	bool dual_reverse_active = false;
-	double independent_axis1_hold_rel = 0.0;
-	double independent_axis2_hold_rel = 0.0;
-	double independent_axis3_hold_rel = 0.0;
-	double independent_axis5_hold_rel = 0.0;
 	// axis6 独立导丝窗口在进入时锁定，回退后复用。
-	bool axis6_window_locked = false;
-	double axis6_locked_window_start_abs = 0.0;
-	double axis6_locked_window_end_abs = 0.0;
 
 	StartupState startup;
 	ForceCalibrationConfig cal_cfg;
@@ -249,7 +240,6 @@ int main()
 	startup.final_axis6_from_left_mm = cfg.startup_final_axis6_default_from_left_mm;
 
 	// 绑定上下文中的长生命周期状态，替代大段 lambda capture。
-	ctx.guidewire_mode = &guidewire_mode;
 	ctx.dual_reverse = &dual_reverse_active;
 	ctx.axis1_crawl = &axis1_crawl;
 	ctx.axis6_crawl = &axis6_crawl;
@@ -272,31 +262,9 @@ int main()
 	ctx.axis6_prev_abs_for_trigger = &axis6_prev_abs_for_trigger;
 	ctx.axis1_prev_abs_valid = &axis1_prev_abs_valid;
 	ctx.axis6_prev_abs_valid = &axis6_prev_abs_valid;
-	ctx.independent_axis1_hold_rel = &independent_axis1_hold_rel;
-	ctx.independent_axis2_hold_rel = &independent_axis2_hold_rel;
-	ctx.independent_axis3_hold_rel = &independent_axis3_hold_rel;
-	ctx.independent_axis5_hold_rel = &independent_axis5_hold_rel;
-	ctx.axis6_window_locked = &axis6_window_locked;
-	ctx.axis6_locked_window_start_abs = &axis6_locked_window_start_abs;
-	ctx.axis6_locked_window_end_abs = &axis6_locked_window_end_abs;
 
 	auto axis1_window_left_abs = [&]() -> double { return motion_sync::axis1_window_left_abs(ctx); };
 	auto axis1_window_right_abs = [&]() -> double { return motion_sync::axis1_window_right_abs(ctx); };
-	auto sync_axis1 = [&](int samples) -> bool
-	{
-		return motion_sync::sync_axis1(ctx, samples);
-	};
-	auto sync_axis6 = [&](int samples,
-		bool rebuild_window,
-		bool log_window_rebuild) -> bool
-	{
-		return motion_sync::sync_axis6(
-			ctx,
-			samples,
-			rebuild_window,
-			log_window_rebuild);
-	};
-
 	auto sync_all = [&](int samples) -> bool { return motion_sync::sync_all(ctx, samples); };
 	auto capture_axis1_follow_baseline = [&]() { motion_sync::capture_axis1_follow_baseline(ctx); };
 	auto clear_axis1_delivery_mapping = [&]()
@@ -314,19 +282,6 @@ int main()
 	auto apply_axis1_mirror_from_abs = [&](double axis1_abs_cmd, bool include_axis6)
 	{
 		motion_sync::apply_axis1_mirror_from_abs(ctx, axis1_abs_cmd, include_axis6);
-	};
-	auto enter_independent_guidewire_mode = [&]() -> bool
-	{
-		return guidewire_mode_ctrl::enter_independent_guidewire_mode(ctx);
-	};
-
-	auto check_axis6_guidewire_entry_gate = [&](double& axis6_from_left_mm) -> bool
-	{
-		return guidewire_mode_ctrl::check_axis6_guidewire_entry_gate(ctx, axis6_from_left_mm);
-	};
-	auto exit_guidewire_mode_to_normal = [&]() -> bool
-	{
-		return guidewire_mode_ctrl::exit_guidewire_mode_to_normal(ctx);
 	};
 	auto start_startup_sequence = [&]() -> bool { return startup_sequence::start_startup_sequence(ctx); };
 	auto consume_startup_loading_ready = [&]() -> bool { return startup_sequence::consume_startup_loading_ready(ctx); };
@@ -471,7 +426,7 @@ int main()
 	bool return_ads_fault_hold = false; // 回退故障恢复中，PLC确认Clear并就绪后自动解除
     ReturnRecovery return_recovery;
     PlannedReturnMode interrupted_return_mode = PlannedReturnMode::None;
-    PlannedReturnRebaseScope interrupted_return_scope = PlannedReturnRebaseScope::Axis1;
+    PlannedReturnRebaseScope interrupted_return_scope = PlannedReturnRebaseScope::Both;
     DualHandoffRequest original_return_intent;
     bool resuming_return = false;
     std::string recovery_event_text;
@@ -1138,7 +1093,6 @@ int main()
 			axis6_fast_retract = false;
 			axis2_hold_rel = plc_act_pos[1];
 			axis7_hold_rel = plc_act_pos[6];
-			independent_axis2_hold_rel = plc_act_pos[1];
 			std::cout << "连接保持退出：source=" << recovery_event_text
 				<< " 保持 PLC 当前反馈位置，不恢复历史目标。axis2="
 				<< plc_act_pos[1] << "，axis7=" << plc_act_pos[6] << "（相对角度）" << std::endl;
@@ -1158,7 +1112,6 @@ int main()
 					startup.prompted = false;
 					axis2_hold_rel = plc_act_pos[1];
 					axis7_hold_rel = plc_act_pos[6];
-					independent_axis2_hold_rel = plc_act_pos[1];
 					std::cout << "系统初始同步完成，进入就绪状态。" << std::endl;
 				}
 			}
@@ -1361,8 +1314,7 @@ int main()
 		// 该映射只属于一次“导管正向递送回退完成后的前 10 mm”过程。
 		// 只要离开普通导管正向 Follow，立即清除，避免撤出/暂停/保持后再次接管时
 		// 把旧的附加量带入新的运动段。
-		if (guidewire_mode != GuidewireMode::None ||
-			axis1_reverse_pressed ||
+		if (axis1_reverse_pressed ||
 			cfg.axis1_post_return_lead_mm <= 1e-6 ||
 			!control_active ||
 			connection_hold_active ||
@@ -1375,7 +1327,7 @@ int main()
 			spacing_recovery.requested ||
 
 			(planned_return.active() &&
-				(planned_return.mode != PlannedReturnMode::Dual || planned_return.contains_axis(0))) ||
+				planned_return.contains_axis(0)) ||
 			axis6_soft_limit_hold)
 		{
 			clear_axis1_delivery_mapping();
@@ -1418,7 +1370,7 @@ int main()
 		const bool axis4_direction_conflict = axis4_forward_semantic && axis4_reverse_semantic;
 		const bool axis4_forward_request = axis4_jog_allowed && axis4_forward_semantic && !axis4_direction_conflict;
 		const bool axis4_reverse_request = axis4_jog_allowed && axis4_reverse_semantic && !axis4_direction_conflict;
-		if (!axis4_jog_allowed || guidewire_mode != GuidewireMode::None || planned_return.active())
+		if (!axis4_jog_allowed || planned_return.active())
 		{
 			axis4_axis6_coupling_active_prev = false;
 			axis4_axis6_coupling_last_ms = 0;
@@ -1478,7 +1430,6 @@ int main()
 				estop_hold_active = false;
 				axis2_hold_rel = plc_act_pos[1];
 				axis7_hold_rel = plc_act_pos[6];
-				independent_axis2_hold_rel = plc_act_pos[1];
 			}
 		}
 
@@ -1533,9 +1484,7 @@ int main()
 				{
 					std::cout << "警告：PLC 自检切换后恢复启动期速度限制参数失败。" << std::endl;
 				}
-				guidewire_mode = GuidewireMode::None;
 				axis6_crawl.enabled = false;
-				axis6_window_locked = false;
                 const bool restored_homing = homing_restore_applied;
                 homing_restore_applied = false;
                 startup.completed = !restored_homing || control_before_plc_restart;
@@ -1686,7 +1635,7 @@ int main()
 		{
 			axis1_net_distance.sample(ads_snapshot.act_pos_rel[0], ads_snapshot.init_pos[0],
 				ads_snapshot.attempt_sequence, ads_motion_cycle_valid,
-				distance_follow_before && guidewire_mode == GuidewireMode::None);
+				distance_follow_before);
 			axis6_net_distance.sample(ads_snapshot.act_pos_rel[5], ads_snapshot.init_pos[5],
 				ads_snapshot.attempt_sequence, ads_motion_cycle_valid,
 				distance_follow_before && 
@@ -1763,12 +1712,12 @@ int main()
 			const TrackingInvalidReason axis1_tracking_reason = tracking_reason_for(
 				false);
 			const TrackingInvalidReason axis6_tracking_reason = tracking_reason_for(
-				guidewire_mode == GuidewireMode::Independent && !axis6_effective_reverse_pressed);
+				false && !axis6_effective_reverse_pressed);
 			// 先按当前 Follow 的预期夹持状态推进控制；本拍末尾还会按最终命令复核。
 			const bool axis1_grip_command_active =
 				cylinder2_cmd == cyl.cyl2_clamp && cylinder1_cmd == cyl.cyl1_open;
 			const bool axis6_grip_command_expected =
-				guidewire_mode == GuidewireMode::Independent &&
+				false &&
 				!planned_return.active() &&
 				!tracking_manual_cylinder_override;
 			tracking_controller.update_gate(
@@ -1800,7 +1749,7 @@ int main()
 			const bool axis1_forward_tracking_mode =
 				false;
 			const bool axis6_forward_tracking_mode =
-				guidewire_mode == GuidewireMode::Independent && !axis6_effective_reverse_pressed;
+				false && !axis6_effective_reverse_pressed;
 			const bool axis1_handover_active = axis1_forward_tracking_mode &&
 				planned_return.active() && planned_return.contains_axis(0);
 			const bool axis6_handover_active = axis6_forward_tracking_mode &&
@@ -2014,9 +1963,7 @@ int main()
 						if (axis6_target_exceeds_soft_limit(leg.target_abs)) return false;
 						double window_left_abs = axis6_crawl.min_abs();
 						double window_right_abs = axis6_crawl.max_abs();
-						if (planned_return.mode == PlannedReturnMode::CatheterDelivery ||
-							planned_return.mode == PlannedReturnMode::CatheterRetraction ||
-							planned_return.mode == PlannedReturnMode::Dual)
+						if (planned_return.mode == PlannedReturnMode::Dual)
 						{
 							motion_sync::calculate_axis6_window_from_axis5_abs(
 								ctx,
@@ -2039,16 +1986,7 @@ int main()
 
 			auto rebase_planned_return = [&]() -> bool
 			{
-				switch (planned_return.rebase_scope)
-				{
-				case PlannedReturnRebaseScope::Axis1:
-					return motion_sync::rebase_axis1_after_return(ctx);
-				case PlannedReturnRebaseScope::Axis6:
-						return motion_sync::rebase_axis6_after_return(ctx);
-					case PlannedReturnRebaseScope::Both:
-						return motion_sync::rebase_dual_after_return(ctx);
-				}
-				return false;
+	return motion_sync::rebase_dual_after_return(ctx);
 			};
 
 			auto fail_planned_return = [&](const char* reason,
@@ -2096,7 +2034,7 @@ int main()
 				planned_return.rebase_scope = rebase_scope;
 				planned_return.phase = PlannedReturnPhase::ClampSettle;
 				// 双手柄仅轴6换手时保留轴1先行进度，待恢复Follow继续。
-				if (mode != PlannedReturnMode::Dual || axis1_active) clear_axis1_delivery_mapping();
+				if (axis1_active) clear_axis1_delivery_mapping();
 				planned_return.phase_t0_ms = 0;
 				planned_return.hold_axis3_rel = plc_act_pos[2];
 				planned_return.hold_axis5_rel = plc_act_pos[4];
@@ -2230,14 +2168,10 @@ int main()
 
 				if (!axis1_leg_active)
 				{
-					pos[0] = (guidewire_mode == GuidewireMode::Independent)
-						? independent_axis1_hold_rel : planned_return.hold_axis1_rel;
-					pos[1] = (guidewire_mode == GuidewireMode::Independent)
-						? independent_axis2_hold_rel : axis2_hold_rel;
-					pos[2] = (guidewire_mode == GuidewireMode::Independent)
-						? independent_axis3_hold_rel : planned_return.hold_axis3_rel;
-					pos[4] = (guidewire_mode == GuidewireMode::Independent)
-						? independent_axis5_hold_rel : planned_return.hold_axis5_rel;
+					pos[0] = planned_return.hold_axis1_rel;
+					pos[1] = axis2_hold_rel;
+					pos[2] = planned_return.hold_axis3_rel;
+					pos[4] = planned_return.hold_axis5_rel;
 					cylinder1_cmd = cyl.cyl1_open;
 					cylinder2_cmd = cyl.cyl2_clamp;
 				}
@@ -2675,9 +2609,7 @@ int main()
 								ff.complete_clamp_hold(2, plc_act_pos[5] + plc_init_pos[5],
 									std::chrono::duration_cast<std::chrono::milliseconds>(
 										std::chrono::steady_clock::now().time_since_epoch()).count());
-							if (planned_return.mode == PlannedReturnMode::CatheterDelivery ||
-								(planned_return.mode == PlannedReturnMode::Dual &&
-									planned_return.contains_axis(0) && !axis1_reverse_pressed))
+							if (planned_return.contains_axis(0) && !axis1_reverse_pressed)
 							{
 								// 回退完成后的附加映射只在后续正常导管前推中生效。
 								arm_axis1_delivery_mapping();
@@ -2699,9 +2631,7 @@ int main()
 
 
 			const double axis7_cmd_rel =
-				(guidewire_mode == GuidewireMode::None)
-				? axis7_hold_rel
-				: compute_axis7_cmd_rel();
+				axis7_hold_rel;
 			pos[6] = axis7_cmd_rel;
 
 			// axis6 软限位锁止时，相关导管/导丝链路统一保持实际位置，
@@ -2726,105 +2656,6 @@ int main()
 					cylinder3_cmd = cyl.cyl3_open;
 					cylinder4_cmd = cyl.cyl4_clamp;
 				};
-
-			// 独立导丝的 axis6 爬行状态机（增量式输入）。
-			// 参数说明：
-			// - axis6_raw_cmd_abs: 本拍按增量累加后的 axis6 绝对目标（未做最终触发处理）
-			// - axis6_increment_mm: 本拍 axis6 线性有效增量（mm）
-			// - axis6_reverse_mode: 当前是否处于反向爬行判定
-			auto run_axis6_crawl_state = [&](double axis6_raw_cmd_abs,
-				double axis6_increment_mm,
-				bool axis6_reverse_mode)
-			{
-				if (axis6_soft_limit_hold)
-				{
-					hold_axis6_related_axes();
-					return;
-				}
-
-				const double axis6_window_left_abs_now = axis6_crawl.min_abs();
-				const double axis6_window_right_abs_now = axis6_crawl.max_abs();
-				// 该函数只在统一回退协调器空闲时调用，因此这里只保留Follow与触发计算。
-				{
-					double axis6_cmd_abs = axis6_follow_cmd_abs;
-					const bool axis6_increment_active = std::abs(axis6_increment_mm) > 0.0;
-					if (axis6_increment_active)
-					{
-						axis6_cmd_abs = clamp_double(axis6_raw_cmd_abs, axis6_window_left_abs_now, axis6_window_right_abs_now);
-						if (axis6_target_exceeds_soft_limit(axis6_cmd_abs))
-						{
-							engage_axis6_soft_limit_hold(
-								axis6_cmd_abs,
-								Axis6SoftLimitReason::HandleTarget,
-								"axis6 手柄目标");
-							hold_axis6_related_axes();
-							return;
-						}
-					}
-
-					pos[5] = axis6_cmd_abs - plc_init_pos[5];
-					axis6_follow_cmd_abs = axis6_cmd_abs;
-					cylinder3_cmd = cyl.cyl3_open;
-					cylinder4_cmd = cyl.cyl4_clamp;
-
-					bool axis6_ready_to_trigger = false;
-					{
-						const double axis6_trigger_edge_abs =
-							axis6_reverse_mode ? axis6_window_right_abs_now : axis6_window_left_abs_now;
-						const bool axis6_toward_trigger =
-							axis6_reverse_mode ? (axis6_increment_mm > 0.0) : (axis6_increment_mm < 0.0);
-
-						const bool axis6_at_trigger_edge = axis6_reverse_mode
-							? axis6_abs >= (axis6_trigger_edge_abs - cfg.crawl_arrive_tol_mm)
-							: axis6_abs <= (axis6_trigger_edge_abs + cfg.crawl_arrive_tol_mm);
-						// 轴4后退的命令目标先到达窗口右边缘时，实际反馈可能仍有一拍滞后；
-						// 以同一窗口边界触发计划回退，避免后退停在边缘而不进入快速换端。
-						const bool axis6_command_at_trigger_edge = axis4_reverse_request &&
-							(axis6_reverse_mode
-								? axis6_cmd_abs >= (axis6_trigger_edge_abs - cfg.crawl_arrive_tol_mm)
-								: axis6_cmd_abs <= (axis6_trigger_edge_abs + cfg.crawl_arrive_tol_mm));
-						// 到达触发边后仍可由后续同向输入触发换手，不要求到位与输入发生在同一拍。
-						axis6_ready_to_trigger =
-							axis6_increment_active &&
-							axis6_toward_trigger &&
-							(axis6_at_trigger_edge || axis6_command_at_trigger_edge);
-						if (axis6_ready_to_trigger)
-						{
-							axis6_reverse_switch_guard_active = false;
-						}
-					}
-					if (axis6_ready_to_trigger && !planned_return.active())
-					{
-						double axis6_return_target_abs = axis6_reverse_mode
-							? axis6_window_left_abs_now
-							: axis6_window_right_abs_now;
-
-						if (axis6_target_exceeds_soft_limit(axis6_return_target_abs))
-						{
-							engage_axis6_soft_limit_hold(
-								axis6_return_target_abs,
-								Axis6SoftLimitReason::PlannedReturn,
-								"axis6 计划回退");
-							hold_axis6_related_axes();
-							return;
-						}
-						const PlannedReturnMode return_mode = axis6_reverse_mode
-							? PlannedReturnMode::GuidewireRetraction : PlannedReturnMode::GuidewireDelivery;
-						const PlannedReturnRebaseScope rebase_scope = PlannedReturnRebaseScope::Axis6;
-						if (begin_planned_return(
-							return_mode,
-							rebase_scope,
-							false,
-							0.0,
-							true,
-							axis6_return_target_abs))
-						{
-							// 本拍立即冻结另一条链路并下发换手夹爪目标；电机请求仍等待50 ms。
-							apply_planned_return_outputs();
-						}
-					}
-				}
-			};
 
 			auto calculate_spacing_recovery_remaining = [&]() -> double
 			{
@@ -3248,11 +3079,6 @@ int main()
                 double target1 = reverse ? axis1_crawl.min_abs() : axis1_crawl.max_abs();
                 double target6 = axis6_abs;
                 double window6_left = axis6_crawl.min_abs(), window6_right = axis6_crawl.max_abs();
-                if (interrupted_return_mode == PlannedReturnMode::GuidewireDelivery ||
-                    interrupted_return_mode == PlannedReturnMode::GuidewireRetraction)
-                    target6 = interrupted_return_mode == PlannedReturnMode::GuidewireRetraction ? window6_left : window6_right;
-                else
-                {
                     motion_sync::calculate_axis6_window_from_axis5_abs(ctx, axis5_abs, window6_left, window6_right);
                     if (interrupted_return_mode == PlannedReturnMode::Dual)
                     {
@@ -3267,8 +3093,6 @@ int main()
                         target6 = (std::min)(plc_leftlimit[5] + axis5_abs - plc_leftlimit[4] + gap,
                             plc_leftlimit[5] + cfg.axis6_soft_limit_from_left_mm);
                     }
-                    else target6 = clamp_double(axis6_abs - (target1 - axis1_abs), window6_left, window6_right);
-                }
                 resuming_return = true;
                 const bool resumed = begin_planned_return(interrupted_return_mode, interrupted_return_scope,
                     axis1_leg, target1, axis6_leg, target6);
@@ -3278,61 +3102,10 @@ int main()
             }
 			else if (planned_return.active())
 			{
-				// 四种普通业务模式的计划回退和交接统一由单一协调器推进。
+				// 双手柄计划回退和交接由协调器推进。
 				axis4_axis6_coupling_active_prev = false;
 				axis4_axis6_coupling_last_ms = 0;
 				step_planned_return();
-			}
-			else if (guidewire_mode == GuidewireMode::Independent)
-			{
-				// 导丝独立模式会冻结导管侧各轴，仅运行 axis6/7。
-				pos[0] = independent_axis1_hold_rel;
-				pos[1] = independent_axis2_hold_rel;
-				pos[2] = independent_axis3_hold_rel;
-				pos[4] = independent_axis5_hold_rel;
-				pos[6] = axis7_cmd_rel;
-
-				const double axis6_follow_start_abs = axis6_follow_cmd_abs;
-				double axis6_nominal_cmd_abs = axis6_follow_start_abs;
-				if (axis6_directional_increment_active)
-				{
-					axis6_nominal_cmd_abs = clamp_double(
-						axis6_follow_start_abs + axis6_directional_increment_mm,
-						axis6_crawl.min_abs(),
-						axis6_crawl.max_abs());
-				}
-				const double axis6_nominal_delta_axis_mm = axis6_nominal_cmd_abs - axis6_follow_start_abs;
-				const double axis6_nominal_forward_mm =
-					(!axis6_effective_reverse_pressed && axis6_nominal_delta_axis_mm < 0.0)
-					? -axis6_nominal_delta_axis_mm : 0.0;
-				double axis6_requested_forward_mm = axis6_nominal_forward_mm;
-				double axis6_raw_cmd_abs = axis6_follow_start_abs + axis6_directional_increment_mm;
-				double axis6_increment_for_state_mm = axis6_directional_increment_mm;
-				if (axis6_nominal_forward_mm > 0.0)
-				{
-					axis6_requested_forward_mm = tracking_controller.request_compensated_forward_increment(
-						DeliveryTrackingAxis::Axis6,
-						axis6_nominal_forward_mm,
-						now_ms);
-					axis6_raw_cmd_abs = axis6_follow_start_abs - axis6_requested_forward_mm;
-					axis6_increment_for_state_mm = -axis6_requested_forward_mm;
-				}
-				run_axis6_crawl_state(
-					axis6_raw_cmd_abs,
-					axis6_increment_for_state_mm,
-					axis6_effective_reverse_pressed);
-				const double axis6_effective_delta_axis_mm = axis6_follow_cmd_abs - axis6_follow_start_abs;
-				const double axis6_effective_forward_mm =
-					(!axis6_effective_reverse_pressed && axis6_effective_delta_axis_mm < 0.0)
-					? -axis6_effective_delta_axis_mm : 0.0;
-				const bool axis6_tracking_output_clamped = axis6_nominal_forward_mm > 0.0 &&
-					std::abs(axis6_effective_forward_mm - axis6_requested_forward_mm) > 1e-6;
-				tracking_controller.commit_command(
-					DeliveryTrackingAxis::Axis6,
-					axis6_nominal_forward_mm,
-					axis6_requested_forward_mm,
-					axis6_effective_forward_mm,
-					axis6_tracking_output_clamped);
 			}
 			else
 			{
@@ -3370,7 +3143,7 @@ int main()
 				// 投送停止位只拦截继续递送的增量，撤出方向始终放行。
 				if (axis3_delivery_stop_active && inc1 < 0.0) inc1 = 0.0;
 				double inc6 = dual_handoff.active() ? 0.0 : axis6_linear_increment_mm;
-				if (!dual_handoff.active() && guidewire_mode == GuidewireMode::None &&
+				if (!dual_handoff.active() &&
 					(axis4_forward_request || axis4_reverse_request))
 				{
 					// 轴4点动：前进对应 axis6 位置减少，作为导丝链路的附加增量来源，同样受 g 约束。
@@ -3817,8 +3590,7 @@ int main()
 		const bool distance_follow_output = ads_output.motion_enabled && ads_output.cylinder_valid &&
 			handle_distance_follow_allowed();
 		axis1_net_distance.set_following(distance_follow_output &&
-			guidewire_mode == GuidewireMode::None &&
-			cylinder1_cmd == cyl.cyl1_open && cylinder2_cmd == cyl.cyl2_clamp);
+						cylinder1_cmd == cyl.cyl1_open && cylinder2_cmd == cyl.cyl2_clamp);
 		axis6_net_distance.set_following(distance_follow_output &&
 			
 			!axis4_forward_request && !axis4_reverse_request &&
@@ -3838,7 +3610,6 @@ int main()
 			startup.prompted = false;
 			clear_axis1_delivery_mapping();
 			clear_cylinder_manual_overrides();
-			guidewire_mode = GuidewireMode::None;
 			control_active = sync_all(20);
 			std::cout << (control_active
 				? "极简器械撤出已完成，进入直接控制模式。"
@@ -4005,9 +3776,8 @@ int main()
 			// 只读发布当前窗口；不修改爬行状态、运动目标或换手条件。
 			if (ads_motion_cycle_valid && initial_sync_done)
 			{
-				double window_start_abs = axis6_locked_window_start_abs;
-				double window_end_abs = axis6_locked_window_end_abs;
-				if (guidewire_mode != GuidewireMode::Independent || !axis6_window_locked)
+				double window_start_abs = 0.0;
+				double window_end_abs = 0.0;
 					motion_sync::calculate_axis6_window_from_axis5(ctx, window_start_abs, window_end_abs);
 				vs.axis6_window_start_from_left_mm = window_start_abs - plc_leftlimit[5];
 				vs.axis6_window_end_from_left_mm = window_end_abs - plc_leftlimit[5];
@@ -4016,7 +3786,7 @@ int main()
 			vs.cylinder_cmd[1] = cylinder2_cmd;
 			vs.cylinder_cmd[2] = cylinder3_cmd;
 			vs.cylinder_cmd[3] = cylinder4_cmd;
-			vs.guidewire_mode = static_cast<int>(guidewire_mode);
+			vs.guidewire_mode = 0;
 			vs.axis1_phase = planned_return_phase_for_axis(0);
 			vs.axis6_phase = planned_return_phase_for_axis(5);
 			vs.startup_phase = static_cast<int>(startup.phase);
@@ -4315,12 +4085,12 @@ int main()
 					{
 						DeliveryTrackingAxis tracking_axis = DeliveryTrackingAxis::Axis1;
 						bool forward_tracking_mode = false;
-						if (guidewire_mode == GuidewireMode::None && !axis1_reverse_pressed)
+						if (!axis1_reverse_pressed)
 						{
 							tracking_axis = DeliveryTrackingAxis::Axis1;
 							forward_tracking_mode = true;
 						}
-						else if (guidewire_mode == GuidewireMode::Independent && !axis6_effective_reverse_pressed)
+						else if (false && !axis6_effective_reverse_pressed)
 						{
 							tracking_axis = DeliveryTrackingAxis::Axis6;
 							forward_tracking_mode = true;
@@ -4484,9 +4254,7 @@ int main()
 					spacing_recovery.reset();
 					clear_axis1_delivery_mapping();
 			clear_cylinder_manual_overrides();
-					guidewire_mode = GuidewireMode::None;
 					axis6_crawl.enabled = false;
-					axis6_window_locked = false;
 					clear_cylinder_manual_overrides();
 					tracking_controller.disable_compensation();
 					ff.set_enabled(0, false);
@@ -4610,9 +4378,7 @@ int main()
 							{
 								if (!startup.completed)
 								{
-									guidewire_mode = GuidewireMode::None;
 									axis6_crawl.enabled = false;
-									axis6_window_locked = false;
 								}
 								startup.recovery_mode = false;
 								startup.direct_positioning = false;

@@ -207,9 +207,7 @@ namespace startup_sequence
 			return false;
 		}
 
-		*ctx.guidewire_mode = GuidewireMode::None;
 		ctx.axis6_crawl->enabled = false;
-		*ctx.axis6_window_locked = false;
 		ctx.startup->phase = ctx.startup->recovery_mode
 			? StartupPhase::RecoveryMoveAxis1267
 			: StartupPhase::ReleaseClamps;

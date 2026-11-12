@@ -37,3 +37,7 @@ R2-8 的51条原断言已复制到 tools/refactor_baseline/behavior_probes.cpp�
 已确认：删除启动单柄锁定/3秒等待、重映射、单柄跟随、换向保护、ModeSelection及保存还原、相关内部命令RequestModeSwitch/SetReverseMode。输入固定587→轴1、582→轴6；缺任何一柄仍走原双柄保持。实验会话的single_handle_mode元数据也删除。
 
 34场景/27,197拍逐值相等（logs/delete1/result.json），11个保留测试程序通过（logs/delete1_tests.log）。R2-8原51条中仅删除单柄分支的4条断言，47条保留断言通过（logs/delete1_probes.log）。删除dual_control_test的test_single_mapping_mirror、main_recovery_test的一条单柄恢复断言；B6与恢复双柄断言保留。抽取边界改用仍存在的片段。
+
+### 3.1.2 导丝独立模式
+
+已确认：删除guidewire_mode模块、独立crawl与专用同步/窗口锁定、四个非Dual计划回退模式及Axis1/Axis6重基准分支。Dual=5、Both=2保留原数值，公共状态mode仍发送0。Dual使用的rebase_axis1/rebase_dual、轴6基准/旋转/跟随窗口仍在。黄金34场景/27,197拍逐值相等，11个离线程序、47条R2断言通过（logs/delete2*）。删除两个单柄/独立窗口兼容断言和两个仅验证独立模式保存的断言；保留控制与同步断言。已编入PLC的接口不变。

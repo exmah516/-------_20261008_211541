@@ -34,7 +34,7 @@ extract('mapping_helpers', 'main.cpp', '\tauto clear_axis1_delivery_mapping =', 
 extract('connection', 'main.cpp', '\t\tconst bool connection_hold_active =', '\t\tif (!initial_sync_done)')
 extract('button', 'main.cpp', '\t\tconst bool spacing_recovery_button_pressed =', '\t\t// 换手/屈曲恢复期间冻结方向')
 extract('save', 'main.cpp', '\t\tif (spacing_recovery_button_press_edge)', '\t\t// 该映射只属于')
-extract('mapping_guard', 'main.cpp', '\t\tif (guidewire_mode != GuidewireMode::None ||', '\t\t// 恢复键只登记请求')
+extract('mapping_guard', 'main.cpp', '\t\tif (axis1_reverse_pressed ||', '\t\t// 恢复键只登记请求')
 extract('entry', 'main.cpp', '\t\t\tauto calculate_spacing_recovery_remaining =', '\t\t\tif (emergency_retract_active)')
 extract('action', 'main.cpp', '\t\t\telse if (spacing_recovery.active())', '\t\t\telse if (motion_startup_active)')
 extract('exit', 'main.cpp', '\t\tconst DWORD spacing_recovery_exit_elapsed_ms =', '\t\tconst bool axis4_manual_error_now =')

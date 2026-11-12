@@ -161,8 +161,7 @@
     <ClCompile Include="ads_communication.cpp" />
     <ClCompile Include="plc_io.cpp" />
     <ClCompile Include="motion_sync.cpp" />
-    <ClCompile Include="guidewire_mode.cpp" />
-    <ClCompile Include="force_feedback.cpp" />
+<ClCompile Include="force_feedback.cpp" />
     <ClCompile Include="delivery_tracking.cpp" />
     <ClCompile Include="arm_manual_ads_service.cpp" />
     <ClCompile Include="startup_sequence.cpp" />
@@ -187,8 +186,7 @@
     <ClInclude Include="ads_communication.h" />
     <ClInclude Include="plc_io.h" />
     <ClInclude Include="motion_sync.h" />
-    <ClInclude Include="guidewire_mode.h" />
-    <ClInclude Include="force_feedback.h" />
+<ClInclude Include="force_feedback.h" />
     <ClInclude Include="delivery_tracking.h" />
     <ClInclude Include="handle_net_distance.h" />
     <ClInclude Include="arm_manual_ads_service.h" />
