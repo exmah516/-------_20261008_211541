@@ -100,7 +100,7 @@ struct ControlConfig
 	double axis1_window_left_from_left_mm = 5.0;
 	double axis1_window_right_from_left_mm = 30.0;
 	// axis6 相对 axis5 的间距窗口 g = axis6_from_left - axis5_from_left，范围 [gmin, gmin+size]。
-	// 双手柄与单手柄调试均使用 g = 1～33 mm。
+	// 双手柄使用 g = 1～33 mm。
 	double catheter_axis6_window_size_mm = 32.0;
 	double catheter_axis6_window_min_gap_from_axis5_mm = 1.0;
 	// 主动换手使用固定间距目标。
@@ -120,14 +120,11 @@ struct ControlConfig
 	DWORD cyl3_clamp_wait_ms = 150;
 	DWORD cyl4_release_wait_ms = 500;
 	DWORD cyl4_clamp_wait_ms = 150;
-	// 启动最终姿态下的 axis6-axis5 间距，独立于运行时换手目标。
+	// 公共自检目标的 axis6-axis5 间距，独立于运行时换手目标。
 	double startup_g_mm = 13.0;
-	// 标准启动中间夹持阶段的轴5/6间距，与运行时窗口相互独立。
-	double axis56_ready_gap_mm = 15.0;
 	double axis3_delivery_stop_from_left_mm = 20.0;
-	double axis3_delivery_release_hysteresis_mm = 2.0;
-	// 单/双手柄导管正向递送中，axis1 每次计划回退后前 10 mm 名义输入额外前进 2 mm。
-	// 0 表示关闭；UI 与内部均限制在 [0, 5] mm。
+	// 双手柄导管正向递送中，axis1 每次计划回退后前 10 mm 名义输入额外前进 2 mm。
+	// 0 表示关闭；内部限制在 [0, 5] mm。
 	double axis1_post_return_lead_mm = 2.0;
 	double axis1_post_return_lead_limit_mm = 5.0;
 	double axis1_post_return_mapping_span_mm = 10.0;
@@ -135,7 +132,7 @@ struct ControlConfig
 	// 不改变 PLC/NC 内已有的硬限位与安全逻辑。
 	double axis6_soft_limit_from_left_mm = 660.0;
 
-	// 手动间距恢复：582 手柄仅驱动轴3/5/6向远离左限位方向等位移移动。
+	// 屈曲恢复：587 手柄仅驱动轴3/5/6向远离左限位方向等位移移动。
 	double spacing_recovery_speed_limit_mm_s = 40.0;
 	double spacing_recovery_axis3_max_from_left_mm = 650.0;
 	double spacing_recovery_axis5_max_from_left_mm = 665.0;
@@ -152,8 +149,6 @@ struct ControlConfig
 	double handoff_stop_velocity_mm_s = 0.5;
 	// 线性增量抗噪死区：仅用于抑制差分噪声，不承担方向门控。
 	double linear_increment_noise_deadband_mm = 0.02;
-	// 正反切换一次性触发保护距离（离开该距离后重新允许触发）。
-	double reverse_switch_trigger_guard_mm = 2.0;
 
 	// PLC 规划快速回退参数。
 	double axis1_return_velocity_mm_s = 110.0;
@@ -172,29 +167,7 @@ struct ControlConfig
 	// 手柄低通滤波。
 	double linear_handle_alpha = 0.25;
 	double rotational_handle_alpha = 0.20;
-	// 开始控制时的低速定位仅使用于已完成自检的目标校正。
-	DWORD startup_clamp_settle_delay_ms = 300;
-	DWORD startup_recovery_stage_delay_ms = 2000;
-	double startup_motion_speed_scale = 0.005;
-	unsigned short startup_cyl3_open = 500;
-	unsigned short startup_cyl4_open = 5;
-	unsigned short startup_cyl3_clamp = 0;
-	unsigned short startup_cyl4_clamp = 1000;
-	// PLC 自检完成后的器械装卸等待姿态；旧 PLC 无就绪标志时也用于兼容判定。
-	double startup_loading_axis1_from_left_mm = 96.0;
-	double startup_loading_axis3_from_left_mm = 500.0;
-	double startup_loading_axis5_from_left_mm = 530.0;
-	double startup_loading_axis6_from_left_mm = 580.0;
-	double startup_loading_pose_tolerance_mm = 2.0;
-	// 标准装卸启动的中间移动目标。
-	double startup_axis1_ready_from_left_mm = 28.0;
-	double startup_axis5_ready_from_left_mm = startup_loading_axis3_from_left_mm + 10.0;
-	// 未经 UI 覆盖时采用的最终启动目标。
-	double startup_final_axis1_default_from_left_mm = 28.0;
-	double startup_final_axis3_default_from_left_mm = 610.0; 
-	double startup_final_axis5_default_from_left_mm = 615.0;
-	double startup_final_axis6_default_from_left_mm = 628.0; // = axis5(615) + startup_g_mm(13)
-	double startup_rot_arrive_tol_deg = 0.2;
+
 };
 
 struct CylinderPreset
@@ -618,14 +591,7 @@ struct StartupState
 {
 	StartupPhase phase = StartupPhase::WaitForEnter;
 	bool completed = false;
-	double final_axis1_from_left_mm = 20.0;
-	double final_axis3_from_left_mm = 649.0;
-	double final_axis5_from_left_mm = 649.0;
-	double final_axis6_from_left_mm = 650.0;
-	double final_axis2_deg = 0.0;
-	double final_axis7_deg = 0.0;
 	bool loading_ready_symbol_available = false;
-	bool loading_ready_plc = false;
 };
 
 struct AppContext
@@ -650,7 +616,6 @@ struct AppContext
 	double* plc_init_pos = nullptr;
 	double* plc_leftlimit = nullptr;
 	double* plc_act_pos_from_left = nullptr;
-	double* plc_v_limit = nullptr;
 	double plc_act_velocity_mm_s[7] = {};
 	std::uint64_t plc_snapshot_sequence = 0;
 	std::int64_t plc_snapshot_qpc_ticks = 0;
@@ -664,7 +629,6 @@ struct AppContext
 	// 常规导管/导丝基线状态。
 	double* axis3_base_rel = nullptr;
 	double* axis5_base_rel = nullptr;
-	double* axis6_mirror_base_rel = nullptr;
 	double* axis2_hold_rel = nullptr;
 	double* axis7_hold_rel = nullptr;
 	double* axis1_prev_linear_filtered = nullptr;
@@ -673,10 +637,4 @@ struct AppContext
 	double* axis6_prev_rot_filtered = nullptr;
 	double* axis1_follow_cmd_abs = nullptr;
 	double* axis6_follow_cmd_abs = nullptr;
-	bool* axis1_reverse_switch_guard_active = nullptr;
-	bool* axis6_reverse_switch_guard_active = nullptr;
-	double* axis1_prev_abs_for_trigger = nullptr;
-	double* axis6_prev_abs_for_trigger = nullptr;
-	bool* axis1_prev_abs_valid = nullptr;
-	bool* axis6_prev_abs_valid = nullptr;
 };

@@ -22,14 +22,14 @@ def between(text, start, end):
 
 parts = {
     'motion': between(source, '\t\t\t\tconst double tol = cfg.crawl_arrive_tol_mm;',
-                      '\n\t\t\t}\n\n\t\t\tif (!axis6_soft_limit_hold'),
+                      '\n\t\t\t}\n\n\t\t\taxis1_prev_linear_filtered ='),
     'windows': between(sync, '\tdouble from_left_to_abs', '\tbool rebase_axis1_after_return'),
     'target_safety': between(source, '\t\t\tauto planned_return_targets_safe =', '\t\t\tauto rebase_planned_return ='),
     'recovery_type': between(header, 'enum class SpacingRecoveryPhase', '// 公共开始控制保留'),
     'mode': between(source, '\tbool spacing_recovery_button_pressed_prev =', '\n\tdouble pending_selfcheck_target'),
     'direction': between(source, '\t\t// 换手/屈曲恢复期间冻结方向', '\t\tif (spacing_recovery_button_press_edge)'),
     'save': between(source, '\t\tif (spacing_recovery_button_press_edge)', '\t\t// 该映射只属于'),
-    'exit': between(source, '\t\t\t\tconst double recovered_axis3_from_left_mm =', '\t\t\t\tstd::cout << "屈曲恢复退出后'),
+    'exit': between(source, '\n\t\t\t\tspacing_recovery.reset();\n\t\t\t\tcontrol_active = true;', '\t\t\t\tstd::cout << "屈曲恢复退出后'),
     'switch': between(source, '\t\tif (axis1_reverse_pressed != axis1_reverse_pressed_prev)', '\t\taxis1_reverse_pressed_prev ='),
     'filter': between(header, 'struct HandleFilterState', 'struct ControlConfig'),
 }

@@ -41,18 +41,14 @@ static void test_main_gates()
     axis4_forward_request = false; cycle(37, 59); cycle(36, 58);
     assert(axis1_net_distance.net_mm() == 14 && axis6_net_distance.net_mm() == 7);
     for (bool* hold : { &connection_hold_active, &ads_soft_hold_active, &handle_soft_hold_active,
-        &return_ads_fault_hold, &estop_hold_active, &emergency_retract_active, &axis6_soft_limit_hold,
-        &manual_cylinder_override_active, &startup.running, &spacing_recovery.running,
+        &return_ads_fault_hold, &estop_hold_active,
+        &manual_cylinder_override_active,  &spacing_recovery.running,
         &spacing_recovery.requested })
     {
         const double before1 = axis1_net_distance.net_mm(), before6 = axis6_net_distance.net_mm();
         *hold = true; cycle(100, 100); *hold = false; cycle(36, 58);
         assert(axis1_net_distance.net_mm() == before1 && axis6_net_distance.net_mm() == before6);
     }
-    single_handle_mode = true; cycle(35, 57); cycle(34, 50);
-    assert(axis1_net_distance.net_mm() == 16 && axis6_net_distance.net_mm() == 7);
-    guidewire_mode = GuidewireMode::Independent; cycle(10, 49); cycle(0, 48);
-    assert(axis1_net_distance.net_mm() == 16 && axis6_net_distance.net_mm() == 8);
     std::cout << "PASS: production gates exclude full handoff, automatic modes, faults, axis4 jog and inactive axes\n";
 }
 

@@ -9,7 +9,6 @@
 namespace motion_sync
 {
 	double from_left_to_abs(const AppContext& ctx, int axis_index, double from_left_mm);
-	double from_left_to_rel(const AppContext& ctx, int axis_index, double from_left_mm);
 	double axis1_window_left_abs(const AppContext& ctx);
 	double axis1_window_right_abs(const AppContext& ctx);
 	double axis6_window_size_mm(const AppContext& ctx);
@@ -31,6 +30,6 @@ namespace motion_sync
 	bool sync_all(AppContext& ctx, int samples);
 
 	void capture_axis1_follow_baseline(AppContext& ctx);
-	void apply_axis1_mirror_from_abs(AppContext& ctx, double axis1_abs_cmd, bool include_axis6);
+	void apply_axis1_mirror_from_abs(AppContext& ctx, double axis1_abs_cmd);
 }
 

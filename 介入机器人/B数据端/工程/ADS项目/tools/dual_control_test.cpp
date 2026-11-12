@@ -103,7 +103,7 @@ static Outcome tick(Plant p, double raw1, double raw6, bool reverse_input=false,
     const bool axis3_delivery_stop_active=false;
     auto is_within_range=[](double x,double lo,double hi,double tol) { return x>=lo-tol && x<=hi+tol; };
     auto capture_axis1_follow_baseline=[]() {};
-    auto apply_axis1_mirror_from_abs=[&](double x,bool) {
+    auto apply_axis1_mirror_from_abs=[&](double x) {
         pos[4]=axis5_base_rel+(x-axis1_crawl.base_rel);
         pos[2]=axis3_base_rel+(x-axis1_crawl.base_rel);
     };
@@ -616,7 +616,7 @@ static void test_pending_guards() {
     require(cancel_calls==0&&dual_handoff.active(),"transient connection hold preserves handoff ownership");
     connection_hold_active=false;
     for(bool* flag:{&estop_hold_active,&return_ads_fault_hold,
-                   &axis6_soft_limit_hold,
+
                    &spacing_recovery.requested}) {
         dual_handoff.axis6=true; *flag=true;
         const int before=cancel_calls;
@@ -731,7 +731,7 @@ static void test_lead_lifecycle() {
     axis1_reverse_pressed=false; planned_return.running=false; complete();
     for(bool* flag:{&connection_hold_active,&ads_soft_hold_active,&return_ads_fault_hold,
         &estop_hold_active,
-        &axis6_soft_limit_hold,&spacing_recovery.requested}) {
+        &spacing_recovery.requested}) {
         arm_axis1_delivery_mapping(); *flag=true; guard();
         require(!axis1_delivery_mapping_active,"保持与恢复接管清除先行");
         *flag=false;

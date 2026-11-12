@@ -19,7 +19,6 @@ namespace AdsSymbol
 	const char* leftlimit = "G.leftlimit";
 	const char* act_pos_from_left = "G.act_pos_from_left";
 	const char* refer_from_left = "G.refer_from_left";
-	const char* v_limit = "G.v_limit";
 	const char* cylinder1_value = "G.cylinder1_value";
 	const char* cylinder2_value = "G.cylinder2_value";
 	const char* cylinder3_value = "G.cylinder3_value";
@@ -253,136 +252,15 @@ namespace plc_io
 		return success;
 	}
 
-	bool read_force_sample(AppContext& ctx, ForceSampleFrame& sample)
-	{
-		if (ctx.ads_service != nullptr)
-		{
-			AdsFastSnapshot snapshot{};
-			if (!ctx.ads_service->latest_snapshot(snapshot) || !snapshot.force_valid)
-			{
-				return false;
-			}
-			sample.ft_1_value = snapshot.ft_1_value;
-			sample.fn_1_value = snapshot.fn_1_value;
-			sample.fn_2_value = snapshot.fn_2_value;
-			sample.ft_2_value = snapshot.ft_2_value;
-			sample.axis1_pos_rel = snapshot.act_pos_rel[0];
-			sample.axis2_pos_rel = snapshot.act_pos_rel[1];
-			sample.ft_1_value_v = static_cast<double>(sample.ft_1_value) / 1000.0;
-			sample.fn_1_value_v = static_cast<double>(sample.fn_1_value) / 1000.0;
-			sample.fn_2_value_v = static_cast<double>(sample.fn_2_value) / 1000.0;
-			sample.ft_2_value_v = static_cast<double>(sample.ft_2_value) / 1000.0;
-			sample.valid = true;
-			sample.tick_ms = GetTickCount();
-			sample.qpc_ticks = snapshot.qpc_ticks;
-			return true;
-		}
-
-		LARGE_INTEGER qpc_before{};
-		LARGE_INTEGER qpc_after{};
-		QueryPerformanceCounter(&qpc_before);
-		// 力采样统一读取 ADS 中的 PLC 原始变量。
-		double act_pos_snapshot[7] = { 0.0 };
-		const char* symbols[] = {
-			AdsSymbol::ft_1_value,
-			AdsSymbol::fn_1_value,
-			AdsSymbol::fn_2_value,
-			AdsSymbol::ft_2_value,
-			AdsSymbol::act_pos
-		};
-		const unsigned long lengths[] = {
-			static_cast<unsigned long>(sizeof(sample.ft_1_value)),
-			static_cast<unsigned long>(sizeof(sample.fn_1_value)),
-			static_cast<unsigned long>(sizeof(sample.fn_2_value)),
-			static_cast<unsigned long>(sizeof(sample.ft_2_value)),
-			static_cast<unsigned long>(sizeof(act_pos_snapshot))
-		};
-		void* outputs[] = {
-			&sample.ft_1_value,
-			&sample.fn_1_value,
-			&sample.fn_2_value,
-			&sample.ft_2_value,
-			act_pos_snapshot
-		};
-		if (!ads_read_sum(ctx, symbols, lengths, outputs, 5))
-		{
-			QueryPerformanceCounter(&qpc_after);
-			sample.qpc_ticks = qpc_before.QuadPart + (qpc_after.QuadPart - qpc_before.QuadPart) / 2;
-			return false;
-		}
-		QueryPerformanceCounter(&qpc_after);
-
-		// 轴1位置采用 G.Act_pos 的第 1 轴（数组下标 0，单位与 PLC Act_pos 保持一致）。
-		sample.axis1_pos_rel = act_pos_snapshot[0];
-		// 轴2位置由倍福直接给出角度，力反馈重力补偿不再使用电机 counts 换算。
-		sample.axis2_pos_rel = act_pos_snapshot[1];
-		// PLC 原始输入约定 1000 counts = 1 V。所有后续标零、标定和日志统一使用伏特。
-		sample.ft_1_value_v = static_cast<double>(sample.ft_1_value) / 1000.0;
-		sample.fn_1_value_v = static_cast<double>(sample.fn_1_value) / 1000.0;
-		sample.fn_2_value_v = static_cast<double>(sample.fn_2_value) / 1000.0;
-		sample.ft_2_value_v = static_cast<double>(sample.ft_2_value) / 1000.0;
-		sample.valid = true;
-		sample.tick_ms = GetTickCount();
-		sample.qpc_ticks = qpc_before.QuadPart + (qpc_after.QuadPart - qpc_before.QuadPart) / 2;
-		return true;
-	}
-
 	bool write_refer(AppContext& ctx)
 	{
 		// 将当前 pos[7] 写回 PLC 参考位数组 G.refer。
 		return ads_write(ctx, AdsSymbol::refer, sizeof(double) * 7, ctx.pos);
 	}
 
-	bool read_v_limit(AppContext& ctx)
-	{
-		// 读取 PLC 当前速度上限（用于启动准备阶段缩放/恢复）。
-		return ads_read(ctx, AdsSymbol::v_limit, sizeof(double) * 7, ctx.plc_v_limit);
-	}
-
-	bool write_v_limit(AppContext& ctx, const double* values)
-	{
-		return ads_write(ctx, AdsSymbol::v_limit, sizeof(double) * 7, values);
-	}
-
-	bool read_startup_loading_ready(AppContext& ctx, bool& ready)
-	{
-		if (ctx.ads_service != nullptr)
-		{
-			if (ctx.ads_service->stats().state != AdsConnectionState::Running) return false;
-			ready = ctx.ads_service->event_state().startup_loading_ready;
-			return true;
-		}
-		return ads_read(ctx, AdsSymbol::startup_loading_ready, sizeof(ready), &ready);
-	}
-
 	bool write_startup_loading_ready(AppContext& ctx, bool ready)
 	{
 		return ads_write(ctx, AdsSymbol::startup_loading_ready, sizeof(ready), &ready);
-	}
-
-	bool write_cylinder_values(AppContext& ctx, const unsigned short values[4])
-	{
-		if (values == nullptr) return false;
-		const char* symbols[] = {
-			AdsSymbol::cylinder2_value,
-			AdsSymbol::cylinder4_value,
-			AdsSymbol::cylinder1_value,
-			AdsSymbol::cylinder3_value
-		};
-		const unsigned long lengths[] = {
-			sizeof(values[1]), sizeof(values[3]), sizeof(values[0]), sizeof(values[2])
-		};
-		const void* inputs[] = { &values[1], &values[3], &values[0], &values[2] };
-		return ads_write_sum(ctx, symbols, lengths, inputs, 4);
-	}
-
-	bool write_startup_smoothing_bypass(AppContext& ctx, bool enabled)
-	{
-		return ads_write(
-			ctx,
-			AdsSymbol::startup_smoothing_bypass,
-			sizeof(enabled),
-			&enabled);
 	}
 
 	void load_pos_from_actual(AppContext& ctx)

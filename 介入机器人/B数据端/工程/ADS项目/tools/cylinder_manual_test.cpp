@@ -93,7 +93,7 @@ int main() {
         f.open(index);
         check(f.ads_communication.reads==1, "repeated opening retains the initial PLC value without extra ADS reads");
     }
-    for (int gate : {0,1,2,3,4,5,6,8,9,10,11,12,13,14}) {
+    for (int gate : {0,1,2,3,4,5,6,8,9,10,11,12,13}) {
         Fixture f; f.open(0);
         switch(gate) {
         case 0: f.has_new_ads_snapshot=false; break;
@@ -109,7 +109,6 @@ int main() {
         case 11: f.ads_events.axis1_return_busy=true; break;
         case 12: f.ads_events.axis6_return_busy=true; break;
         case 13: f.spacing_recovery.requested=true; break;
-        case 14: f.axis6_soft_limit_hold=true; break;
         }
         f.tick();
         check(!f.allowed && !f.output.cylinder_valid, "PLC unavailable or an automatic cylinder owner still blocks manual output");

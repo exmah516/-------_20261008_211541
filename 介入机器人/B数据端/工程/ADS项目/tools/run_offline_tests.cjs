@@ -35,7 +35,7 @@ if (selected === 'all' || selected === 'dual') {
     const source = read('main.cpp'), header = read('control_types.h'), sync = read('motion_sync.cpp');
     const parts = {
         axis4_speed: between(source,'\tconstexpr double axis4_coupled_axis6_speed_mm_s =','\n'),
-        motion: between(source,'\t\t\t\tconst double tol = cfg.crawl_arrive_tol_mm;','\n\t\t\t}\n\n\t\t\tif (!axis6_soft_limit_hold'),
+        motion: between(source,'\t\t\t\tconst double tol = cfg.crawl_arrive_tol_mm;','\n\t\t\t}\n\n\t\t\taxis1_prev_linear_filtered ='),
         cancel: between(source,'\t\tif ((planned_return.active() || dual_handoff.active()) &&','\t\t// 正式控制阶段：'),
         axis4_pause: between(source,'\t\tconst bool axis4_paused_by_axis6 =','\t\tads_output.axis4_forward_req'),
         mapping_helpers: between(source,'\tauto clear_axis1_delivery_mapping =','\tauto apply_axis1_mirror_from_abs ='),
@@ -49,12 +49,12 @@ if (selected === 'all' || selected === 'dual') {
         mode: between(source,'\tbool spacing_recovery_button_pressed_prev =','\n\tdouble pending_selfcheck_target'),
         direction: between(source,'\t\t// 换手/屈曲恢复期间冻结方向','\t\tif (spacing_recovery_button_press_edge)'),
         save: between(source,'\t\tif (spacing_recovery_button_press_edge)','\t\t// 该映射只属于'),
-        exit: between(source,'\t\t\t\tconst double recovered_axis3_from_left_mm =','\t\t\t\tstd::cout << "屈曲恢复退出后'),
+        exit: between(source,'\n\t\t\t\tspacing_recovery.reset();\n\t\t\t\tcontrol_active = true;','\t\t\t\tstd::cout << "屈曲恢复退出后'),
         switch: between(source,'\t\tif (axis1_reverse_pressed != axis1_reverse_pressed_prev)','\t\taxis1_reverse_pressed_prev ='),
         filter: between(header,'struct HandleFilterState','struct ControlConfig')
     };
     const fields = new Set([...((parts.motion+parts.windows).matchAll(/cfg(?:\.|->)(\w+)/g))].map(m=>m[1]));
-    for (const f of ['linear_increment_noise_deadband_mm','axis3_delivery_stop_from_left_mm','axis3_delivery_release_hysteresis_mm']) fields.add(f);
+    for (const f of ['linear_increment_noise_deadband_mm','axis3_delivery_stop_from_left_mm']) fields.add(f);
     parts.config = [...fields].sort().map(f => {
         const m = header.match(new RegExp('double\\s+'+f+'\\s*=\\s*([^;]+)'));
         if (!m) throw Error('Missing config: '+f);
@@ -71,7 +71,7 @@ if (selected === 'all' || selected === 'recovery') {
         cancel: between(source, '\tauto reset_planned_return =', '\tauto axis6_from_left_mm ='),
         guard: between(source, '\t\tif ((planned_return.active() || dual_handoff.active()) &&', '\t\t// 正式控制阶段：'),
         save: between(source, '\t\tif (spacing_recovery_button_press_edge)', '\t\t// 该映射只属于'),
-        enter: between(source, '\t\t\tauto calculate_spacing_recovery_remaining =', '\t\t\tif (axis6_soft_limit_hold)'),
+        enter: between(source, '\t\t\tauto calculate_spacing_recovery_remaining =', '\t\t\tif (spacing_recovery.active())'),
         output: between(source, '\t\t\tauto apply_planned_return_outputs =', '\t\t\tauto enter_planned_return_retry ='),
         refresh: between(source, '\t\t\tauto refresh_planned_return_leg =', '\t\t\tauto planned_return_targets_safe ='),
         failure: between(source, '\t\t\tauto fail_planned_return =', '\t\tauto begin_planned_return ='),

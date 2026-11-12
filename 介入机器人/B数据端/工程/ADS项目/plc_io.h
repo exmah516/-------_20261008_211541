@@ -14,7 +14,6 @@ namespace AdsSymbol
 	extern const char* leftlimit;
 	extern const char* act_pos_from_left;
 	extern const char* refer_from_left;
-	extern const char* v_limit;
 	extern const char* cylinder1_value;
 	extern const char* cylinder2_value;
 	extern const char* cylinder3_value;
@@ -57,14 +56,8 @@ namespace AdsSymbol
 namespace plc_io
 {
 	bool read_plc_state(AppContext& ctx);
-	bool read_force_sample(AppContext& ctx, ForceSampleFrame& sample);
 	bool write_refer(AppContext& ctx);
-	bool read_v_limit(AppContext& ctx);
-	bool write_v_limit(AppContext& ctx, const double* values);
-	bool read_startup_loading_ready(AppContext& ctx, bool& ready);
 	bool write_startup_loading_ready(AppContext& ctx, bool ready);
-	bool write_cylinder_values(AppContext& ctx, const unsigned short values[4]);
-	bool write_startup_smoothing_bypass(AppContext& ctx, bool enabled);
 	void load_pos_from_actual(AppContext& ctx);
 
 	bool read_axis_return_status(AppContext& ctx, const AxisReturnAdsSymbols& symbols, AxisReturnStatus& status);

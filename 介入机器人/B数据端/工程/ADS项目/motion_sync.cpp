@@ -1,5 +1,5 @@
 // 文件职责说明：
-// 1) 实现运动同步相关流程：窗口计算、窗口重建、axis1/axis6/all 重同步。
+// 1) 实现运动同步相关流程：窗口计算与双手柄重同步。
 // 2) 复用原控制逻辑中的状态更新次序与基线刷新策略。
 // 3) 不改变主循环状态机，仅提供可复用的同步函数。
 #include "motion_sync.h"
@@ -15,12 +15,6 @@ namespace motion_sync
 	{
 		// 左限位参考坐标 -> PLC 绝对坐标。
 		return ctx.plc_leftlimit[axis_index] + from_left_mm;
-	}
-
-	double from_left_to_rel(const AppContext& ctx, int axis_index, double from_left_mm)
-	{
-		// 左限位参考坐标 -> 上位机相对坐标（refer 使用的坐标系）。
-		return from_left_to_abs(ctx, axis_index, from_left_mm) - ctx.plc_init_pos[axis_index];
 	}
 
 	double axis1_window_left_abs(const AppContext& ctx)
@@ -66,9 +60,7 @@ namespace motion_sync
 			(!ctx.axis1_handle_filter->inited && ctx.axis1_input_handle == nullptr) ||
 			ctx.axis1_crawl == nullptr || ctx.axis2_hold_rel == nullptr ||
 			ctx.axis7_hold_rel == nullptr || ctx.axis6_crawl == nullptr ||
-			ctx.axis6_follow_cmd_abs == nullptr ||
-			ctx.axis6_prev_abs_for_trigger == nullptr ||
-			ctx.axis6_prev_abs_valid == nullptr)
+			ctx.axis6_follow_cmd_abs == nullptr)
 		{
 			return false;
 		}
@@ -102,12 +94,8 @@ namespace motion_sync
 			ctx.axis1_crawl->max_abs(),
 			ctx.cfg->crawl_arrive_tol_mm);
 
-		*ctx.axis1_reverse_switch_guard_active = false;
-		*ctx.axis1_prev_abs_for_trigger = ctx.plc_act_pos[0] + ctx.plc_init_pos[0];
-		*ctx.axis1_prev_abs_valid = true;
 		*ctx.axis3_base_rel = ctx.plc_act_pos[2];
 		*ctx.axis5_base_rel = ctx.plc_act_pos[4];
-		*ctx.axis6_mirror_base_rel = ctx.plc_act_pos[5];
 
 		// 导管侧双腿回退包含 axis6 时，Axis1 重建也必须同步刷新
 		// axis6 的累计目标和窗口，否则下一拍联动会继续使用回退前的旧目标。
@@ -121,8 +109,6 @@ namespace motion_sync
 			ctx.axis6_crawl->max_abs(),
 			ctx.cfg->crawl_arrive_tol_mm);
 		ctx.axis6_crawl->enabled = true;
-		*ctx.axis6_prev_abs_for_trigger = *ctx.axis6_follow_cmd_abs;
-		*ctx.axis6_prev_abs_valid = true;
 		return true;
 	}
 
@@ -220,13 +206,9 @@ namespace motion_sync
 		*ctx.axis1_follow_cmd_abs = ctx.plc_act_pos[0] + ctx.plc_init_pos[0];
 
 		*ctx.axis2_hold_rel = preserved_axis2_hold_rel;
-		*ctx.axis1_reverse_switch_guard_active = false;
-		*ctx.axis1_prev_abs_for_trigger = *ctx.axis1_follow_cmd_abs;
-		*ctx.axis1_prev_abs_valid = true;
 
 		*ctx.axis3_base_rel = ctx.plc_act_pos[2];
 		*ctx.axis5_base_rel = ctx.plc_act_pos[4];
-		*ctx.axis6_mirror_base_rel = ctx.plc_act_pos[5];
 
 		ctx.axis6_crawl->base_rel = ctx.plc_act_pos[5];
 		ctx.axis6_crawl->rot_base_rel = preserved_axis7_hold_rel;
@@ -235,9 +217,6 @@ namespace motion_sync
 		ctx.axis6_crawl->window_active = false;
 		ctx.axis6_crawl->enabled = false;
 		*ctx.axis6_follow_cmd_abs = ctx.plc_act_pos[5] + ctx.plc_init_pos[5];
-		*ctx.axis6_reverse_switch_guard_active = false;
-		*ctx.axis6_prev_abs_for_trigger = *ctx.axis6_follow_cmd_abs;
-		*ctx.axis6_prev_abs_valid = true;
 		*ctx.axis7_hold_rel = preserved_axis7_hold_rel;
 
 		return true;
@@ -252,21 +231,13 @@ namespace motion_sync
 		*ctx.axis1_follow_cmd_abs = ctx.plc_act_pos[0] + ctx.plc_init_pos[0];
 		*ctx.axis3_base_rel = ctx.plc_act_pos[2];
 		*ctx.axis5_base_rel = ctx.plc_act_pos[4];
-		if (!ctx.axis6_crawl->enabled)
-		{
-			*ctx.axis6_mirror_base_rel = ctx.plc_act_pos[5];
-		}
 	}
 
-	void apply_axis1_mirror_from_abs(AppContext& ctx, double axis1_abs_cmd, bool include_axis6)
+	void apply_axis1_mirror_from_abs(AppContext& ctx, double axis1_abs_cmd)
 	{
 		const double axis1_delta_rel = axis1_abs_cmd - ctx.plc_init_pos[0] - ctx.axis1_crawl->base_rel;
 		ctx.pos[2] = *ctx.axis3_base_rel + axis1_delta_rel;
 		ctx.pos[4] = *ctx.axis5_base_rel + axis1_delta_rel;
-		if (include_axis6)
-		{
-			ctx.pos[5] = *ctx.axis6_mirror_base_rel + axis1_delta_rel;
-		}
 	}
 }
 
