@@ -1,0 +1,11 @@
+mode,width,cat_input,wire_input,handoffs,cat_actual,wire_actual
+delivery,25,0.1,0,5,-99.5,0
+delivery,25,0,0.1,4,0,-99.6
+delivery,25,0.1,0.1,4,-99.6,-99.6
+delivery,25,0.1,0.2,8,-99.2,-198.4
+delivery,25,0.2,0.1,15,-197,-98.5
+retraction,25,0.1,0,5,99.5,0
+retraction,25,0,0.1,3,0,99.7
+retraction,25,0.1,0.1,4,99.6,99.6
+retraction,25,0.1,0.2,7,99.3,198.6
+retraction,25,0.2,0.1,9,198.2,99.1

@@ -19,3 +19,13 @@
 与继续摘要的差异：250902 子目录确实没有 sln，但 C从端/250902.sln 存在。使用该实际解决方案。解决方案还引用测量工程；脚本只 BuildProject 250902。
 
 删除前标准离线套件 run_offline_tests.cjs all：11/11 程序成功。日志见 logs/before/。调研 F 已知的定位臂旧黄金/诊断失败保留为既有问题，不能通过改动断言掩盖。
+
+## 2. 删除前行为基线
+
+已确认：完整生产 main.cpp 主循环、真实 motion_sync/plc_io/force_feedback/Handle 编译到离线进程；仅时钟、ADS/Zenoh/记录文件/定位臂服务替换为内存端。不加载设备 DLL。34 个输入场景，27,197 个拍末快照，含7 refer、4电缸、fast、Req/clear mask、租约输出、49个主要状态字段。浮点用十六进制无损文本，逐字节比较。生成后第二次编译、运行全部相等；覆盖断言通过。正式源哈希见 tools/refactor_baseline/golden/manifest.json。
+
+R2-8 的51条原断言已复制到 tools/refactor_baseline/behavior_probes.cpp，生产片段抽取运行通过；现有11个离线程序全部通过。正式黄金输入从未启用单手柄初始化，后续不需要更换输入。内存PLC按100Hz推进，模拟请求、Busy/Done/Error边沿、单调generation及失败结果；不宣称模拟TwinCAT的1ms轨迹动力学。各阶段内瞬时状态仍由原有专项断言覆盖。
+
+运行：python tools/refactor_baseline/run.py；python tools/refactor_baseline/run_behavior_probes.py；node 介入机器人/B数据端/工程/ADS项目/tools/run_offline_tests.cjs all <日志目录>。
+
+早期 c986d50 只保存现有套件清单；本节的完整黄金提交才完成逐拍基线。草稿黄金留在 scratch，未作为正式预期值提交。

@@ -1,0 +1,46 @@
+behavior_probes.cpp
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+屈曲恢复：已激活，582 手柄仅控制轴3/5/6向远离左限位方向移动。
+连接保持激活：source=手柄; 保留回退任务，等待有效快照与手柄采样，清零力反馈。
+连接保持退出：source=fixture 保持 PLC 当前反馈位置，不恢复历史目标。axis2=12，axis7=34（相对角度）
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+SCENARIO 1 PASS held=Idle release_press=ClampWait
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+屈曲恢复：已激活，582 手柄仅控制轴3/5/6向远离左限位方向移动。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 3.75 mm。
+SCENARIO 2A PASS equal_steps=3.35 zero_negative_clear=1 settled_exit=100ms
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+屈曲恢复：已激活，582 手柄仅控制轴3/5/6向远离左限位方向移动。
+屈曲恢复：已到达轴3/5/6共同安全行程上限。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+屈曲恢复退出等待超时，已按轴3/5/6当前实际位置重同步。
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0.3 mm。
+SCENARIO 2B PASS common_limit=0.3 timeout_exit=2000ms
+587 屈曲恢复按键：按下，准备进入恢复模式。
+屈曲恢复：夹爪准备中，轴1保持；恢复速度上限 40 mm/s。
+屈曲恢复：已激活，582 手柄仅控制轴3/5/6向远离左限位方向移动。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+屈曲恢复：正在停止并重建跟随基准。
+连接保持激活：source=手柄; 保留回退任务，等待有效快照与手柄采样，清零力反馈。
+连接保持退出：source=fixture 保持 PLC 当前反馈位置，不恢复历史目标。axis2=12，axis7=34（相对角度）
+屈曲恢复退出后，双手柄方向按当前B6状态生效。
+屈曲恢复已退出并完成重同步，本次共同移动 0.4 mm。
+SCENARIO 2C PASS sync_failure_retry=1 ExitSync_hold_preserved=1
+连接保持激活：source=手柄; 保留回退任务，等待有效快照与手柄采样，清零力反馈。
+连接保持退出：source=fixture 保持 PLC 当前反馈位置，不恢复历史目标。axis2=12，axis7=34（相对角度）
+SCENARIO 3 PASS mode=dual before_progress=4 before_extra=0.8 after_extra=0
+连接保持激活：source=手柄; 保留回退任务，等待有效快照与手柄采样，清零力反馈。
+连接保持退出：source=fixture 保持 PLC 当前反馈位置，不恢复历史目标。axis2=12，axis7=34（相对角度）
+SCENARIO 3 PASS mode=single before_progress=4 before_extra=0.8 after_extra=0
+PASS assertions=51 no hardware or network calls
+

@@ -1,0 +1,25 @@
+[ADS-DIAG] build=Release Nov 12 2026 22:33:03；故障记录位于 ADS.exe 同目录的 ads_fault_diagnostics.log
+手柄接收速度100Hz记录：C:\Users\Sui\AppData\Local\Temp\refactor-baseline-edpqhf_i\handle_velocity_1000.csv
+手柄来源：主端（远程），等待有效采样。
+已接入远程手柄（物理 SN 587）。
+已接入远程手柄（物理 SN 582）。
+力反馈：关闭，可由主端切换。
+实验记录默认开启：records/日期/时间_auto，退出程序时保存完成。
+ADS 快照恢复：实际位置与手柄基准已重建。
+系统初始同步完成，进入就绪状态。
+ADS 目标 PLC 应用: MemoryPLC
+连接保持结束：实际位置与手柄基准已重建。
+连接保持退出：source=连接保持结束 保持 PLC 当前反馈位置，不恢复历史目标。axis2=12，axis7=34（相对角度）
+已在当前位置开始控制。
+[ADS-DIAG] 2026-11-12 22:33:9.163 build=Release new_snapshot=1 position_valid=1 state=2 age_us=0 rtt_us=0 failed=0 reconnects=0 plc_restarts=1 self_check=0 selfcheck_status=1 reinit_done=0 host_timeout=0/0 return_phase=0 legs=0 axis1_busy/error/id=0/0/0 axis6_busy/error/id=0/0/0
+[ADS-DIAG] last_failure_seq=0 failure_tick_ms=0 now_tick_ms=1900 No ADS call failure recorded; inspect readiness flags or snapshot wait
+ADS/PLC 运动条件未就绪：保持最后参考并丢弃故障期间手柄增量，原因见前面的诊断字段。
+连接保持激活：source=ADS; 保留回退任务，等待有效快照与手柄采样，清零力反馈。
+检测到 PLC 重启或应用重载：已重置运行状态，进入待机准备。
+PLC 自检完成标志变为 false，已停止当前控制。
+ADS 目标 PLC 应用: MemoryPLC
+寻参已复用
+ADS 快照恢复：实际位置与手柄基准已重建。
+连接保持退出：source=ADS 快照恢复 保持 PLC 当前反馈位置，不恢复历史目标。axis2=12，axis7=34（相对角度）
+PLC 自检已完成，已自动进入手柄控制。
+COVERAGE restart commits=0 complete=0 mapping=0 hold=1 spacing_active=0 fault=0 phases=800,0,0,0,0,0,0,0,0,0,
