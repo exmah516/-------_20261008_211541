@@ -4,6 +4,7 @@
 enum class ExperimentEventCode { SpacingRecoveryStart };
 static void record_experiment_event(ExperimentEventCode, int) {}
 #include <cmath>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -69,9 +70,9 @@ struct Fixture {
     struct ForceFeedbackStub {
         int completed[3]={};
         double position[3]={};
-        double force_587_f=0,force_587_n=0,force_582_f=0,force_582_n=0;
-        void capture_clamp_hold(int,bool,double,double) {}
-        void complete_clamp_hold(int channel,double axis_abs) {
+        struct { double force=0,torque=0; } smooth_582,smooth_587;
+        void capture_clamp_hold(int,double,double) {}
+        void complete_clamp_hold(int channel,double axis_abs,std::int64_t) {
             ++completed[channel]; position[channel]=axis_abs;
         }
     } ff;

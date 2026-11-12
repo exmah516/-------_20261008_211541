@@ -53,6 +53,9 @@ static void recording()
         force.fn_2_raw_v = 3.75; force.ft_2_raw_v = 4.5;
         force.clean_force_n = 1.0; force.clean_handle_torque_nm = .002;
         force.clean_force_2_n = 2.0; force.clean_handle_torque_2_nm = .003;
+        force.ff_582_out_f = -.3; force.ff_582_out_n = .001;
+        force.ff_587_out_f = .6; force.ff_587_out_n = -.002;
+        force.hold_582_active = true; force.hold_587_active = false;
         assert(recorder.enqueue_force(force));
         assert(!recorder.enqueue_force(force));
         if ((i & 1) == 0)
@@ -74,7 +77,15 @@ static void recording()
         if (file.path().filename() == "session.json") session = file.path().parent_path();
     assert(!session.empty());
     const auto force = csv(session / "force.csv"), motion = csv(session / "motion.csv"), events = csv(session / "events.csv");
-    assert(force.size() == 101 && force[0].size() == 16);
+    assert(force.size() == 101 && force[0].size() == 22);
+    const std::vector<std::string> appended = { "ff_582_out_f", "ff_582_out_n", "ff_587_out_f", "ff_587_out_n", "hold_582_active", "hold_587_active" };
+    assert(std::vector<std::string>(force[0].begin() + 16, force[0].end()) == appended);
+    for (std::size_t i = 1; i < force.size(); ++i) {
+        assert(force[i].size() == 22);
+        assert(std::stod(force[i][16]) == -.3 && std::stod(force[i][17]) == .001);
+        assert(std::stod(force[i][18]) == .6 && std::stod(force[i][19]) == -.002);
+        assert(force[i][20] == "1" && force[i][21] == "0");
+    }
     assert(motion.size() == 51 && motion[0].size() == 12);
     assert(events.size() == 3 && events[0].size() == 4);
     assert(events[0][2] == "event_code" && events[0][3] == "value");
@@ -91,7 +102,7 @@ static void recording()
     assert(motion[25][10] == "1" && motion[25][11] == "1" && std::stod(motion[25][8]) == 15);
     std::ifstream metadata(session / "session.json");
     std::string json((std::istreambuf_iterator<char>(metadata)), {});
-    assert(json.find("\"schema_version\": 7") != std::string::npos && json.find("test_complete") != std::string::npos);
+    assert(json.find("\"schema_version\": 8") != std::string::npos && json.find("test_complete") != std::string::npos);
     assert(recorder.start("auto", info)); recorder.stop_and_wait("second");
     int sessions = 0;
     for (const auto& file : fs::recursive_directory_iterator("records"))
@@ -102,7 +113,7 @@ static void recording()
     { std::ofstream file("records"); file << "not a directory"; }
     assert(!recorder.start("auto", info) && recorder.snapshot().error == ExperimentRecordingError::CreateDirectoryFailed);
     fs::current_path(original);
-    std::cout << "PASS: recorder actual CSV writes, 100/50 samples, events, validity, NaN, drain, duplicate rejection, schema7, separate sessions, I/O failure.\n";
+    std::cout << "PASS: recorder actual CSV writes, 100/50 samples, events, validity, NaN, drain, duplicate rejection, schema8, separate sessions, I/O failure.\n";
 }
 static bool close(double a, double b) { return std::abs(a-b) < 1e-9; }
 static void handoff_holds()
@@ -238,15 +249,15 @@ static void feedback()
     cfg.force_feedback_587_force_scale = .5; cfg.force_feedback_587_torque_scale = .5;
     double axis1_abs = 100, axis6_abs = 200;
     bool position_valid = true;
-    auto tick = [&](ULONGLONG now) {
+    auto tick = [&](std::int64_t now) {
         process_force_feedback(state, sample, wire, catheter, true, false,
             axis1_abs, axis6_abs, position_valid, now, cfg, cal, zero);
     };
-    auto capture_hold = [&](int channel, bool reverse) {
+    auto capture_hold = [&](int channel) {
         const bool guidewire = channel == 2;
-        state.capture_clamp_hold(channel, reverse,
-            guidewire ? state.force_582_f : state.force_587_f,
-            guidewire ? state.force_582_n : state.force_587_n);
+        state.capture_clamp_hold(channel,
+            guidewire ? state.smooth_582.force : state.smooth_587.force,
+            guidewire ? state.smooth_582.torque : state.smooth_587.torque);
     };
     tick(1); assert(state.force_582_f == 0 && state.force_587_f == 0);
     state.set_enabled(1, true); tick(10);
@@ -254,18 +265,11 @@ static void feedback()
     state.set_enabled(2, true); tick(20);
     assert(close(state.force_582_f,.5) && close(state.force_582_n,.001));
     assert(close(remote_handle_bridge::get_output(0).force,.5) && close(remote_handle_bridge::get_output(1).torque,.001));
-	// 阻尼只作用于对应手柄的轴向力，正速度减力、负速度增力，扭矩和另一侧不变。
-	cfg.force_feedback_damping_n_per_velocity = .1;
-	wire.fVels2[0] = 2.0;
-	catheter.fVels2[0] = -3.0;
-	tick(25);
-	assert(close(state.force_582_f,.3) && close(state.force_587_f,.8));
-	assert(close(state.force_582_n,.001) && close(state.force_587_n,.001));
-	wire.fVels2[0] = catheter.fVels2[0] = 0.0;
-	cfg.force_feedback_damping_n_per_velocity = 0.0;
-	tick(26);
-	assert(close(state.force_582_f,.5) && close(state.force_587_f,.5));
-	// 低通先于阻尼：5 倍单帧尖峰只让输出从 0.5 到 1.0，恢复后下一拍为 0.875。
+    // 数据端不再使用手柄速度，扭矩和轴向力只由标定、比例和保持决定。
+    wire.fVels2[0] = 20; catheter.fVels2[0] = -30; tick(25);
+    assert(close(state.force_582_f,.5) && close(state.force_587_f,.5));
+    assert(close(state.force_582_n,.001) && close(state.force_587_n,.001));
+    // 5倍单帧尖峰经低通后为1.0，恢复下一拍为0.875。
 	cfg.force_feedback_force_filter_alpha = .25;
 	sample.fn_1_value_v *= 5; sample.fn_2_value_v *= 5;
 	tick(27);
@@ -296,52 +300,67 @@ static void feedback()
     assert(close(state.force_587_f,.25) && state.force_587_n == 0);
     cfg.force_feedback_582_force_scale = cfg.force_feedback_587_force_scale = .5;
     cfg.force_feedback_582_torque_scale = cfg.force_feedback_587_torque_scale = .5;
-    tick(80);
-    capture_hold(1, false);
-    capture_hold(2, true);
+    state.reset_force_filters(); tick(80);
     sample.fn_1_value_v *= 2; sample.fn_2_value_v *= 2;
+    sample.ft_1_value_v *= 2; sample.ft_2_value_v *= 2;
+    tick(90);
+    const double held_f = .5 + .5 * (1 - std::exp(-.1));
+    const double held_n = .001 + .001 * (1 - std::exp(-.1));
+    assert(close(state.smooth_582.force, held_f) && close(state.smooth_587.force, held_f));
+    assert(close(state.smooth_582.torque, held_n) && close(state.smooth_587.torque, held_n));
+    capture_hold(1); capture_hold(2);
     tick(100);
-    assert(close(state.force_582_f,.5) && close(state.force_587_f,.5));
+    assert(close(state.force_582_f, held_f) && close(state.force_587_f, held_f));
+    assert(close(state.hold_582.torque, held_n) && close(state.hold_587.torque, held_n));
     axis1_abs = 90; axis6_abs = 210; tick(120);
-    assert(close(state.force_582_f,.5) && close(state.force_587_f,.5));
-    assert(!state.hold_582.handoff_complete && !state.hold_587.handoff_complete);
+    assert(!state.hold_582.blending && !state.hold_587.blending);
     axis1_abs = 100; axis6_abs = 200;
-    state.complete_clamp_hold(1, axis1_abs);
-    state.complete_clamp_hold(2, axis6_abs);
-    tick(150); assert(close(state.force_582_f,.5) && close(state.force_587_f,.5));
-    tick(5000); assert(close(state.force_582_f,.5) && close(state.force_587_f,.5));
-    axis1_abs = 99; axis6_abs = 199; tick(5010);
-    assert(close(state.force_582_f,.5) && close(state.force_587_f,.5));
-    sample.valid = false; tick(5011);
-    assert(close(state.force_582_f,.5) && close(state.force_587_f,.5));
+    state.complete_clamp_hold(1, axis1_abs, 150);
+    state.complete_clamp_hold(2, axis6_abs, 150);
+    tick(150);
+    axis1_abs = 101.999; axis6_abs = 198.001; tick(160);
+    assert(!state.hold_582.blending && !state.hold_587.blending);
+    sample.valid = false; tick(161);
+    assert(close(state.force_582_f, held_f) && close(state.force_587_f, held_f));
     sample.valid = true;
-    axis1_abs = 98; tick(5020);
-    assert(close(state.force_587_f,.5) && state.hold_587.blending);
-    assert(close(state.force_582_f,.5) && !state.hold_582.blending);
-    tick(5070); assert(close(state.force_587_f,.75) && close(state.force_582_f,.5));
-    tick(5120); assert(close(state.force_587_f,1) && !state.hold_587.active);
-    axis6_abs = 202; tick(5130);
-    assert(close(state.force_582_f,.5) && state.hold_582.blending);
-    tick(5180); assert(close(state.force_582_f,.75));
-    tick(5230); assert(close(state.force_582_f,1) && !state.hold_582.active);
-    capture_hold(1, false); tick(6000);
+    // 正反两个方向都在2mm处释放，不依赖换手时的运动方向。
+    axis1_abs = 102; axis6_abs = 198; tick(170);
+    assert(state.hold_582.blending && state.hold_587.blending);
+    assert(close(state.force_582_f, held_f) && close(state.force_587_f, held_f));
+    tick(320);
+    assert(close(state.force_582_f, (held_f + 1) / 2) && close(state.force_587_f, (held_f + 1) / 2));
+    assert(close(state.force_582_n, (held_n + .002) / 2));
+    tick(469); assert(state.hold_582.active && state.hold_587.active);
+    tick(470); assert(!state.hold_582.active && !state.hold_587.active);
+    assert(close(state.force_582_f, 1) && close(state.force_587_n, .002));
+    capture_hold(1); capture_hold(2);
+    const double held_timeout = state.hold_582.force;
+    state.complete_clamp_hold(1, axis1_abs, 500);
+    state.complete_clamp_hold(2, axis6_abs, 500);
+    tick(899); assert(!state.hold_582.blending && !state.hold_587.blending);
+    position_valid = false; tick(900);
+    assert(state.hold_582.blending && state.hold_587.blending);
+    assert(close(state.force_582_f, held_timeout));
+    tick(1050); assert(close(state.force_582_f, (held_timeout + 1) / 2));
+    tick(1200); assert(!state.hold_582.active && !state.hold_587.active);
+    position_valid = true;
+    capture_hold(1); tick(6000);
     state.clamp_hold_enabled = false; state.clear_clamp_holds(); tick(6010);
     assert(close(state.force_582_f,1) && close(state.force_587_f,1));
     cfg.force_feedback_force_filter_alpha = .25;
-    cfg.force_feedback_damping_n_per_velocity = .1;
-    wire.fVels2[0] = 2.0; catheter.fVels2[0] = -3.0;
     sample.fn_1_value_v *= 2; sample.fn_2_value_v *= 2;
     tick(6020);
-    assert(close(state.force_582_f,2) && close(state.force_587_f,2));
-    assert(!state.force_582_filter_initialized && !state.force_587_filter_initialized);
+    assert(close(state.force_582_f,1.25) && close(state.force_587_f,1.25));
+    assert(state.force_582_filter_initialized && state.force_587_filter_initialized);
     sample.fn_1_value_v /= 2; sample.fn_2_value_v /= 2;
-    wire.fVels2[0] = catheter.fVels2[0] = 0.0;
     tick(6030);
-    assert(close(state.force_582_f,1) && close(state.force_587_f,1));
+    assert(close(state.force_582_f,1.1875) && close(state.force_587_f,1.1875));
+    capture_hold(1); assert(!state.hold_587.active);
+    cfg.force_feedback_force_filter_alpha = 1.0;
     tick(7000);
     sample.fn_1_value_v *= 2; sample.fn_2_value_v *= 2;
     tick(7010); assert(close(state.force_582_f,2) && close(state.force_587_f,2));
-    capture_hold(2, true); state.set_enabled(2, false); tick(7020);
+    capture_hold(2); state.set_enabled(2, false); tick(7020);
     assert(state.force_582_f == 0 && !state.hold_582.active && close(state.force_587_f,2));
     state.set_enabled(2, true); tick(7030);
     assert(close(state.force_582_f,2) && close(state.force_587_f,2));
@@ -351,6 +370,6 @@ static void feedback()
     assert(state.force_582_f == 0 && state.force_587_f == 0 && !state.hold_582.active);
     sample.valid = true; zero.zeroed = false; tick(7060);
     assert(state.force_582_f == 0);
-    std::cout << "PASS: independent feedback/scales, per-handle handoff hold, signed 2mm release, 100ms blend, disable/re-enable, invalid samples.\n";
+    std::cout << "PASS: independent feedback/scales, per-handle handoff hold, 100ms smoothed latch, bidirectional 2mm / 400ms release, 300ms blend, disable/re-enable, invalid samples.\n";
 }
 int main() { calibration(); handoff_holds(); recording(); feedback(); }

@@ -13,7 +13,7 @@ void process_force_feedback(
 	double axis1_abs,
 	double axis6_abs,
 	bool position_valid,
-	ULONGLONG now_ms,
+	std::int64_t now_ms,
 	const ControlConfig& cfg,
 	const ForceCalibrationConfig& cal_cfg,
 	const ForceCalibrationState& cal_state);

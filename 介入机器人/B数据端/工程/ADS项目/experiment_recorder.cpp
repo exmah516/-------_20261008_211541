@@ -20,7 +20,8 @@ namespace
 	constexpr const char* kForceHeader =
 		"sample_index,elapsed_us,sample_valid,calibrated_valid,"
 		"fn_1_raw_v,ft_1_raw_v,fn_1_zero_v,ft_1_zero_v,clean_force_n,clean_handle_torque_nm,"
-		"fn_2_raw_v,ft_2_raw_v,fn_2_zero_v,ft_2_zero_v,clean_force_2_n,clean_handle_torque_2_nm\n";
+		"fn_2_raw_v,ft_2_raw_v,fn_2_zero_v,ft_2_zero_v,clean_force_2_n,clean_handle_torque_2_nm,"
+		"ff_582_out_f,ff_582_out_n,ff_587_out_f,ff_587_out_n,hold_582_active,hold_587_active\n";
 	constexpr const char* kMotionHeader =
 		"sample_index,elapsed_us,position_valid,"
 		"axis1_from_left_mm,axis2_from_left_mm,axis3_from_left_mm,axis4_from_left_mm,"
@@ -262,16 +263,17 @@ bool ExperimentRecorder::write_force_row(std::FILE* fp, const ForceCsvRow& row)
 		normalized.fn_1_raw_v, normalized.ft_1_raw_v, normalized.fn_1_zero_v, normalized.ft_1_zero_v,
 		normalized.clean_force_n, normalized.clean_handle_torque_nm,
 		normalized.fn_2_raw_v, normalized.ft_2_raw_v, normalized.fn_2_zero_v, normalized.ft_2_zero_v,
-		normalized.clean_force_2_n, normalized.clean_handle_torque_2_nm
+		normalized.clean_force_2_n, normalized.clean_handle_torque_2_nm,
+		normalized.ff_582_out_f, normalized.ff_582_out_n, normalized.ff_587_out_f, normalized.ff_587_out_n
 	};
 	for (std::size_t i = 0; i < sizeof(values) / sizeof(values[0]); ++i)
 	{
-		if (!write_double(fp, values[i]) || std::fputc(i + 1 == sizeof(values) / sizeof(values[0]) ? '\n' : ',', fp) == EOF)
+		if (!write_double(fp, values[i]) || std::fputc(',', fp) == EOF)
 		{
 			return false;
 		}
 	}
-	return true;
+	return std::fprintf(fp, "%d,%d\n", normalized.hold_582_active ? 1 : 0, normalized.hold_587_active ? 1 : 0) >= 0;
 }
 
 bool ExperimentRecorder::write_motion_row(std::FILE* fp, const MotionCsvRow& row)
@@ -898,7 +900,7 @@ void ExperimentRecorder::write_session_json(bool final, const std::string& stop_
 		: 0;
 	std::ostringstream json;
 	json << "{\n";
-	json << "  \"schema_version\": 7,\n";
+	json << "  \"schema_version\": 8,\n";
 	json << "  \"experiment_name_raw\": \"" << json_escape(raw_name_utf8_) << "\",\n";
 	json << "  \"experiment_name_cleaned\": \"" << json_escape(wide_to_utf8(cleaned_name_)) << "\",\n";
 	json << "  \"utc_start\": \"" << format_utc_filetime(clock_.utc_start_filetime_100ns()) << "\",\n";

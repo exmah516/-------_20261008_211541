@@ -69,6 +69,7 @@ namespace MasterConsole.Protocol.Tests
                 Check("错误密钥拒绝", !ZenohWire.Verify(ZenohWire.Deserialize<HandleFrame>(frameBytes), wrongKey));
                 Check("空密钥拒绝", !ZenohWire.Verify(ZenohWire.Deserialize<HandleFrame>(frameBytes), new byte[0]));
                 RobotServiceTests();
+                LocalForceTests();
                 HandleHostTests();
                 if (args.Contains("--network")) NetworkSmoke(args, key);
             }

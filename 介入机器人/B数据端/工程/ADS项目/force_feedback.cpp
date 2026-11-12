@@ -12,21 +12,19 @@ void process_force_feedback(
 	double axis1_abs,
 	double axis6_abs,
 	bool position_valid,
-	ULONGLONG now_ms,
+	std::int64_t now_ms,
 	const ControlConfig& cfg,
 	const ForceCalibrationConfig& cal_cfg,
 	const ForceCalibrationState& cal_state)
 {
 	ForceOutputCmd out_cmd;
-	constexpr ULONGLONG blend_duration_ms = 100;
+	constexpr std::int64_t blend_duration_ms = 300;
 	const bool output_enabled =
 		ff.enabled() && control_active && !estop_hold_active &&
 		cal_state.zeroed && sample.valid;
 
 	if (output_enabled)
 	{
-		const bool filtered_feedback_enabled = ff.clamp_hold_enabled;
-		if (!filtered_feedback_enabled) ff.reset_force_filters();
 		const CalibratedForce pair_1 = calibrate_force(
 			sample.fn_1_value_v, sample.ft_1_value_v, sample.axis2_pos_rel,
 			cal_cfg, cal_state);
@@ -34,9 +32,7 @@ void process_force_feedback(
 			sample.fn_2_value_v, sample.ft_2_value_v, sample.axis2_pos_rel,
 			cal_cfg, cal_state);
 		// 反馈与运动控制对象一致：导管fn1/ft1到587，导丝fn2/ft2到582。
-		const double theory_582_f = pair_2.f_feedback_n * cfg.force_feedback_582_force_scale;
 		const double theory_582_n = pair_2.t_feedback_nm * cfg.force_feedback_582_torque_scale;
-		const double theory_587_f = pair_1.f_feedback_n * cfg.force_feedback_587_force_scale;
 		const double theory_587_n = pair_1.t_feedback_nm * cfg.force_feedback_587_torque_scale;
 		const double filter_alpha =
 			std::isfinite(cfg.force_feedback_force_filter_alpha) &&
@@ -57,24 +53,25 @@ void process_force_feedback(
 			}
 			return filtered;
 		};
-		const double filtered_582_f = filtered_feedback_enabled
-			? apply_force_filter(theory_582_f, ff.force_582_filtered_f, ff.force_582_filter_initialized)
-			: theory_582_f;
-		const double filtered_587_f = filtered_feedback_enabled
-			? apply_force_filter(theory_587_f, ff.force_587_filtered_f, ff.force_587_filter_initialized)
-			: theory_587_f;
-		const auto apply_damping = [&](double force, double velocity)
+		const double filtered_582_f = apply_force_filter(
+			pair_2.f_feedback_n, ff.force_582_filtered_f, ff.force_582_filter_initialized)
+			* cfg.force_feedback_582_force_scale;
+		const double filtered_587_f = apply_force_filter(
+			pair_1.f_feedback_n, ff.force_587_filtered_f, ff.force_587_filter_initialized)
+			* cfg.force_feedback_587_force_scale;
+		// 慢速平滑仅用于换手锁存，不增加实时力和扭矩的输出延迟。
+		const auto smooth_hold_sample = [&](ForceFeedbackState::HoldSample& smooth, double force, double torque)
 		{
-			const double safe_velocity = std::isfinite(velocity) ? velocity : 0.0;
-			return force - cfg.force_feedback_damping_n_per_velocity * safe_velocity;
+			const double alpha = smooth.initialized
+				? 1.0 - std::exp(-static_cast<double>(now_ms - smooth.tick_ms) / 100.0) : 1.0;
+			smooth.force += alpha * (force - smooth.force);
+			smooth.torque += alpha * (torque - smooth.torque);
+			smooth.tick_ms = now_ms;
+			smooth.initialized = true;
 		};
-		const double display_582_f = filtered_feedback_enabled
-			? apply_damping(filtered_582_f, handle_582.fVels2[0])
-			: theory_582_f;
-		const double display_587_f = filtered_feedback_enabled
-			? apply_damping(filtered_587_f, handle_587.fVels2[0])
-			: theory_587_f;
-		ff.force_582_theory_f = display_582_f;
+		smooth_hold_sample(ff.smooth_582, filtered_582_f, theory_582_n);
+		smooth_hold_sample(ff.smooth_587, filtered_587_f, theory_587_n);
+		ff.force_582_theory_f = filtered_582_f;
 		ff.force_582_theory_n = theory_582_n;
 		ff.observe_clamp_hold_motion(2, axis6_abs, position_valid, now_ms);
 		ff.observe_clamp_hold_motion(1, axis1_abs, position_valid, now_ms);
@@ -95,9 +92,9 @@ void process_force_feedback(
 			output_torque = hold.torque + (torque - hold.torque) * blend;
 			if (blend >= 1.0) hold = ForceFeedbackState::HandoffHold{};
 		};
-		apply_handoff_hold(ff.hold_582, display_582_f, theory_582_n,
+		apply_handoff_hold(ff.hold_582, filtered_582_f, theory_582_n,
 			out_cmd.force_582_f, out_cmd.force_582_n);
-		apply_handoff_hold(ff.hold_587, display_587_f, theory_587_n,
+		apply_handoff_hold(ff.hold_587, filtered_587_f, theory_587_n,
 			out_cmd.force_587_f, out_cmd.force_587_n);
 	}
 	else if (!estop_hold_active && control_active && cal_state.zeroed)

@@ -7,6 +7,7 @@
 #include "Handle.h"
 #include <ADSComm1.h>
 #include <cstdint>
+#include <cmath>
 #include <string>
 #include <windows.h>
 
@@ -89,9 +90,6 @@ struct ControlConfig
 	double force_feedback_582_torque_scale = 0.3; // 导丝582：扭矩比例
 	double force_feedback_587_force_scale = 0.3;  // 导管587：力比例
 	double force_feedback_587_torque_scale = 0.3; // 导管587：扭矩比例
-	// 操作者实际感受到的轴向力为 k_f * F_fb - b * v_m。
-	// v_m 使用对应远程手柄第一通道的 SDK 速度，单位随手柄 SDK；从小值开始现场调节。
-	double force_feedback_damping_n_per_velocity = 0.01;
 	// 一阶轴向力低通系数；100 Hz 控制循环下 0.25 可抑制短时尖峰，1.0 表示关闭滤波。
 	double force_feedback_force_filter_alpha = 0.25;
 
@@ -482,8 +480,16 @@ struct ForceFeedbackState
 		double force = 0.0;
 		double torque = 0.0;
 		double resume_origin_abs = 0.0;
-		double resume_direction = 0.0;
-		ULONGLONG blend_start_ms = 0;
+		std::int64_t completed_ms = 0;
+		std::int64_t blend_start_ms = 0;
+	};
+
+	struct HoldSample
+	{
+		double force = 0.0;
+		double torque = 0.0;
+		std::int64_t tick_ms = 0;
+		bool initialized = false;
 	};
 
 	// 按物理手柄独立开关：582 导丝，587 导管；传感器映射保持不变。
@@ -500,6 +506,7 @@ struct ForceFeedbackState
 			force_582_f = force_582_n = force_582_theory_f = force_582_theory_n = 0.0;
 			force_582_filtered_f = 0.0;
 			force_582_filter_initialized = false;
+			smooth_582 = HoldSample{};
 			hold_582 = HandoffHold{};
 		}
 		if (channel == 0 || channel == 1)
@@ -508,10 +515,11 @@ struct ForceFeedbackState
 			force_587_f = force_587_n = 0.0;
 			force_587_filtered_f = 0.0;
 			force_587_filter_initialized = false;
+			smooth_587 = HoldSample{};
 			hold_587 = HandoffHold{};
 		}
 	}
-	// 此开关同时控制换手保持、轴向力低通和虚拟阻尼。
+	// 此开关只控制换手保持，轴向力低通始终启用。
 	bool clamp_hold_enabled = true;
 	// 当前输出命令缓存（用于调试和换手保持）。
 	double force_582_f = 0.0;
@@ -524,6 +532,7 @@ struct ForceFeedbackState
 	double force_587_filtered_f = 0.0;
 	bool force_582_filter_initialized = false;
 	bool force_587_filter_initialized = false;
+	HoldSample smooth_582, smooth_587;
 	HandoffHold hold_582;
 	HandoffHold hold_587;
 	// 调试观测缓存。
@@ -545,9 +554,11 @@ struct ForceFeedbackState
 		force_587_filtered_f = 0.0;
 		force_582_filter_initialized = false;
 		force_587_filter_initialized = false;
+		smooth_582 = HoldSample{};
+		smooth_587 = HoldSample{};
 	}
 
-	void capture_clamp_hold(int channel, bool reverse_mode, double force, double torque)
+	void capture_clamp_hold(int channel, double force, double torque)
 	{
 		if (!clamp_hold_enabled) return;
 		HandoffHold& hold = channel == 2 ? hold_582 : hold_587;
@@ -557,22 +568,23 @@ struct ForceFeedbackState
 		hold.active = true;
 		hold.force = force;
 		hold.torque = torque;
-		hold.resume_direction = reverse_mode ? 1.0 : -1.0;
 	}
 
-	void complete_clamp_hold(int channel, double axis_abs)
+	void complete_clamp_hold(int channel, double axis_abs, std::int64_t now_ms)
 	{
 		HandoffHold& hold = channel == 2 ? hold_582 : hold_587;
 		if (!hold.active) return;
 		hold.handoff_complete = true;
 		hold.resume_origin_abs = axis_abs;
+		hold.completed_ms = now_ms;
 	}
 
-	void observe_clamp_hold_motion(int channel, double axis_abs, bool position_valid, ULONGLONG now_ms)
+	void observe_clamp_hold_motion(int channel, double axis_abs, bool position_valid, std::int64_t now_ms)
 	{
 		HandoffHold& hold = channel == 2 ? hold_582 : hold_587;
-		if (!hold.active || !hold.handoff_complete || hold.blending || !position_valid) return;
-		if ((axis_abs - hold.resume_origin_abs) * hold.resume_direction >= 2.0)
+		if (!hold.active || !hold.handoff_complete || hold.blending) return;
+		if ((position_valid && std::abs(axis_abs - hold.resume_origin_abs) >= 2.0) ||
+			now_ms - hold.completed_ms >= 400)
 		{
 			hold.blending = true;
 			hold.blend_start_ms = now_ms;

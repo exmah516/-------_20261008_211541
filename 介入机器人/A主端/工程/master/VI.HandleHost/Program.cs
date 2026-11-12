@@ -6,16 +6,23 @@ using MasterConsole.Services;
 
 internal static class Program
 {
+    internal const double DAMPING_B = 0.01; // N / getEncVel 第一通道原始单位。
+    internal const int DAMPING_SIGN = 1;
+    internal const double DAMPING_MAX_N = 0.5;
+    internal const double FORCE_SLEW_N_PER_S = 8;
+    internal const double FORCE_MAX_N = 1.2;
+    internal const bool SHOW_FORCE_CONSOLE = true;
     [DllImport("winmm.dll")] private static extern uint timeBeginPeriod(uint period);
     [DllImport("winmm.dll")] private static extern uint timeEndPeriod(uint period);
     private static readonly FlCatheterNative.ServoCallback Servo = _ => FlCatheterNative.deviceStatus(0);
-    private sealed class Device
+    internal sealed class Device
     {
         internal uint Serial;
         internal ulong DeviceEpoch;
         internal int Id = -1;
         internal long NextOpen, Sequence, LastZero;
-        internal bool Nonzero;
+        internal bool Nonzero, ForceActive, DampingClamped;
+        internal double EnvironmentForce, DampingForce, OutputForce;
         internal readonly double[] Velocity = new double[2], Joints = new double[2];
         internal readonly int[] Encoders = new int[2];
     }
@@ -28,10 +35,14 @@ internal static class Program
         try
         {
             long deadline = Stopwatch.GetTimestamp();
+            long previousForceTimestamp = deadline, lastForcePrint = deadline;
             HostForces forces = default;
             while (!memory.Stop)
             {
                 long now = Environment.TickCount64;
+                long forceTimestamp = Stopwatch.GetTimestamp();
+                double dt = (forceTimestamp - previousForceTimestamp) / (double)Stopwatch.Frequency;
+                previousForceTimestamp = forceTimestamp;
                 var samples = new HostSamples();
                 if (memory.Read(HandleHostMemory.ForceOffset, out HostForces update)) forces = update;
                 for (int i = 0; i < 2; ++i)
@@ -63,12 +74,17 @@ internal static class Program
                                 Encoder0 = d.Encoders[0], Encoder1 = d.Encoders[1], Joint0 = (float)d.Joints[0], Joint1 = (float)d.Joints[1],
                                 Vel0 = (float)d.Velocity[0], Vel1 = (float)d.Velocity[1] };
                         }
-                        ApplyForce(d, i == 0 ? forces.A : forces.B, valid, now);
+                        ApplyForce(d, i == 0 ? forces.A : forces.B, valid, now, dt);
                     }
                     if (i == 0) samples.A = sample; else samples.B = sample;
                 }
                 memory.Write(HandleHostMemory.SampleOffset, samples);
                 memory.Heartbeat = Environment.TickCount64;
+                if (SHOW_FORCE_CONSOLE && forceTimestamp - lastForcePrint >= Stopwatch.Frequency / 5)
+                {
+                    Console.WriteLine("   " + FormatForce(devices[0]) + "   " + FormatForce(devices[1]));
+                    lastForcePrint = forceTimestamp;
+                }
                 deadline += Stopwatch.Frequency / 200;
                 while (Stopwatch.GetTimestamp() < deadline)
                 {
@@ -85,12 +101,33 @@ internal static class Program
         catch (EntryPointNotFoundException) { memory.Error = 3; return 3; }
         finally { if (preciseTimer) timeEndPeriod(1); }
     }
-    private static void ApplyForce(Device d, HostForce force, bool valid, long now)
+    internal static void UpdateForce(Device d, HostForce force, bool valid, long now, double dt)
     {
-        if (valid && force.Enable != 0 && force.Tick > 0 && now >= force.Tick && now - force.Tick < 3000)
+        d.ForceActive = valid && force.Enable != 0 && force.Tick > 0 && now >= force.Tick && now - force.Tick < 3000;
+        if (!d.ForceActive)
+        {
+            d.EnvironmentForce = 0;
+            return;
+        }
+        double damping = -DAMPING_SIGN * DAMPING_B * d.Velocity[0];
+        d.DampingForce = Math.Clamp(damping, -DAMPING_MAX_N, DAMPING_MAX_N);
+        d.DampingClamped = damping != d.DampingForce;
+        double step = FORCE_SLEW_N_PER_S * dt;
+        d.EnvironmentForce += Math.Clamp(force.Force - d.EnvironmentForce, -step, step);
+        d.OutputForce = Math.Clamp(d.EnvironmentForce + d.DampingForce, -FORCE_MAX_N, FORCE_MAX_N);
+    }
+    internal static string FormatForce(Device d)
+        => d.ForceActive
+            ? FormattableString.Invariant($"[{d.Serial}] 速度原始值={d.Velocity[0]:+0.0000;-0.0000;+0.0000}  阻尼力={d.DampingForce:+0.000;-0.000;+0.000} N  环境力={d.EnvironmentForce:+0.000;-0.000;+0.000} N  输出={d.OutputForce:+0.000;-0.000;+0.000} N  阻尼限幅={(d.DampingClamped ? "是" : "否")}")
+            : $"[{d.Serial}] 力反馈未生效";
+
+    private static void ApplyForce(Device d, HostForce force, bool valid, long now, double dt)
+    {
+        UpdateForce(d, force, valid, now, dt);
+        if (d.ForceActive)
         {
             var vector = new double[3];
-            vector[force.Axis] = force.Force;
+            vector[force.Axis] = d.OutputForce;
             FlCatheterNative.sendForce(vector, force.Torque, d.Id);
             d.Nonzero = true;
         }

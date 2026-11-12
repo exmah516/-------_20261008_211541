@@ -11,6 +11,7 @@ namespace MasterConsole.Services
     public sealed class HandleService : IHandleService
     {
         public const uint SerialA = 582, SerialB = 587;
+        private const bool SHOW_FORCE_CONSOLE = true;
         private readonly object _lock = new object();
         private readonly object _lifecycleLock = new object();
         private readonly Func<string, Process> _launch;
@@ -31,7 +32,7 @@ namespace MasterConsole.Services
         private static Process Launch(string name)
         {
             string executable = Path.Combine(AppContext.BaseDirectory, "HandleHost", "VI.HandleHost.exe");
-            var info = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true };
+            var info = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = !SHOW_FORCE_CONSOLE };
             info.ArgumentList.Add(name);
             return Process.Start(info);
         }

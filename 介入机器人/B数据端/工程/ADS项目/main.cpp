@@ -17,6 +17,7 @@
 #include "control_messages.h"
 
 #include <cmath>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <deque>
@@ -2518,9 +2519,9 @@ int main()
                     original_return_intent.wire_reverse = axis6_effective_reverse_pressed;
                 }
 				if (axis1_active) ff.capture_clamp_hold(
-					1, axis1_reverse_pressed, ff.force_587_f, ff.force_587_n);
+					1, ff.smooth_587.force, ff.smooth_587.torque);
 				if (axis6_active) ff.capture_clamp_hold(
-					2, axis6_effective_reverse_pressed, ff.force_582_f, ff.force_582_n);
+					2, ff.smooth_582.force, ff.smooth_582.torque);
 				clear_cylinder_manual_overrides();
 				return true;
 			};
@@ -3053,9 +3054,13 @@ int main()
 							// 夹爪恢复和最终重同步完成后才开始计算释放距离；
 							// 换手期间的自动轴运动不能消耗这 2 mm。
 							if (planned_return.contains_axis(0))
-								ff.complete_clamp_hold(1, plc_act_pos[0] + plc_init_pos[0]);
+								ff.complete_clamp_hold(1, plc_act_pos[0] + plc_init_pos[0],
+									std::chrono::duration_cast<std::chrono::milliseconds>(
+										std::chrono::steady_clock::now().time_since_epoch()).count());
 							if (planned_return.contains_axis(5))
-								ff.complete_clamp_hold(2, plc_act_pos[5] + plc_init_pos[5]);
+								ff.complete_clamp_hold(2, plc_act_pos[5] + plc_init_pos[5],
+									std::chrono::duration_cast<std::chrono::milliseconds>(
+										std::chrono::steady_clock::now().time_since_epoch()).count());
 							if (planned_return.mode == PlannedReturnMode::CatheterDelivery ||
 								(planned_return.mode == PlannedReturnMode::Dual &&
 									planned_return.contains_axis(0) && !axis1_reverse_pressed))
@@ -4439,72 +4444,6 @@ int main()
 			? calculate_clean_force(
 				force_sample.fn_1_value_v, force_sample.ft_1_value_v, cal_cfg, cal_state)
 			: CleanForce{};
-		if (experiment_recorder.is_recording())
-		{
-			const std::int64_t max_handle_delta_ticks =
-				std::max<std::int64_t>(1, experiment_recorder.clock().frequency() / 100);
-			for (const AdsFastSnapshot& record_snapshot : drained_ads_snapshots)
-			{
-				ForceCsvRow force_row{};
-				force_row.ads_snapshot_sequence = record_snapshot.attempt_sequence;
-				force_row.source_qpc_ticks = record_snapshot.qpc_ticks;
-				force_row.sample_valid = record_snapshot.force_valid;
-				force_row.fn_1_raw_v = static_cast<double>(record_snapshot.fn_1_value) / 1000.0;
-				force_row.ft_1_raw_v = static_cast<double>(record_snapshot.ft_1_value) / 1000.0;
-				force_row.fn_2_raw_v = static_cast<double>(record_snapshot.fn_2_value) / 1000.0;
-				force_row.ft_2_raw_v = static_cast<double>(record_snapshot.ft_2_value) / 1000.0;
-				force_row.calibrated_valid = force_row.sample_valid && cal_state.zeroed;
-				const CleanForce row_clean_force = force_row.calibrated_valid
-					? calculate_clean_force(
-						force_row.fn_1_raw_v, force_row.ft_1_raw_v, cal_cfg, cal_state)
-					: CleanForce{};
-				const CleanForce row_clean_force_2 = force_row.calibrated_valid
-					? calculate_clean_guidewire_force(
-						force_row.fn_2_raw_v, force_row.ft_2_raw_v, cal_cfg, cal_state)
-					: CleanForce{};
-				force_row.fn_1_zero_v = force_row.calibrated_valid ? cal_state.f_zero : csv_nan;
-				force_row.ft_1_zero_v = force_row.calibrated_valid ? cal_state.ft_zero : csv_nan;
-				force_row.clean_force_n = force_row.calibrated_valid ? row_clean_force.force_n : csv_nan;
-				force_row.clean_handle_torque_nm = force_row.calibrated_valid
-					? row_clean_force.handle_torque_nm : csv_nan;
-				force_row.fn_2_zero_v = force_row.calibrated_valid ? cal_state.fn_2_zero : csv_nan;
-				force_row.ft_2_zero_v = force_row.calibrated_valid ? cal_state.ft_2_zero : csv_nan;
-				force_row.clean_force_2_n = force_row.calibrated_valid ? row_clean_force_2.force_n : csv_nan;
-				force_row.clean_handle_torque_2_nm = force_row.calibrated_valid
-					? row_clean_force_2.handle_torque_nm : csv_nan;
-				(void)experiment_recorder.enqueue_force(force_row);
-
-				// 100 Hz ADS 序号的偶数帧形成稳定 50 Hz 运动表，不做历史突发补写。
-				if ((record_snapshot.attempt_sequence & 1ULL) != 0ULL) continue;
-				MotionCsvRow motion_row{};
-				motion_row.ads_snapshot_sequence = record_snapshot.attempt_sequence;
-				motion_row.source_qpc_ticks = record_snapshot.qpc_ticks;
-				motion_row.position_valid = record_snapshot.position_valid;
-				for (int axis = 0; axis < 7; ++axis)
-				{
-					motion_row.axis_from_left_mm[axis] = record_snapshot.act_pos_from_left[axis];
-				}
-				const HandleRecordSnapshot* nearest_handle = nullptr;
-				std::int64_t nearest_delta = std::numeric_limits<std::int64_t>::max();
-				for (const HandleRecordSnapshot& candidate : handle_record_history)
-				{
-					const std::int64_t delta = candidate.qpc_ticks >= record_snapshot.qpc_ticks
-						? candidate.qpc_ticks - record_snapshot.qpc_ticks
-						: record_snapshot.qpc_ticks - candidate.qpc_ticks;
-					if (delta < nearest_delta)
-					{
-						nearest_delta = delta;
-						nearest_handle = &candidate;
-					}
-				}
-				if (nearest_handle != nullptr && nearest_delta <= max_handle_delta_ticks)
-				{
-					motion_row.axis1_handle_valid = nearest_handle->axis1_valid;
-					motion_row.axis6_handle_valid = nearest_handle->axis6_valid;
-				}
-				(void)experiment_recorder.enqueue_motion(motion_row);
-			}
-		}
 
 		// PI 与磁盘记录无关；力采样失效时关闭位移补偿。
 		if (tracking_controller.compensation_enabled() && !force_sample.valid)
@@ -4653,7 +4592,8 @@ int main()
 			plc_act_pos[0] + plc_init_pos[0],
 			plc_act_pos[5] + plc_init_pos[5],
 			ads_motion_cycle_valid,
-			GetTickCount64(),
+			std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now().time_since_epoch()).count(),
 			cfg,
 			cal_cfg,
 			cal_state);
@@ -4663,6 +4603,80 @@ int main()
 		axis6_prev_linear_filtered = axis6_handle_filter.axis0_filtered;
 		axis1_prev_rot_filtered = axis1_handle_filter.axis1_filtered;
 		axis6_prev_rot_filtered = axis6_handle_filter.axis1_filtered;
+
+		// 力反馈计算后记录本拍数据端输出。
+		if (experiment_recorder.is_recording())
+		{
+			const std::int64_t max_handle_delta_ticks =
+				std::max<std::int64_t>(1, experiment_recorder.clock().frequency() / 100);
+			for (const AdsFastSnapshot& record_snapshot : drained_ads_snapshots)
+			{
+				ForceCsvRow force_row{};
+				force_row.ads_snapshot_sequence = record_snapshot.attempt_sequence;
+				force_row.source_qpc_ticks = record_snapshot.qpc_ticks;
+				force_row.sample_valid = record_snapshot.force_valid;
+				force_row.fn_1_raw_v = static_cast<double>(record_snapshot.fn_1_value) / 1000.0;
+				force_row.ft_1_raw_v = static_cast<double>(record_snapshot.ft_1_value) / 1000.0;
+				force_row.fn_2_raw_v = static_cast<double>(record_snapshot.fn_2_value) / 1000.0;
+				force_row.ft_2_raw_v = static_cast<double>(record_snapshot.ft_2_value) / 1000.0;
+				force_row.calibrated_valid = force_row.sample_valid && cal_state.zeroed;
+				const CleanForce row_clean_force = force_row.calibrated_valid
+					? calculate_clean_force(
+						force_row.fn_1_raw_v, force_row.ft_1_raw_v, cal_cfg, cal_state)
+					: CleanForce{};
+				const CleanForce row_clean_force_2 = force_row.calibrated_valid
+					? calculate_clean_guidewire_force(
+						force_row.fn_2_raw_v, force_row.ft_2_raw_v, cal_cfg, cal_state)
+					: CleanForce{};
+				force_row.fn_1_zero_v = force_row.calibrated_valid ? cal_state.f_zero : csv_nan;
+				force_row.ft_1_zero_v = force_row.calibrated_valid ? cal_state.ft_zero : csv_nan;
+				force_row.clean_force_n = force_row.calibrated_valid ? row_clean_force.force_n : csv_nan;
+				force_row.clean_handle_torque_nm = force_row.calibrated_valid
+					? row_clean_force.handle_torque_nm : csv_nan;
+				force_row.fn_2_zero_v = force_row.calibrated_valid ? cal_state.fn_2_zero : csv_nan;
+				force_row.ft_2_zero_v = force_row.calibrated_valid ? cal_state.ft_2_zero : csv_nan;
+				force_row.clean_force_2_n = force_row.calibrated_valid ? row_clean_force_2.force_n : csv_nan;
+				force_row.clean_handle_torque_2_nm = force_row.calibrated_valid
+					? row_clean_force_2.handle_torque_nm : csv_nan;
+				force_row.ff_582_out_f = ff.force_582_f;
+				force_row.ff_582_out_n = ff.force_582_n;
+				force_row.ff_587_out_f = ff.force_587_f;
+				force_row.ff_587_out_n = ff.force_587_n;
+				force_row.hold_582_active = ff.hold_582.active;
+				force_row.hold_587_active = ff.hold_587.active;
+				(void)experiment_recorder.enqueue_force(force_row);
+
+				// 100 Hz ADS 序号的偶数帧形成稳定 50 Hz 运动表，不做历史突发补写。
+				if ((record_snapshot.attempt_sequence & 1ULL) != 0ULL) continue;
+				MotionCsvRow motion_row{};
+				motion_row.ads_snapshot_sequence = record_snapshot.attempt_sequence;
+				motion_row.source_qpc_ticks = record_snapshot.qpc_ticks;
+				motion_row.position_valid = record_snapshot.position_valid;
+				for (int axis = 0; axis < 7; ++axis)
+				{
+					motion_row.axis_from_left_mm[axis] = record_snapshot.act_pos_from_left[axis];
+				}
+				const HandleRecordSnapshot* nearest_handle = nullptr;
+				std::int64_t nearest_delta = std::numeric_limits<std::int64_t>::max();
+				for (const HandleRecordSnapshot& candidate : handle_record_history)
+				{
+					const std::int64_t delta = candidate.qpc_ticks >= record_snapshot.qpc_ticks
+						? candidate.qpc_ticks - record_snapshot.qpc_ticks
+						: record_snapshot.qpc_ticks - candidate.qpc_ticks;
+					if (delta < nearest_delta)
+					{
+						nearest_delta = delta;
+						nearest_handle = &candidate;
+					}
+				}
+				if (nearest_handle != nullptr && nearest_delta <= max_handle_delta_ticks)
+				{
+					motion_row.axis1_handle_valid = nearest_handle->axis1_valid;
+					motion_row.axis6_handle_valid = nearest_handle->axis6_valid;
+				}
+				(void)experiment_recorder.enqueue_motion(motion_row);
+			}
+		}
 
 		// 可视化状态限制为约 15 Hz，命令轮询仍每个控制拍执行。
 		LARGE_INTEGER vis_now_qpc{};

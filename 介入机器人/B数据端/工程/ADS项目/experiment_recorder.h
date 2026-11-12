@@ -87,6 +87,12 @@ struct ForceCsvRow
 	double ft_2_zero_v = 0.0;
 	double clean_force_2_n = 0.0;
 	double clean_handle_torque_2_nm = 0.0;
+	double ff_582_out_f = 0.0;
+	double ff_582_out_n = 0.0;
+	double ff_587_out_f = 0.0;
+	double ff_587_out_n = 0.0;
+	bool hold_582_active = false;
+	bool hold_587_active = false;
 };
 
 struct MotionCsvRow

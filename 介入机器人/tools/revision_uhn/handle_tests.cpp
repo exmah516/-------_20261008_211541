@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <array>
 #include <cmath>
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
