@@ -34,7 +34,7 @@ connection = between(source, "\t\tconst bool connection_hold_active =", "\t\tif 
 (build / "main_auto_resume.inc").write_text(between(source, "\t\tif (!control_active && !return_ads_fault_hold",
     "\t\tunsigned short cylinder1_cmd"), encoding="utf-8")
 (build / "main_start.inc").write_text(between(source, "\t\t\t\tcase VisCommandType::SelectDirectControl:",
-    "\t\t\t\t\tcase VisCommandType::SetGravityCompensation:").split("\n", 1)[1], encoding="utf-8")
+    "\t\t\t\tdefault:").split("\n", 1)[1], encoding="utf-8")
 fixture = (ads / "tools/main_recovery_test.cpp").read_text(encoding="utf-8-sig")
 fixture = fixture[:fixture.index("\nint main()")]
 fixture = re.sub(r"^#include <.*>\n", "", fixture, flags=re.M)

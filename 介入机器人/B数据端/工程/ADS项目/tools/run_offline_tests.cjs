@@ -93,7 +93,7 @@ if (selected === 'all' || selected === 'recovery') {
     fs.writeFileSync(path.join(build,'main_rebase.inc'),between(source,recoveryStart,'\t\tconst bool connection_hold_active').replace('else if','if'),'utf8');
     fs.writeFileSync(path.join(build,'main_observe.inc'),between(source,'\t\tconst bool ads_self_check_valid','\t\tif (ads_events.selfcheck_status'),'utf8');
     fs.writeFileSync(path.join(build,'main_auto_resume.inc'),between(source,'\t\tif (!control_active && !return_ads_fault_hold','\t\tunsigned short cylinder1_cmd'),'utf8');
-    fs.writeFileSync(path.join(build,'main_start.inc'),between(source,'\t\t\t\tcase VisCommandType::SelectDirectControl:','\t\t\t\t\tcase VisCommandType::SetGravityCompensation:').split('\n').slice(1).join('\n'),'utf8');
+    fs.writeFileSync(path.join(build,'main_start.inc'),between(source,'\t\t\t\tcase VisCommandType::SelectDirectControl:','\t\t\t\tdefault:').split('\n').slice(1).join('\n'),'utf8');
     run('main_recovery_test',['tools/main_recovery_test.cpp']);
     run('return_recovery_test',['tools/return_recovery_test.cpp']);
     fs.writeFileSync(path.join(build,'return_recovery_crawl.inc'),between(header,'struct CrawlState','struct ForceFeedbackState'),'utf8');

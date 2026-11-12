@@ -153,25 +153,15 @@ struct VisState
 enum class VisCommandType : int
 {
 	None = 0,
-	SetCylinderManualOpen = 1,
-	SetCylinderManualClosed = 2,
 	ZeroForceSensor = 4,
-	ToggleForceFeedback = 5,
 	// 7 为已删除的旧力记录命令，保留数值空洞。
 	SelectDirectControl = 12,
-	SetGravityCompensation = 13,
-	SetSpacingRecovery = 18, // param1: 0=退出，1=进入
 	// 20 为已删除的旧位移记录命令，保留数值空洞。
-	SetAxis1PostReturnLead = 24, // param1=轴1前10 mm比例映射量，单位 mm×1000，范围 [0, 5]
-	StartExperimentRecording = 25, // UTF-8 负载为实验名称
-	StopExperimentRecording = 26,
 	// 命令号 27 已停用，保留编号。
-	SetCleanForceMonitor = 28, // param1: 0=关闭，1=打开
 	SetArmManualEnable = 29, // param1: 0=关闭，1=开启
 	SetArmAxisEnable = 30, // param1: 轴号1..5，param2: 0=断电，1=上电
 	RequestArmAxisReset = 31, // param1: 轴号1..5
 	SetArmAxisJog = 32, // param1: 轴号1..5，param2: -1/0/1
-	SetArmJogParameter = 33, // param1=(轴号-1)*4+参数号，param2=值×1000
 	SetAxis4ManualJog = 34, // param1: -1=后退，0=停止，1=前进（物理语义）
 	SetForceFeedbackHold = 35, // param1: 0=关闭，1=开启；换手后保持至对应轴沿当前方向运动2mm，再平滑恢复实时值
 	SetYValveOpen = 36, // param1: 0=关闭，1=打开

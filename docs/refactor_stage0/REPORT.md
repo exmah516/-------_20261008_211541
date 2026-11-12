@@ -53,3 +53,7 @@ R2-8 的51条原断言已复制到 tools/refactor_baseline/behavior_probes.cpp�
 ### 3.1.5 内部启动序列
 
 已确认：删除 ExecuteStartup、标准/恢复启动序列模块、direct positioning 两阶段、SetStartupAxisPos/AxisDeg/Speed 与 pending_startup。公共 SelectDirectControl、startup.completed、StartupPhase::Done=11、PLC loading_ready 消费和自检后的重同步保留；协议中的 startup_phase/waiting/completed 字段保留。黄金34场景/27,197拍逐值相等，11个离线程序、47条保留断言通过（logs/delete5*）。电缸测试移除仅检查已删除启动占用门的场景，其他断言未改。
+
+### 3.1.6 无公共映射的内部命令
+
+已确认：清单余下10项内部命令及枚举删除；RequestModeSwitch/SetReverseMode、两项tracking命令已随前组删除。三个 StartControl 抽取边界统一换为仍存在的 default，保留断言不变。主端 ToggleForceFeedback 方法发送公共 SetForceFeedback，不引用被删内部枚举，无需修改。自动实验记录、物理恢复键、公共电缸Position/Reset、力反馈Set/Hold均保留。黄金34场景/27,197拍逐值相等，11个离线程序、47条保留断言通过（logs/delete6*）。

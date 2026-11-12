@@ -1,0 +1,235 @@
+{
+  "build": "C:\\Users\\Sui\\AppData\\Local\\Temp\\refactor-baseline-yu_iwmpi",
+  "sources": {
+    "ads_communication.h": "61d03c05b96d61388436b7d590b693b084651ba7d1b6aaaa275c71714c58dffe",
+    "arm_cartesian_motion.h": "6b20673a198997a14c80e9e5901cfef14be3eb34f9b8e7abae2cc940e6bab103",
+    "arm_manual_ads_service.h": "1e677f04668d33665c0467b27af426f5127e535aa98b62f5518e10a4ce31b472",
+    "async_csv_writer.h": "4ca995c944c5157acbbcd4762480b0de6bfebd7bf36ad329197cb0055da0a1e3",
+    "control_messages.h": "176f066f4705420c17fdac0b1292d3a7f5ca7e9c428d8e2ff6e6845bbe17481e",
+    "control_types.h": "f9c2d9e0aa35655423c25eb65e3e5bb93a595133019ceb8d8ab4c5492aab99e9",
+    "experiment_recorder.h": "9a325f6bee1da34607dd2c7635de45dca5562ac8801a533d517d3353a79996f6",
+    "force_calibration.h": "e34959c244ec8fb5fadb095aa781ee962a1ae81f1c236dfffe6602484387ed2e",
+    "force_feedback.h": "a7c24573f0342c4bf20315a011f641539f0f64ec973bd9a3267afac4dc36f815",
+    "handle_net_distance.h": "39a1f1b5a5a17ed4d0a48a390ebbe603a2cbd8a014279fb0b74c52f594853c6c",
+    "handle_velocity_recorder.h": "3858c01b298765f1e40841cfa3f133a26bc6434aa9b98170db9178b6681fd5eb",
+    "homing_record.h": "6317a2ecc61fe1b578938395442b3f70b5fb7f7a568fccbe9c18a6f35eab8336",
+    "motion_sync.h": "0da09c15bb1a65d3d293244aa705b4269650a014d47ba3c774b779c428e23d91",
+    "plc_io.h": "0c072b282e9e1958e329e3e9a3d6a6d054bfafc11c45df7b46787a3b65fa9004",
+    "return_recovery.h": "7c984bf78172dfe2799a3ed2027c252ee0ce69ae7dce65cb3d38490816e5d161",
+    "zenoh_service.h": "511a74d124f17004c241a769cba18ca16817f635705cc01f9d61d535fe3cefca",
+    "手柄/Handle.h": "9e9db14eee91e4e2437cb2c281db2c1eb2036a8c94876c00cea6502991625597",
+    "手柄/remote_handle_bridge.h": "19f4142beb946efca7a61a29b3910c65be592d414ebf359f6cb3ce795c22547d",
+    "control_types.cpp": "bf00263c9bec43dc5f489a7800df38bce348d9cc4cb4baf595cad719bb3cb092",
+    "motion_sync.cpp": "4ecc0602b1efb4f1d325730f58c26fcced80c8cd5e6b46d73eb0136682dc2565",
+    "plc_io.cpp": "c0b249b3d58c6c48f9919e326e403be57f1eb4055f0dfe10dc0d24bc6ebbde8d",
+    "force_feedback.cpp": "e2f8704bfc4d3eabda1a8a180d779ac9455c3d6ee153273add51890c1304cc8a",
+    "手柄/手柄.cpp": "d05ab00c32bae1cdbde311fce5614519fd3f13c4aa8ae798673f6b0bc2c5b8ce",
+    "main.cpp": "e0dbb61bbd59b0d0fb169d98d522f3408b7bfc0c918257dfff61246e4a79e765"
+  },
+  "scenarios": [
+    {
+      "scenario": "follow_delivery",
+      "ticks": 800,
+      "sha256": "fd61868986b55672c50efcee6a52f3051aa4cddb718c3305d7ca89eacdb1c064",
+      "equal": true
+    },
+    {
+      "scenario": "follow_retraction",
+      "ticks": 800,
+      "sha256": "f044994a6f3297102bdf458744bdfdef145b43b292356344234c89c9321fe611",
+      "equal": true
+    },
+    {
+      "scenario": "lead_hold",
+      "ticks": 800,
+      "sha256": "1a7a2df187e38e7d6fc8efb886aab853d9ccf7e2b34ef97a43ac010066a79d1f",
+      "equal": true
+    },
+    {
+      "scenario": "lead_axis6",
+      "ticks": 800,
+      "sha256": "a517de09895a6d7fa38c8226362974c79612ff2800bbc6d73254e846b0f0a2cb",
+      "equal": true
+    },
+    {
+      "scenario": "axis4",
+      "ticks": 800,
+      "sha256": "669798269b9dcaa6d8638582365643e5a62c2f16ad44c7603bcbc5c81b0659d1",
+      "equal": true
+    },
+    {
+      "scenario": "handoff_axis1",
+      "ticks": 800,
+      "sha256": "fe66b447079cafe4b4e4ba0de2338bb0c0d753f92e4496050bc900f0e36b5328",
+      "equal": true
+    },
+    {
+      "scenario": "handoff_active",
+      "ticks": 800,
+      "sha256": "19fb7fc65fcea16d1beb5fe4b966f66cadb5326967be52a04762767192ff4eeb",
+      "equal": true
+    },
+    {
+      "scenario": "handoff_passive",
+      "ticks": 800,
+      "sha256": "31d7463eb02c0533c7a74282b4895c7575f0c3d5c6bf03716edc9ea6996274d5",
+      "equal": true
+    },
+    {
+      "scenario": "handoff_merge",
+      "ticks": 800,
+      "sha256": "21d3dd7960af7667b9f2d03d857bd9e7099c81443ffec45b5d61182f32b58b92",
+      "equal": true
+    },
+    {
+      "scenario": "return_axis1",
+      "ticks": 800,
+      "sha256": "a0ec8187c6913f0863b81e36692458688ed692c4166441f16189900e5f34fd56",
+      "equal": true
+    },
+    {
+      "scenario": "return_axis6",
+      "ticks": 800,
+      "sha256": "bb5ce6f534d0af04e28ef1e87395a9944883650a4842c72c462da7207024da63",
+      "equal": true
+    },
+    {
+      "scenario": "return_both",
+      "ticks": 800,
+      "sha256": "21d3dd7960af7667b9f2d03d857bd9e7099c81443ffec45b5d61182f32b58b92",
+      "equal": true
+    },
+    {
+      "scenario": "return_retry",
+      "ticks": 800,
+      "sha256": "9f48b52182ee7e854426aea52dd2c1b16bb234f400b2883715b549caaf130445",
+      "equal": true
+    },
+    {
+      "scenario": "return_possible",
+      "ticks": 800,
+      "sha256": "90c2d848a8b779626fe81bc08160a14ac28246baa0330643376c0c2118daf361",
+      "equal": true
+    },
+    {
+      "scenario": "return_fault",
+      "ticks": 800,
+      "sha256": "43a00678134f0cdae344da211f7c146c66fc0c9a6142d6adf58638db5a71c5c6",
+      "equal": true
+    },
+    {
+      "scenario": "return_estop",
+      "ticks": 800,
+      "sha256": "376f96bc4ba6cbc6741cc9c4bd9333afe62827b4482be5098f519159ebe75cfc",
+      "equal": true
+    },
+    {
+      "scenario": "spacing",
+      "ticks": 800,
+      "sha256": "dce2299bd87bdd739e1387a18b38a15a8bb7e3e0b236b36aa656880432a92d14",
+      "equal": true
+    },
+    {
+      "scenario": "spacing_hold",
+      "ticks": 800,
+      "sha256": "907393d5f346503c08d1a2e80007f70b63103a9cad8c66f1b291fb6b6341ff59",
+      "equal": true
+    },
+    {
+      "scenario": "ads_hold",
+      "ticks": 800,
+      "sha256": "12dfe441b1eb690493216d579e3206caa7528432747a7f33b51c7458371c450a",
+      "equal": true
+    },
+    {
+      "scenario": "handle_gap_short",
+      "ticks": 800,
+      "sha256": "5d59424cebaa397f7d51dc16e6b82ad39997bd3c0110c922ab1ed651d3d97f69",
+      "equal": true
+    },
+    {
+      "scenario": "handle_gap_rebase",
+      "ticks": 800,
+      "sha256": "1cad7bf97ac51a9b736b2b5bc004b0eb5900379605046cd171cd4af9e031a553",
+      "equal": true
+    },
+    {
+      "scenario": "handle_disconnect",
+      "ticks": 800,
+      "sha256": "9182d635b6c311f10fd982e3e4e5d056151b0c8b263fc691913508bc9e46b4a5",
+      "equal": true
+    },
+    {
+      "scenario": "device_epoch",
+      "ticks": 800,
+      "sha256": "5ee61c87593e838f15c7d19839463f5985dd7100477d3c7fcd2229fd42ed762a",
+      "equal": true
+    },
+    {
+      "scenario": "restart",
+      "ticks": 800,
+      "sha256": "f78e15bb64d928a4285189906893b6b3ae4f308452bab904edf708f91128c4dd",
+      "equal": true
+    },
+    {
+      "scenario": "restart_accept",
+      "ticks": 800,
+      "sha256": "f78e15bb64d928a4285189906893b6b3ae4f308452bab904edf708f91128c4dd",
+      "equal": true
+    },
+    {
+      "scenario": "restart_reject",
+      "ticks": 800,
+      "sha256": "1b518aa4620c5c77c64522f8722708c21b50bf35f85d3ac2bd9bfc700bedb700",
+      "equal": true
+    },
+    {
+      "scenario": "manual",
+      "ticks": 800,
+      "sha256": "241277d3021782e8902d49e88e6605dbbb2f0f45dfdb53e7d3d3007ca00d1a1c",
+      "equal": true
+    },
+    {
+      "scenario": "feedback",
+      "ticks": 797,
+      "sha256": "c65c3d5fb034dadffea641ac67fcaea93a97b2205ef2bd14865c018bdd14fb57",
+      "equal": true
+    },
+    {
+      "scenario": "return_retry_axis6",
+      "ticks": 800,
+      "sha256": "4fff6df88c834d3adeb2d8521058cc09e5827925e380b564f0432240d733c578",
+      "equal": true
+    },
+    {
+      "scenario": "return_retry_both",
+      "ticks": 800,
+      "sha256": "aad1e7643dafb38ab846ac4b55a80beed61b20dbcf4f0b3d388ce9b45042ceec",
+      "equal": true
+    },
+    {
+      "scenario": "return_possible_axis6",
+      "ticks": 800,
+      "sha256": "8d0d424617278a1cc0da2072c7eaf1fcba3e3246a17edec635dd8a866426ce0e",
+      "equal": true
+    },
+    {
+      "scenario": "return_possible_both",
+      "ticks": 800,
+      "sha256": "5ebfba8fc481e71243fc558a678332c7cf866e88b42b935c20c97ef4067e23b4",
+      "equal": true
+    },
+    {
+      "scenario": "return_fault_axis6",
+      "ticks": 800,
+      "sha256": "081af37df4839477430cc19c3e7fdad584cc31fc7734ecb20f0cbc508ec3f89a",
+      "equal": true
+    },
+    {
+      "scenario": "return_fault_both",
+      "ticks": 800,
+      "sha256": "4ec71b172dd16fbae205c08b3cfec762683bd593f75f5ee7607f3dab40670d46",
+      "equal": true
+    }
+  ]
+}

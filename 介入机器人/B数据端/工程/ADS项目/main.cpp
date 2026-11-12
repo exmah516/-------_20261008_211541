@@ -367,7 +367,6 @@ int main()
 	double axis6_soft_limit_blocked_target_from_left_mm = 0.0;
 	ForceSampleFrame force_sample;
 	int loop_count = 0;
-	bool clean_force_monitor_enabled = false;
 	std::string force_feedback_diag_reason;
 	std::string force_sample_diag_reason;
 	// 统一回退的完成、重试和取消均以同一份100 Hz快照序号判定“之后的新鲜帧”。
@@ -2963,8 +2962,7 @@ int main()
 		experiment_recorder.update_ads_communication_stats(ads_stats);
 		experiment_recorder.poll_health();
 		const DWORD force_sample_now_ms = GetTickCount();
-		const bool force_data_consumer_active = experiment_recorder.is_recording() || ff.enabled() ||
-			clean_force_monitor_enabled;
+		const bool force_data_consumer_active = experiment_recorder.is_recording() || ff.enabled();
 		if (has_new_ads_snapshot)
 		{
 			ForceSampleFrame sampled_frame{};
@@ -3482,36 +3480,11 @@ int main()
 					}
 					break;
 				}
-				case VisCommandType::SetCylinderManualOpen:
-				case VisCommandType::SetCylinderManualClosed:
-				{
-					const bool valid_cylinder_index = vcmd.param1 >= 0 && vcmd.param1 < 4;
-					if (valid_cylinder_index && cylinder_manual_allowed)
-					{
-						const unsigned short current[] = { cylinder1_cmd, cylinder2_cmd, cylinder3_cmd, cylinder4_cmd };
-						if (!prepare_cylinder_manual_override(vcmd.param1, !automatic_cylinder_output_enabled, current[vcmd.param1])) break;
-						cylinder_manual_mode[vcmd.param1] =
-							vcmd.type == VisCommandType::SetCylinderManualOpen
-							? CylinderManualMode::Open
-							: CylinderManualMode::Closed;
-					}
-					else if (valid_cylinder_index)
-					{
-						std::cout << "UI：PLC 未就绪或自动流程正在接管，已忽略电缸手动覆盖请求。" << std::endl;
-					}
-					break;
-				}
 				case VisCommandType::ZeroForceSensor:
 				{
 					zero_force_sensor("UI：");
 					break;
 				}
-				case VisCommandType::ToggleForceFeedback:
-					ff.set_enabled(0, !ff.enabled());
-					ff.reset();
-					std::cout << "UI：力反馈：" << (ff.enabled() ? "开启" : "关闭") << std::endl;
-					if (!ff.enabled()) clear_force_output();
-					break;
 				case VisCommandType::SetForceFeedback:
 					ff.set_enabled(vcmd.param2, vcmd.param1 != 0);
 					std::cout << "UI：力反馈 " << (vcmd.param2 == 1 ? "导管587" : vcmd.param2 == 2 ? "导丝582" : "两侧")
@@ -3525,39 +3498,6 @@ int main()
 							? "开启（低通、虚拟阻尼及换手保持）"
 							: "关闭（旁路低通与虚拟阻尼）")
 						<< std::endl;
-					break;
-				case VisCommandType::StartExperimentRecording:
-				{
-					const ExperimentRecorderSnapshot before_start = experiment_recorder.snapshot();
-					if (before_start.state != ExperimentRecordingState::Idle &&
-						before_start.state != ExperimentRecordingState::Error)
-					{
-						break;
-					}
-					ExperimentStartInfo start_info{};
-					start_info.axis1_handle_serial = axis1_input_handle != nullptr
-						? axis1_input_handle->serial()
-						: 0;
-					start_info.axis6_handle_serial = axis6_input_handle != nullptr
-						? axis6_input_handle->serial()
-						: 0;
-					if (experiment_recorder.start(vcmd.payload_utf8, start_info))
-					{
-						std::cout << "UI：统一实验记录已启动。" << std::endl;
-					}
-					else
-					{
-						const ExperimentRecorderSnapshot failed_snapshot = experiment_recorder.snapshot();
-						std::cout << "UI：统一实验记录启动失败，错误码："
-							<< static_cast<int>(failed_snapshot.error) << "。" << std::endl;
-					}
-					break;
-				}
-				case VisCommandType::StopExperimentRecording:
-					experiment_recorder.stop_async("user_stop");
-					break;
-				case VisCommandType::SetCleanForceMonitor:
-					clean_force_monitor_enabled = vcmd.param1 != 0;
 					break;
 				case VisCommandType::SetArmManualEnable:
 					arm_manual_ads.set_manual_enable(vcmd.param1 != 0);
@@ -3587,18 +3527,6 @@ int main()
 					if (vcmd.param1 >= 1 && vcmd.param1 <= 5 && vcmd.param2 >= -1 && vcmd.param2 <= 1)
 						arm_manual_ads.set_jog_direction(vcmd.param1, vcmd.param2, vcmd.arm_jog_speed_scale);
 					break;
-				case VisCommandType::SetArmJogParameter:
-				{
-					const int axis_one_based = (vcmd.param1 / 4) + 1;
-					const int parameter_kind = vcmd.param1 % 4;
-					const double value = static_cast<double>(vcmd.param2) / 1000.0;
-					if (vcmd.param1 < 0 || vcmd.param1 >= 20 ||
-						!arm_manual_ads.set_jog_parameter(axis_one_based, parameter_kind, value))
-					{
-						std::cout << "定位臂点动参数已忽略：轴号、字段或数值超出范围。" << std::endl;
-					}
-					break;
-				}
 				case VisCommandType::SetAxis4ManualJog:
 					if (vcmd.param1 >= -1 && vcmd.param1 <= 1)
 					{
@@ -3624,26 +3552,6 @@ int main()
 							: GetTickCount64() + manual_jog_lease_ms;
 					}
 					break;
-				case VisCommandType::SetAxis1PostReturnLead:
-				{
-					const double lead_mm = static_cast<double>(vcmd.param1) / 1000.0;
-					if (lead_mm < 0.0 ||
-						lead_mm > cfg.axis1_post_return_lead_limit_mm)
-					{
-						std::cout << "UI：axis1 前10 mm比例映射量已忽略，范围为 [0, 5] mm。"
-							<< std::endl;
-					}
-					else
-					{
-						cfg.axis1_post_return_lead_mm = lead_mm;
-						// 参数变更从下一段回退后的递送重新计量，避免旧映射进度
-						// 继续套用到新参数。
-						clear_axis1_delivery_mapping();
-						std::cout << "UI：axis1 前10 mm比例映射量已更新为 "
-							<< lead_mm << " mm。" << std::endl;
-					}
-					break;
-				}
 				case VisCommandType::SelectDirectControl:
 					{
 						if (control_active || planned_return.active() || spacing_recovery.active()) break;
@@ -3684,37 +3592,7 @@ int main()
 						}
 						break;
 					}
-					case VisCommandType::SetGravityCompensation:
-				{
-					const bool requested_enabled = (vcmd.param1 != 0);
-					const bool enabled = requested_enabled && cal_cfg.gravity_comp_validated;
-					if (requested_enabled && !cal_cfg.gravity_comp_validated)
-					{
-						std::cout << "UI：重力补偿启用已拒绝：返工后的F_direct尚未完成旋转重力复标。"
-							<< std::endl;
-					}
-					if (cal_cfg.gravity_comp_enabled != enabled)
-					{
-						cal_cfg.gravity_comp_enabled = enabled;
-						std::cout << "UI：重力补偿：" << (enabled ? "开启" : "关闭")
-							<< "，theta0=" << cal_state.theta0_deg << " deg" << std::endl;
-					}
-					break;
-				}
-				case VisCommandType::SetSpacingRecovery:
-				{
-					if (vcmd.param1 != 0 && ads_soft_hold_active)
-					{
-						std::cout << "UI：ADS 软保持或重连期间已忽略屈曲恢复请求。" << std::endl;
-						break;
-					}
-					if (vcmd.param1 != 0)
-					{
-						// 与物理按键一致：当前换手自然完成后，在请求仍有效时进入恢复。
-					}
-					spacing_recovery.requested = (vcmd.param1 != 0);
-					break;
-				}
+
 				default:
 					break;
 				}
