@@ -9,7 +9,7 @@ static void test_main_gates()
     bool control_active = true, initial_sync_done = true, connection_hold_active = false;
     bool ads_soft_hold_active = false, handle_soft_hold_active = false, return_ads_fault_hold = false;
     bool estop_hold_active = false, emergency_retract_active = false, axis6_soft_limit_hold = false;
-    bool tracking_manual_cylinder_override = false, single_handle_mode = false;
+    bool manual_cylinder_override_active = false, single_handle_mode = false;
     bool axis4_forward_request = false, axis4_reverse_request = false;
     bool has_new_ads_snapshot = true, ads_motion_cycle_valid = true;
     struct State {
@@ -42,7 +42,7 @@ static void test_main_gates()
     assert(axis1_net_distance.net_mm() == 14 && axis6_net_distance.net_mm() == 7);
     for (bool* hold : { &connection_hold_active, &ads_soft_hold_active, &handle_soft_hold_active,
         &return_ads_fault_hold, &estop_hold_active, &emergency_retract_active, &axis6_soft_limit_hold,
-        &tracking_manual_cylinder_override, &startup.running, &spacing_recovery.running,
+        &manual_cylinder_override_active, &startup.running, &spacing_recovery.running,
         &spacing_recovery.requested })
     {
         const double before1 = axis1_net_distance.net_mm(), before6 = axis6_net_distance.net_mm();

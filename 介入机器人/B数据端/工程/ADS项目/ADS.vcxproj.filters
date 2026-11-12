@@ -48,9 +48,6 @@
     <ClCompile Include="experiment_recorder.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="delivery_tracking.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="arm_manual_ads_service.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
@@ -99,9 +96,6 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="handle_net_distance.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="delivery_tracking.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="arm_manual_ads_service.h">

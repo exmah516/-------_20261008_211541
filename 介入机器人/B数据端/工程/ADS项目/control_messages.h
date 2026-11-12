@@ -166,8 +166,6 @@ enum class VisCommandType : int
 	SetGravityCompensation = 13,
 	SetSpacingRecovery = 18, // param1: 0=退出，1=进入
 	// 20 为已删除的旧位移记录命令，保留数值空洞。
-	SetTrackingCompensation = 21, // param1: 0=关闭，1=开启
-	SetTrackingCompensationParam = 22, // param1=TrackingParameterField，param2=数值×1000
 	SetAxis1PostReturnLead = 24, // param1=轴1前10 mm比例映射量，单位 mm×1000，范围 [0, 5]
 	StartExperimentRecording = 25, // UTF-8 负载为实验名称
 	StopExperimentRecording = 26,

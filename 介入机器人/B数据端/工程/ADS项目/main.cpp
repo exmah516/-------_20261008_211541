@@ -3,7 +3,6 @@
 #include "homing_record.h"
 #include "ads_communication.h"
 #include "arm_manual_ads_service.h"
-#include "delivery_tracking.h"
 #include "handle_net_distance.h"
 #include "experiment_recorder.h"
 #include "handle_velocity_recorder.h"
@@ -79,7 +78,6 @@ int main()
 	Handle handle_axis1(serial_axis1_handle);
 	Handle handle_axis6(serial_axis6_handle);
 	CADSComm ads;
-	DeliveryTrackingController tracking_controller;
 	HandleNetDistance axis1_net_distance, axis6_net_distance;
 	ExperimentRecorder experiment_recorder;
 	HandleVelocityRecorder handle_velocity_recorder;
@@ -786,7 +784,7 @@ int main()
 	pending_startup.axis5_from_left_mm = startup.final_axis5_from_left_mm;
 	pending_startup.axis6_from_left_mm = startup.final_axis6_from_left_mm;
 	pending_startup.speed_scale = cfg.startup_motion_speed_scale;
-	bool tracking_manual_cylinder_override = false;
+	bool manual_cylinder_override_active = false;
 	ads_snapshot_sequence = 0;
 	std::uint64_t handled_plc_restart_count = 0;
 	std::uint64_t handled_reconnect_count = 0;
@@ -908,7 +906,6 @@ int main()
 			ads_communication.request_coordinate_refresh();
 			ads_communication.request_watchdog_recovery();
 			if (spacing_recovery.phase != SpacingRecoveryPhase::ExitSync) spacing_recovery.reset();
-			tracking_controller.disable_compensation();
 			std::cout << "ADS 重连：保留原回退任务与方向，按 PLC 当前状态继续确认和交接。" << std::endl;
 		}
 		// 运动控制只依赖位置快照；力数据质量单独由 force_valid 传给力反馈和记录器。
@@ -1077,7 +1074,6 @@ int main()
 		if (connection_hold_enter_edge)
 		{
 			clear_cylinder_manual_overrides();
-			tracking_controller.disable_compensation();
 			if (spacing_recovery.phase != SpacingRecoveryPhase::ExitSync) spacing_recovery.reset();
 			clear_force_output();
 			std::cout << "连接保持激活：source="
@@ -1139,7 +1135,6 @@ int main()
 			handled_plc_restart_count = ads_stats.plc_restart_count;
 			plc_restart_recovery_latched = false;
 			ff.set_enabled(0, false);
-			tracking_controller.disable_compensation();
 			spacing_recovery.reset();
 			(void)cancel_active_return_motion(true);
 			control_active = false;
@@ -1610,12 +1605,12 @@ int main()
 		// 轴4 接线方向与按键语义相反，此处交换映射。
 		bool axis4_manual_forward_req = axis4_reverse_request;
 		bool axis4_manual_reverse_req = axis4_forward_request;
-		tracking_manual_cylinder_override = false;
+		manual_cylinder_override_active = false;
 		for (int cylinder_index = 0; cylinder_index < 4; ++cylinder_index)
 		{
 			if (cylinder_manual_mode[cylinder_index] != CylinderManualMode::Automatic)
 			{
-				tracking_manual_cylinder_override = true;
+				manual_cylinder_override_active = true;
 				break;
 			}
 		}
@@ -1628,7 +1623,7 @@ int main()
 				!estop_hold_active && !startup.is_active() && !emergency_retract_active &&
 				!spacing_recovery.active() && !spacing_recovery.requested &&
 				!planned_return.active() && !axis6_soft_limit_hold &&
-				!tracking_manual_cylinder_override;
+				!manual_cylinder_override_active;
 		};
 		const bool distance_follow_before = handle_distance_follow_allowed();
 		if (has_new_ads_snapshot)
@@ -1693,106 +1688,6 @@ int main()
 			const bool axis6_directional_increment_active =
 				std::abs(axis6_directional_increment_mm) > 0.0;
 
-			// 主从位移实验门控：只认可普通导管递送 axis1 与独立导丝递送 axis6。
-			// 夹持成立仅是命令保持 150 ms 的实验假设，并不替代物理到位传感器。
-			const bool tracking_no_return_active =
-				!planned_return.active() && !axis6_soft_limit_hold;
-			auto tracking_reason_for = [&](bool forward_mode) -> TrackingInvalidReason
-			{
-				if (!forward_mode) return TrackingInvalidReason::NotForwardDelivery;
-				if (!control_active) return TrackingInvalidReason::ControlInactive;
-				if (motion_startup_active) return TrackingInvalidReason::StartupActive;
-				if (estop_hold_active) return TrackingInvalidReason::PlcHold;
-				if (return_ads_fault_hold) return TrackingInvalidReason::AdsReturnFault;
-				if (spacing_recovery.active() || spacing_recovery.requested) return TrackingInvalidReason::SpacingRecovery;
-				if (tracking_manual_cylinder_override) return TrackingInvalidReason::ManualCylinderOverride;
-				if (!tracking_no_return_active) return TrackingInvalidReason::CrawlReturnActive;
-				return TrackingInvalidReason::None;
-			};
-			const TrackingInvalidReason axis1_tracking_reason = tracking_reason_for(
-				false);
-			const TrackingInvalidReason axis6_tracking_reason = tracking_reason_for(
-				false && !axis6_effective_reverse_pressed);
-			// 先按当前 Follow 的预期夹持状态推进控制；本拍末尾还会按最终命令复核。
-			const bool axis1_grip_command_active =
-				cylinder2_cmd == cyl.cyl2_clamp && cylinder1_cmd == cyl.cyl1_open;
-			const bool axis6_grip_command_expected =
-				false &&
-				!planned_return.active() &&
-				!tracking_manual_cylinder_override;
-			tracking_controller.update_gate(
-				DeliveryTrackingAxis::Axis1,
-				axis1_tracking_reason == TrackingInvalidReason::None,
-				axis1_grip_command_active,
-				now_ms,
-				axis1_abs,
-				axis1_tracking_reason);
-			tracking_controller.update_gate(
-				DeliveryTrackingAxis::Axis6,
-				axis6_tracking_reason == TrackingInvalidReason::None,
-				axis6_grip_command_expected,
-				now_ms,
-				axis6_abs,
-				axis6_tracking_reason);
-			tracking_controller.begin_cycle(
-				DeliveryTrackingAxis::Axis1,
-				axis1_input_handle->fJoints2[0],
-				axis1_linear_filtered,
-				axis1_linear_increment_raw_mm,
-				plc_act_pos[0]);
-			tracking_controller.begin_cycle(
-				DeliveryTrackingAxis::Axis6,
-				axis6_input_handle->fJoints2[0],
-				axis6_linear_filtered,
-				axis6_linear_increment_raw_mm,
-				plc_act_pos[5]);
-			const bool axis1_forward_tracking_mode =
-				false;
-			const bool axis6_forward_tracking_mode =
-				false && !axis6_effective_reverse_pressed;
-			const bool axis1_handover_active = axis1_forward_tracking_mode &&
-				planned_return.active() && planned_return.contains_axis(0);
-			const bool axis6_handover_active = axis6_forward_tracking_mode &&
-				planned_return.active() && planned_return.contains_axis(5);
-			if (axis1_handover_active)
-			{
-				// 正向递送坐标朝左为负；换手时只把持续前推转换成正欠账，回拉复位不计入。
-				tracking_controller.record_handover_forward_increment(
-					DeliveryTrackingAxis::Axis1,
-					(std::max)(0.0, -axis1_linear_increment_mm));
-			}
-			if (axis6_handover_active)
-			{
-				tracking_controller.record_handover_forward_increment(
-					DeliveryTrackingAxis::Axis6,
-					(std::max)(0.0, -axis6_linear_increment_mm));
-			}
-			const bool tracking_segment_active =
-				tracking_controller.snapshot(DeliveryTrackingAxis::Axis1).segment_active ||
-				tracking_controller.snapshot(DeliveryTrackingAxis::Axis6).segment_active;
-			const DeliveryTrackingAxisSnapshot axis1_tracking_gate_snapshot =
-				tracking_controller.snapshot(DeliveryTrackingAxis::Axis1);
-			const DeliveryTrackingAxisSnapshot axis6_tracking_gate_snapshot =
-				tracking_controller.snapshot(DeliveryTrackingAxis::Axis6);
-			const bool tracking_handover_or_regrip =
-				axis1_tracking_reason == TrackingInvalidReason::CrawlReturnActive ||
-				axis6_tracking_reason == TrackingInvalidReason::CrawlReturnActive ||
-				axis1_tracking_reason == TrackingInvalidReason::GripSettling ||
-				axis6_tracking_reason == TrackingInvalidReason::GripSettling ||
-				axis1_tracking_gate_snapshot.invalid_reason ==
-					static_cast<int>(TrackingInvalidReason::CrawlReturnActive) ||
-				axis6_tracking_gate_snapshot.invalid_reason ==
-					static_cast<int>(TrackingInvalidReason::CrawlReturnActive) ||
-				axis1_tracking_gate_snapshot.invalid_reason ==
-					static_cast<int>(TrackingInvalidReason::GripSettling) ||
-				axis6_tracking_gate_snapshot.invalid_reason ==
-					static_cast<int>(TrackingInvalidReason::GripSettling);
-			if (tracking_controller.compensation_enabled() && !tracking_segment_active &&
-				!tracking_handover_or_regrip)
-			{
-				tracking_controller.disable_compensation();
-				std::cout << "主从位移补偿已关闭：已离开正向递送/换手恢复范围。" << std::endl;
-			}
 			struct PlannedReturnEventView
 			{
 				bool busy = false;
@@ -3321,39 +3216,6 @@ int main()
 				axis6_soft_limit_warning_reason = Axis6SoftLimitReason::None;
 			}
 
-			const bool tracking_return_started_this_cycle = planned_return.active();
-			if (tracking_return_started_this_cycle)
-			{
-				// 本拍触发 SwitchWait/回退时立即结束实验段并冻结 PI；
-				// 换手前向欠账保留，待恢复正向 Follow 后继续由受限映射逐步补偿。
-				tracking_controller.invalidate_all(TrackingInvalidReason::CrawlReturnActive);
-			}
-			else
-			{
-				// 以状态机构最终生成的命令复核 150 ms 夹持假设。
-				// 这里再次调用不会重复累计实际位移，因为本拍实际位置尚未改变。
-				const bool axis1_final_grip_command =
-					cylinder2_cmd == cyl.cyl2_clamp && cylinder1_cmd == cyl.cyl1_open;
-				const bool axis6_final_grip_command =
-					cylinder4_cmd == cyl.cyl4_clamp && cylinder3_cmd == cyl.cyl3_open;
-				tracking_controller.update_gate(
-					DeliveryTrackingAxis::Axis1,
-					axis1_tracking_reason == TrackingInvalidReason::None,
-					axis1_final_grip_command,
-					now_ms,
-					axis1_abs,
-					axis1_tracking_reason);
-				tracking_controller.update_gate(
-					DeliveryTrackingAxis::Axis6,
-					axis6_tracking_reason == TrackingInvalidReason::None,
-					axis6_final_grip_command,
-					now_ms,
-					axis6_abs,
-					axis6_tracking_reason);
-			}
-			tracking_controller.finish_cycle(DeliveryTrackingAxis::Axis1, pos[0], plc_act_pos[0]);
-			tracking_controller.finish_cycle(DeliveryTrackingAxis::Axis6, pos[5], plc_act_pos[5]);
-
 			axis1_prev_linear_filtered = axis1_linear_filtered;
 			axis6_prev_linear_filtered = axis6_linear_filtered;
 			axis1_prev_rot_filtered = axis1_rot_filtered;
@@ -3367,18 +3229,6 @@ int main()
 		{
 			axis4_axis6_coupling_active_prev = false;
 			axis4_axis6_coupling_last_ms = 0;
-			TrackingInvalidReason inactive_reason = TrackingInvalidReason::NotForwardDelivery;
-			if (return_ads_fault_hold) inactive_reason = TrackingInvalidReason::AdsReturnFault;
-			else if (motion_startup_active) inactive_reason = TrackingInvalidReason::StartupActive;
-			else if (estop_hold_active) inactive_reason = TrackingInvalidReason::PlcHold;
-			else if (spacing_recovery.active() || spacing_recovery.requested) inactive_reason = TrackingInvalidReason::SpacingRecovery;
-			else if (!control_active) inactive_reason = TrackingInvalidReason::ControlInactive;
-			tracking_controller.invalidate_all(inactive_reason);
-			if (tracking_controller.compensation_enabled())
-			{
-				tracking_controller.disable_compensation();
-				std::cout << "主从位移补偿已关闭：运动控制当前不可用。" << std::endl;
-			}
 		}
 
 		const DWORD spacing_recovery_exit_elapsed_ms =
@@ -3480,7 +3330,7 @@ int main()
 		experiment_recorder.poll_health();
 		const DWORD force_sample_now_ms = GetTickCount();
 		const bool force_data_consumer_active = experiment_recorder.is_recording() || ff.enabled() ||
-			tracking_controller.compensation_enabled() || clean_force_monitor_enabled;
+			clean_force_monitor_enabled;
 		if (has_new_ads_snapshot)
 		{
 			ForceSampleFrame sampled_frame{};
@@ -3521,13 +3371,6 @@ int main()
 			? calculate_clean_force(
 				force_sample.fn_1_value_v, force_sample.ft_1_value_v, cal_cfg, cal_state)
 			: CleanForce{};
-
-		// PI 与磁盘记录无关；力采样失效时关闭位移补偿。
-		if (tracking_controller.compensation_enabled() && !force_sample.valid)
-		{
-			tracking_controller.disable_compensation();
-			std::cout << "主从位移补偿已关闭：当前没有有效力采样。" << std::endl;
-		}
 
 		// 力反馈阻断原因仅在状态变化时输出一次，避免控制台被周期性等待提示淹没。
 		std::string current_force_feedback_reason;
@@ -3837,15 +3680,11 @@ int main()
 			vs.spacing_recovery_phase = static_cast<int>(spacing_recovery.phase);
 			vs.spacing_recovery_moved_mm = spacing_recovery.moved_mm;
 			vs.spacing_recovery_remaining_mm = spacing_recovery.remaining_mm;
-			const DeliveryTrackingAxisSnapshot axis1_tracking_snapshot =
-				tracking_controller.snapshot(DeliveryTrackingAxis::Axis1);
-			const DeliveryTrackingAxisSnapshot axis6_tracking_snapshot =
-				tracking_controller.snapshot(DeliveryTrackingAxis::Axis6);
-			vs.tracking_compensation_enabled = tracking_controller.compensation_enabled();
-			vs.axis1_tracking_error_mm = axis1_tracking_snapshot.tracking_error_mm;
-			vs.axis6_tracking_error_mm = axis6_tracking_snapshot.tracking_error_mm;
-			vs.axis1_compensation_gain = axis1_tracking_snapshot.compensation_gain;
-			vs.axis6_compensation_gain = axis6_tracking_snapshot.compensation_gain;
+			vs.tracking_compensation_enabled = false;
+			vs.axis1_tracking_error_mm = 0.0;
+			vs.axis6_tracking_error_mm = 0.0;
+			vs.axis1_compensation_gain = 1.0;
+			vs.axis6_compensation_gain = 1.0;
 			vs.axis6_soft_limit_hold = axis6_soft_limit_hold;
 			const ExperimentRecorderSnapshot recorder_snapshot = experiment_recorder.snapshot();
 			vs.recording_state = static_cast<int>(recorder_snapshot.state);
@@ -4072,67 +3911,6 @@ int main()
 							: "关闭（旁路低通与虚拟阻尼）")
 						<< std::endl;
 					break;
-				case VisCommandType::SetTrackingCompensation:
-					if (vcmd.param1 == 0)
-					{
-						if (tracking_controller.compensation_enabled())
-						{
-							tracking_controller.disable_compensation();
-							std::cout << "主从位移补偿已关闭。" << std::endl;
-						}
-						break;
-					}
-					{
-						DeliveryTrackingAxis tracking_axis = DeliveryTrackingAxis::Axis1;
-						bool forward_tracking_mode = false;
-						if (!axis1_reverse_pressed)
-						{
-							tracking_axis = DeliveryTrackingAxis::Axis1;
-							forward_tracking_mode = true;
-						}
-						else if (false && !axis6_effective_reverse_pressed)
-						{
-							tracking_axis = DeliveryTrackingAxis::Axis6;
-							forward_tracking_mode = true;
-						}
-						const std::int64_t gate_now_qpc = experiment_recorder.clock().now_qpc();
-						const std::int64_t gate_max_age = experiment_recorder.clock().frequency() / 2;
-						const bool force_sample_fresh =
-							force_sample.valid &&
-							force_sample.qpc_ticks > 0 &&
-							gate_now_qpc >= force_sample.qpc_ticks &&
-							gate_now_qpc - force_sample.qpc_ticks <= gate_max_age;
-						if (!force_sample_fresh)
-						{
-							ForceSampleFrame gate_sample{};
-							const bool gate_sample_ok = read_force_sample(gate_sample);
-							force_sample = gate_sample;
-							force_sample.valid = gate_sample_ok;
-						}
-						if (!forward_tracking_mode || !force_sample.valid)
-						{
-							std::cout << "主从位移补偿开启被拒绝：需处于正向 Follow 递送段且 ADS 力采样有效。" << std::endl;
-						}
-						else if (!tracking_controller.set_compensation_enabled(true, tracking_axis))
-						{
-							std::cout << "主从位移补偿开启被拒绝：夹持假设尚未稳定或 PI 参数未满足安全范围。" << std::endl;
-						}
-						else
-						{
-							std::cout << "主从位移补偿已开启。" << std::endl;
-						}
-					}
-					break;
-				case VisCommandType::SetTrackingCompensationParam:
-					if (vcmd.param1 < static_cast<int>(TrackingParameterField::Axis1Kp) ||
-						vcmd.param1 > static_cast<int>(TrackingParameterField::Axis6MaxError) ||
-						!tracking_controller.set_parameter(
-							static_cast<TrackingParameterField>(vcmd.param1),
-							static_cast<double>(vcmd.param2) / 1000.0))
-					{
-						std::cout << "主从位移 PI 参数已忽略：补偿开启时不可修改，或数值超出安全范围。" << std::endl;
-					}
-					break;
 				case VisCommandType::StartExperimentRecording:
 				{
 					const ExperimentRecorderSnapshot before_start = experiment_recorder.snapshot();
@@ -4256,7 +4034,6 @@ int main()
 			clear_cylinder_manual_overrides();
 					axis6_crawl.enabled = false;
 					clear_cylinder_manual_overrides();
-					tracking_controller.disable_compensation();
 					ff.set_enabled(0, false);
 					ff.reset();
 					clear_force_output();

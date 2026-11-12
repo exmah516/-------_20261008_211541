@@ -41,3 +41,7 @@ R2-8 的51条原断言已复制到 tools/refactor_baseline/behavior_probes.cpp�
 ### 3.1.2 导丝独立模式
 
 已确认：删除guidewire_mode模块、独立crawl与专用同步/窗口锁定、四个非Dual计划回退模式及Axis1/Axis6重基准分支。Dual=5、Both=2保留原数值，公共状态mode仍发送0。Dual使用的rebase_axis1/rebase_dual、轴6基准/旋转/跟随窗口仍在。黄金34场景/27,197拍逐值相等，11个离线程序、47条R2断言通过（logs/delete2*）。删除两个单柄/独立窗口兼容断言和两个仅验证独立模式保存的断言；保留控制与同步断言。已编入PLC的接口不变。
+
+### 3.1.3 追踪补偿
+
+已确认：删除 delivery_tracking 模块、控制器及全部调用、换手欠账和两个无公共映射的内部参数命令。公共状态字段维持原布局，双柄下继续发送关闭、误差0、增益1。净距离仍使用的四电缸手动覆盖扫描保留并改名 manual_cylinder_override_active。黄金34场景/27,197拍逐值相等，11个离线程序和47条保留断言通过（logs/delete3*）；本组没有删除保留断言。
