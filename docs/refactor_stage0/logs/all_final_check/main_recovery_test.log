@@ -1,0 +1,26 @@
+main_recovery_test.cpp
+PASS: missing handles cannot report a rebuilt baseline while connection hold is still active
+PASS: repeated start leaves an active return and its baseline untouched
+PASS: fresh ADS releases the snapshot gate without rebasing an unfinished return
+PASS: disconnect cache reset does not masquerade as PLC self-check falling edge
+PASS: a transient snapshot loss does not cancel the selected control mode
+ADS 快照恢复：实际位置与手柄基准已重建。
+PASS: dual-handle recovery rebases both handles together
+PASS: failed coordinate rebase keeps input output gated
+ADS 快照恢复：实际位置与手柄基准已重建。
+开始控制被拒绝：当前不在已自检待机状态或 ADS 未就绪。
+PASS: start cannot bypass ADS hold
+开始控制被拒绝：当前不在已自检待机状态或 ADS 未就绪。
+PASS: missing handle samples do not start control
+PASS: failed rebase is retried without activating control
+PASS: fresh ADS and handles recover the completed control without a manual resume latch
+开始控制被拒绝：当前不在已自检待机状态或 ADS 未就绪。
+PASS: confirmed incomplete PLC preparation still blocks control
+开始控制被拒绝：当前不在已自检待机状态或 ADS 未就绪。
+PASS: a return fault is not bypassed by communication recovery
+PASS: fresh startup does not auto-select control
+PASS: R3 ADS recovery reason is separate
+手柄587采样间隔 1600 ms 后重建；：实际位置与手柄基准已重建。
+PASS: R3 sample-gap reason includes physical handle and milliseconds
+连接保持结束：实际位置与手柄基准已重建。
+PASS: R3 connection-hold end has its own reason

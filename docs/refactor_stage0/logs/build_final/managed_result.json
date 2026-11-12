@@ -1,0 +1,62 @@
+{
+  "master": {
+    "exit": 0,
+    "command": [
+      "C:\\Program Files\\dotnet\\dotnet.exe",
+      "build",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\介入机器人\\A主端\\工程\\master\\MasterConsole.sln",
+      "-c",
+      "Release",
+      "-p:Platform=x64",
+      "-p:DirectoryBuildPropsPath=C:\\Users\\Sui\\AppData\\Local\\Temp\\stage0-managed-qm2kklid\\isolated.props",
+      "-warnaserror",
+      "-m:2",
+      "-v:minimal"
+    ]
+  },
+  "handlehost": {
+    "exit": 0,
+    "command": [
+      "C:\\Program Files\\dotnet\\dotnet.exe",
+      "build",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\介入机器人\\A主端\\工程\\master\\VI.HandleHost\\VI.HandleHost.csproj",
+      "-c",
+      "Release",
+      "-p:Platform=x64",
+      "-p:DirectoryBuildPropsPath=C:\\Users\\Sui\\AppData\\Local\\Temp\\stage0-managed-qm2kklid\\isolated.props",
+      "-warnaserror",
+      "-m:2",
+      "-v:minimal"
+    ]
+  },
+  "wpf_tests_build": {
+    "exit": 0,
+    "command": [
+      "C:\\Program Files\\dotnet\\dotnet.exe",
+      "build",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\介入机器人\\A主端\\工程\\master\\VI.Control.Tests.slnx",
+      "-c",
+      "Release",
+      "-p:Platform=x64",
+      "-p:DirectoryBuildPropsPath=C:\\Users\\Sui\\AppData\\Local\\Temp\\stage0-managed-qm2kklid\\isolated.props",
+      "-warnaserror",
+      "-m:2",
+      "-v:minimal"
+    ]
+  },
+  "protocol_tests_build": {
+    "exit": 0,
+    "command": [
+      "C:\\Program Files\\dotnet\\dotnet.exe",
+      "build",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\介入机器人\\A主端\\工程\\master\\MasterConsole.Protocol.Tests\\MasterConsole.Protocol.Tests.csproj",
+      "-c",
+      "Release",
+      "-p:Platform=x64",
+      "-p:DirectoryBuildPropsPath=C:\\Users\\Sui\\AppData\\Local\\Temp\\stage0-managed-qm2kklid\\isolated.props",
+      "-warnaserror",
+      "-m:2",
+      "-v:minimal"
+    ]
+  }
+}

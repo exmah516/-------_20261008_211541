@@ -1,0 +1,2 @@
+FAIL pre-round4 bitwise regression scenarios=45 cycles=160120 bytes=20655848 baseline_bytes=20655848
+first differing byte=375285

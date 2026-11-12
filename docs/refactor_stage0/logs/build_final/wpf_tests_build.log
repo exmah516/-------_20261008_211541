@@ -1,0 +1,17 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  MasterConsole.Protocol -> D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\A主端\工程\build\Stage0Release\bin\MasterConsole.Protocol\MasterConsole.Protocol.dll
+  VI.Service.Net -> D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\A主端\工程\build\Stage0Release\bin\VI.Service.Net\VI.Service.Net.dll
+  VI.HandleHost -> D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\A主端\工程\build\Stage0Release\bin\VI.HandleHost\VI.HandleHost.dll
+  VI.Service.Robot -> D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\A主端\工程\build\Stage0Release\bin\VI.Service.Robot\VI.Service.Robot.dll
+  MasterConsole.Protocol.Tests -> D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\A主端\工程\build\Stage0Release\bin\MasterConsole.Protocol.Tests\MasterConsole.Protocol.Tests.dll
+  VI.Module.PositioningArm -> D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\A主端\工程\build\Stage0Release\bin\VI.Module.PositioningArm\VI.Module.PositioningArm.dll
+  VI.Module.Intervention -> D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\A主端\工程\build\Stage0Release\bin\VI.Module.Intervention\VI.Module.Intervention.dll
+  VI.Control -> D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\A主端\工程\build\Stage0Release\bin\VI.Control\VI.Control.dll
+  VI.Control.Tests -> D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\介入机器人\A主端\工程\build\Stage0Release\bin\VI.Control.Tests\VI.Control.Tests.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:03.44

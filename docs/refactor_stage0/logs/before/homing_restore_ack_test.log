@@ -1,0 +1,9 @@
+homing_restore_ack_tests.cpp
+ADS 目标 PLC 应用: RobotPLC
+寻参已复用
+ADS 目标 PLC 应用: RobotPLC
+寻参已复用
+ADS 目标 PLC 应用: RobotPLC
+拒绝复用寻参：PLC原因码 2
+ADS 目标 PLC 应用: RobotPLC
+PASS V11 extracted restore acknowledgement checks=10

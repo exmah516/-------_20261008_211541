@@ -1,0 +1,33 @@
+network_tests.cpp
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_fixture.inc(46): error C3646: “guidewire_mode”: 未知重写说明符
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_fixture.inc(46): error C2059: 语法错误:“=”
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_fixture.inc(46): error C2653: “GuidewireMode”: 不是类或命名空间名称
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_fixture.inc(46): error C2238: 意外的标记位于“;”之前
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_fixture.inc(47): error C2086: “main_fixture::SpacingRecoveryPhase main_fixture::Fixture::<unnamed-tag>::phase”: 重定义
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(3): error C2065: “handle1_poll_ok”: 未声明的标识符
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(3): error C2065: “handle6_poll_ok”: 未声明的标识符
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(4): error C2039: "resume_settling": 不是 "main_fixture::Fixture::GapHandle" 的成员
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_fixture.inc(26): note: 参见“main_fixture::Fixture::GapHandle”的声明
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(5): error C2039: "resume_settling": 不是 "main_fixture::Fixture::GapHandle" 的成员
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_fixture.inc(26): note: 参见“main_fixture::Fixture::GapHandle”的声明
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(2): error C2737: “hold_sources”: 必须初始化 const 对象
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(6): error C2065: “event_connection_hold_active”: 未声明的标识符
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(8): error C2065: “event_connection_hold_active”: 未声明的标识符
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(9): error C2065: “event_hold_sources”: 未声明的标识符
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(10): error C2065: “event_connection_hold_active”: 未声明的标识符
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(11): error C2065: “event_hold_sources”: 未声明的标识符
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(14): error C2065: “event_hold_sources”: 未声明的标识符
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(13): error C2660: “main_fixture::record_experiment_event”: 函数不接受 1 个参数
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_fixture.inc(3): note: 参见“main_fixture::record_experiment_event”的声明
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(13): note: 尝试匹配参数列表“(main_fixture::ExperimentEventCode)”时
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(15): error C2065: “event_hold_sources”: 未声明的标识符
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(24): error C2039: "requested": 不是 "main_fixture::Fixture::<unnamed-type-spacing_recovery>" 的成员
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_fixture.inc(47): note: 参见“main_fixture::Fixture::<unnamed-type-spacing_recovery>”的声明
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(24): error C2838: “ExitSync”: 成员声明中的限定名称非法
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(24): error C2065: “ExitSync”: 未声明的标识符
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(27): error C2838: “ExitSync”: 成员声明中的限定名称非法
+D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\regression\network_replay\fixed\main_connection.inc(27): error C2065: “ExitSync”: 未声明的标识符
+plc_io.cpp
+zenoh_service.cpp
+手柄.cpp
+正在生成代码...

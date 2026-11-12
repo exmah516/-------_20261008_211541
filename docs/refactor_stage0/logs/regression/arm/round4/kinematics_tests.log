@@ -1,0 +1,22 @@
+PASS Known mechanical and program-zero geometry
+PASS Analytical Jacobian finite differences
+PASS Encoder conversion uses the new mechanical-zero reference
+PASS Invalid configuration and explicit unlimited axes
+PASS XY and yaw isolation
+PASS Z and pitch bypass planar singularity
+PASS Jog input, velocity and position rejection
+PASS All finite physical boundaries
+PASS Analytic Cartesian jog with unlimited axes and bounded pitch
+PASS Continuous planar jog and quaternion sign
+PASS Unreachable preserves state and reachable IK is analytic
+PASS Home windows include exact boundaries without motion
+PASS Home does not wrap angles or relabel measured position
+Home example: duration=2.23212 s, tip bound=70.6724 mm, rotation bound=6.32428 deg
+PASS Home path approaches folded zero with bounded dynamics
+PASS Home positive and negative corrections
+PASS Home rejects missing dynamics and invalid sampling
+PASS Home checks initial and final joint limits
+PASS Home retiming and deterministic planning
+PASS Near-singular speed reduction and malformed inputs
+PASS Home single-axis recovery and dense dynamic consistency
+20/20 tests passed (no hardware).

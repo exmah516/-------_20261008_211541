@@ -1,0 +1,20 @@
+
+  control_types.cpp
+  experiment_recorder.cpp
+  zenoh_service.cpp
+  ads_communication.cpp
+  plc_io.cpp
+  motion_sync.cpp
+  force_feedback.cpp
+  arm_manual_ads_service.cpp
+  main.cpp
+  ADSComm.cpp
+  手柄.cpp
+  kinematics.cpp
+  program_zero.cpp
+  正在生成代码
+  Previous IPDB not found, fall back to full compilation.
+  All 10285 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+  已完成代码的生成
+  ADS.vcxproj -> D:\Work_files\Vessel intervention Robot\主从分机软件包_20261008_211541\docs\refactor_stage0\logs\build_final\native\ADS.exe
+

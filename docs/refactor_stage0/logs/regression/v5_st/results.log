@@ -1,0 +1,7 @@
+st_tests.cpp
+PASS SelfCheck start-to-self_check_done cycles=5686 max_difference=0
+PASS ordinary err full-chain cycles=435 max_difference=0
+PASS four-axis return full-chain cycles=108 max_difference=0
+PASS V8/V9/V10/V11 new ST exits; checks=62
+PASS baseline/current complete ST: cycles=11049 max_difference=0
+PASS checks=29228

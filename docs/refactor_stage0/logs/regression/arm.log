@@ -1,0 +1,340 @@
+st_translation exit=0
+PASS ST translation: 1733 tokens; 338 C++ lines; all statements consumed
+stage_translation exit=0
+PASS ST translation: 1109 tokens; 199 C++ lines; all statements consumed
+stage_translation_before exit=0
+PASS ST translation: 1060 tokens; 193 C++ lines; all statements consumed
+st_static_audit_round4 exit=0
+PASS XML C从端\250902\Untitled2\GVLs\G.TcGVL
+PASS XML C从端\250902\Untitled2\Untitled2.plcproj
+PASS XML C从端\250902\Untitled2\PlcTask.TcTTO
+PASS XML C从端\250902\Untitled2\POUs\ArmCartJogGen.TcPOU
+PASS ST block nesting ArmCartJogGen
+PASS XML C从端\250902\Untitled2\POUs\ArmCartJog.TcPOU
+PASS ST block nesting ArmCartJog
+PASS XML C从端\250902\Untitled2\POUs\ArmCartesian.TcPOU
+PASS ST block nesting ArmCartesian
+PASS XML C从端\250902\Untitled2\POUs\ArmManual.TcPOU
+PASS ST block nesting ArmManual
+PASS XML C从端\250902\Untitled2\POUs\MAIN.TcPOU
+PASS ST block nesting MAIN
+PASS MAIN call order unchanged
+PASS PLC registers ArmCartJogGen
+PASS PLC registers ArmCartJog
+PASS PLC task 1000 us
+PASS Gen has no global or axis I/O
+PASS nominal-speed trapezoidal path increment
+PASS single-axis increment cap
+PASS full-step trial, otherwise exactly 12 bisections
+PASS exact reachable annulus
+PASS axis 2 trial increment cap
+PASS axis 3 trial increment cap
+PASS axis 4 trial increment cap
+PASS ACOS cosine has only prescribed [-1,1] clamp
+PASS no accepted step preserves position
+PASS ambiguous folded/straight elbow retains prior branch; initial +1
+PASS feed velocity/acceleration are finite differences
+PASS executed path speed and limited flag
+PASS joint caps 24 mm/s, 30/30/30/30 deg/s
+PASS TCP tool offsets match kinematics.h in millimetres
+PASS yaw trial recomputes wrist from anchored TCP and cumulative yaw
+PASS yaw anchor uses the q5-dependent horizontal tool offset
+PASS yaw inverse compensates axis 4 to track requested yaw
+PASS mode 5 is no longer a single-axis jog
+PASS old margin/Jacobian/k removed; no internal finite checks
+PASS mode/direction changes stay in wrapper stage 25
+PASS drive_ready identical to home
+PASS existing Tc2_MC2 API MC_ExtSetPointGenEnable
+PASS existing Tc2_MC2 API MC_ExtSetPointGenDisable
+PASS existing Tc2_MC2 API MC_Stop
+PASS existing Tc2_MC2 API MC_ExtSetPointGenFeed
+PASS Feed only owned stages 10/25
+PASS ArmCartJog skips MC_Stop on NC error axis
+PASS ArmCartJog Disable Done/Error/axis error completes stage 40
+PASS ArmCartJog Stop Done/Error/axis error completes stage 50
+PASS ArmCartJog stage 60 waits only for Stop Busy to clear
+PASS ArmCartJog FB errors preserve first cause
+PASS ArmCartesian skips MC_Stop on NC error axis
+PASS ArmCartesian Disable Done/Error/axis error completes stage 40
+PASS ArmCartesian Stop Done/Error/axis error completes stage 50
+PASS ArmCartesian stage 60 waits only for Stop Busy to clear
+PASS ArmCartesian FB errors preserve first cause
+PASS ArmCartJogGen.TcPOU matches pre-round4 after the accepted zero/cap changes (line endings normalized)
+PASS ArmManual.TcPOU matches pre-round4 after the accepted zero/cap changes (line endings normalized)
+PASS manual reset request resumes after ownership release; MC_Reset call retained
+PASS home/manual exclude jog ownership
+PASS kinematics z=+q1 retained
+PASS base offset default zero retained
+PASS no TcUnit in PLC project; no framework added
+REVIEW target TwinCAT 3.1.4024: BOOL/INT/LREAL/fixed ARRAY, IF/FOR/WHILE/EXIT, array assignment, SIN/COS/ACOS/ATAN/SQRT/ABS/MIN
+NOT BUILT 未构建: no TwinCAT XAE/PLC compiler; static checks and ST translation do not compile or run Tc2_MC2
+home_regression_build exit=0
+home_regression.cpp
+kinematics.cpp
+program_zero.cpp
+正在生成代码...
+home_regression exit=1
+FAIL HOME 100 cases, 1700 doubles + error/already_home, mismatches=274
+arm_cart_jog_regression_build exit=0
+arm_cart_jog_regression.cpp
+arm_cart_jog_regression exit=1
+FAIL second-round bitwise regression scenarios=30 cycles=99619 bytes=12851099 baseline_bytes=12851099
+first differing byte=375285
+arm_cart_jog_round4_regression_build exit=0
+arm_cart_jog_regression.cpp
+arm_cart_jog_round4_regression exit=1
+FAIL pre-round4 bitwise regression scenarios=45 cycles=160120 bytes=20655848 baseline_bytes=20655848
+first differing byte=375285
+arm_cart_jog_stage_tests_build exit=0
+arm_cart_jog_stage_tests.cpp
+arm_cart_jog_stage_tests exit=0
+S5.3 compare=pre-round4 bytes=2387200 other_bytes=2387200 first_difference=2387200
+S5.3 compare=reference bytes=2387200 other_bytes=2387200 first_difference=2387200
+PASS S5.3 normal release: 3200 cycles identical to pre-round4 ST and handwritten reference
+S5.1 release_cycle=7 cycles_after_other_axes_done=2 error=3002 error_axis_stop_execute=0
+PASS S5.1 axis 2 error, Stop error and Busy release
+S5.2 release_cycle=7 cycles_after_other_axes_done=2 error=4660 error_axis_stop_execute=0
+PASS S5.2 Disable error releases and preserves first error
+PASS first error clears on successful start
+S5 ST versus reference cycles=3232 bitwise_exact=1 max_numerical_difference=0 failures=0
+arm_cart_jog_round4_diagnostics_build exit=0
+arm_cart_jog_round4_diagnostics.cpp
+kinematics.cpp
+program_zero.cpp
+正在生成代码...
+arm_cart_jog_round4_diagnostics exit=1
+B_NONMONOTONE q2=-31.568598207665932 q3=-4 wx=-0.00190000000000623 wy=-23.987254484051618 alpha_now=176 delta_now=-1
+B_TRIAL step_mm=0.001 alpha_try=176.00000003194225 delta_try=-1.0000000319422497 old_conditions=1 proposed_accept=0 dq2=0.002388787614496124 dq3=3.194225417502139e-08 dq4=-0.0023888195567494108
+B_TRIAL step_mm=0.0025000000000000001 alpha_try=176.00000003707564 delta_try=-1.0000000370756368 old_conditions=1 proposed_accept=0 dq2=0.0059717079085253033 dq3=3.7075643888329068e-08 dq4=-0.0059717449841656389
+B_TRIAL step_mm=0.0040000000000000001 alpha_try=175.99999999087365 delta_try=-0.99999999087364699 old_conditions=1 proposed_accept=1 dq2=0.0095543148280157197 dq3=-9.1263654411477546e-09 dq4=-0.0095543057016485022
+B_TRIAL step_mm=0.0050000000000000001 alpha_try=175.99999993155268 delta_try=-0.9999999315526793 old_conditions=1 proposed_accept=1 dq2=0.011942545330487775 dq3=-6.8447323364750901e-08 dq4=-0.011942476883163522
+B_BISECTION desired_mm=0.005 accepted_mm=0 known_acceptable_mm=0.004
+FAIL B nonmonotone witness confirmed; 12 bisections miss an acceptable positive step; implementation stopped by user rule
+S1 mode=1 dir=1 speed=5 cycles=5000 displacement_mm=22.499999999982144 final_alpha_deg=-23.265217123452089 min_delta_deg=7.4923999999999751 final_path_speed=5 limited=0 line_mm=7.2164496600635175e-13 finite=1 joint_cap=1 max_joint_speed=3.2853743461203067 max_joint_acceleration=5.2930286358332523 peak_cycle=450 peak_axis=3 peak_previous_v=-1.5722358156153859 peak_v=-1.5775288442512192 first_stop_cycle=0 radius_min=372.21689422599593 radius_max=377.75041890988086 T11_ratio=0.9999986666665942 T11_peak_cycle=501
+S1 mode=1 dir=1 speed=30 cycles=5000 displacement_mm=135.00000000000318 final_alpha_deg=-32.708355619318525 min_delta_deg=7.4923999999999751 final_path_speed=30 limited=0 line_mm=7.2164496600635175e-13 finite=1 joint_cap=1 max_joint_speed=13.053119006656289 max_joint_acceleration=25.925177283170342 peak_cycle=344 peak_axis=3 peak_previous_v=-5.8065319142883709 peak_v=-5.8324570915715412 first_stop_cycle=0 radius_min=363.30297277001614 radius_max=377.75041889961591 T11_ratio=0.99999866666667314 T11_peak_cycle=501
+S1 mode=1 dir=-1 speed=5 cycles=5000 displacement_mm=7.933050537104414 final_alpha_deg=-0.0037832139944953269 min_delta_deg=-4.9962167860055047 final_path_speed=0 limited=1 line_mm=7.7715611723760958e-13 finite=1 joint_cap=1 max_joint_speed=29.99986853129144 max_joint_acceleration=21403.303533645612 peak_cycle=2116 peak_axis=3 peak_previous_v=21.403303533645612 peak_v=0 first_stop_cycle=2116 radius_min=377.75041891398683 radius_max=379.99999979347842 T11_ratio=0.9999986666665942 T11_peak_cycle=501
+S1 mode=1 dir=-1 speed=30 cycles=5000 displacement_mm=7.9330454997458277 final_alpha_deg=-0.010800945384914939 min_delta_deg=-4.9891990546150851 final_path_speed=0 limited=1 line_mm=7.2164496600635175e-13 finite=1 joint_cap=1 max_joint_speed=29.999907097845835 max_joint_acceleration=18208.919751685924 peak_cycle=881 peak_axis=3 peak_previous_v=27.471589905957217 peak_v=9.2626701542712908 first_stop_cycle=882 radius_min=377.75041892425173 radius_max=379.99999831667805 T11_ratio=0.99999866666667314 T11_peak_cycle=501
+S1 mode=2 dir=1 speed=5 cycles=5000 displacement_mm=22.499999999982258 final_alpha_deg=-40.86164472504197 min_delta_deg=7.4923999999999751 final_path_speed=5 limited=0 line_mm=4.4408920985006262e-13 finite=1 joint_cap=1 max_joint_speed=9.5418318403233116 max_joint_acceleration=16.770313436609285 peak_cycle=393 peak_axis=3 peak_previous_v=-4.3245217942171621 peak_v=-4.3412921076537714 first_stop_cycle=0 radius_min=356.16428121531669 radius_max=377.75041890472551 T11_ratio=0.9999986666665942 T11_peak_cycle=501
+S1 mode=2 dir=1 speed=30 cycles=5000 displacement_mm=134.3294390840631 final_alpha_deg=-97.393186341365322 min_delta_deg=7.4923999999999751 final_path_speed=30 limited=0 line_mm=3.8857805861880479e-13 finite=1 joint_cap=1 max_joint_speed=29.999907731109943 max_joint_acceleration=73.680661245134615 peak_cycle=267 peak_axis=3 peak_previous_v=-12.700288549552852 peak_v=-12.773969210797986 first_stop_cycle=0 radius_min=251.26720457305839 radius_max=377.75041886868371 T11_ratio=0.99999866666667314 T11_peak_cycle=501
+S1 mode=2 dir=-1 speed=5 cycles=5000 displacement_mm=2.3384785871291003 final_alpha_deg=-0.0027814924676476949 min_delta_deg=-4.9972185075323523 final_path_speed=0 limited=1 line_mm=4.9960036108132044e-13 finite=1 joint_cap=1 max_joint_speed=29.999977125186206 max_joint_acceleration=17583.911153479901 peak_cycle=1060 peak_axis=3 peak_previous_v=17.583911153479903 peak_v=0 first_stop_cycle=1060 radius_min=377.75041891914213 radius_max=379.99999988836527 T11_ratio=0.9999986666665942 T11_peak_cycle=501
+S1 mode=2 dir=-1 speed=30 cycles=5000 displacement_mm=2.338475287174735 final_alpha_deg=-0.015092851015992892 min_delta_deg=-4.9849071489840071 final_path_speed=0 limited=1 line_mm=3.8857805861880479e-13 finite=1 joint_cap=1 max_joint_speed=29.999910528516693 max_joint_acceleration=25538.561309247143 peak_cycle=659 peak_axis=3 peak_previous_v=25.538561309247143 peak_v=0 first_stop_cycle=659 radius_min=377.75041895518393 radius_max=379.99999671310212 T11_ratio=0.90636266666671694 T11_peak_cycle=348
+FAIL S1 current third-round generator; B not implemented
+S2_OUT mode=1 dir=1 speed=5 cycles=5000 displacement_mm=1.4420010009018047 final_alpha_deg=0.0059696889443614509 min_delta_deg=-4.9940303110556385 final_path_speed=0 limited=1 line_mm=2.2204460492503131e-13 finite=1 joint_cap=1 max_joint_speed=29.999991491507672 max_joint_acceleration=25583.449952932824 peak_cycle=860 peak_axis=3 peak_previous_v=-25.583449952932824 peak_v=0 first_stop_cycle=860 radius_min=378.5579984923757 radius_max=379.99999948578227 T11_ratio=0.9999986666665942 T11_peak_cycle=501
+S2_REVERSE mode=1 dir=-1 speed=5 cycles=8000 displacement_mm=8.5579985148438453 final_alpha_deg=26.38432978911294 min_delta_deg=-4.999973837722905 final_path_speed=5 limited=0 line_mm=2.2204460492503131e-13 finite=1 joint_cap=1 max_joint_speed=29.999991491507672 max_joint_acceleration=25583.449952932824 peak_cycle=860 peak_axis=3 peak_previous_v=-25.583449952932824 peak_v=0 first_stop_cycle=860 radius_min=369.99999997003681 radius_max=379.99999999999011 T11_ratio=0.9999986666665942 T11_peak_cycle=501
+S2_OUT mode=1 dir=1 speed=30 cycles=5000 displacement_mm=1.4419994809536929 final_alpha_deg=0.011873297206022926 min_delta_deg=-4.9881267027939771 final_path_speed=0 limited=1 line_mm=2.2204460492503131e-13 finite=1 joint_cap=1 max_joint_speed=29.999944828006164 max_joint_acceleration=13580.848872351226 peak_cycle=542 peak_axis=3 peak_previous_v=-22.354539336021162 peak_v=-8.7736904636699364 first_stop_cycle=543 radius_min=378.55799852985069 radius_max=379.99999796583432 T11_ratio=0.83189866666665402 T11_peak_cycle=296
+S2_REVERSE mode=1 dir=-1 speed=30 cycles=8000 displacement_mm=53.919791981206913 final_alpha_deg=62.729371687671929 min_delta_deg=-4.9999383093150982 final_path_speed=30 limited=0 line_mm=3.3306690738754696e-13 finite=1 joint_cap=1 max_joint_speed=29.999990811091948 max_joint_acceleration=13580.848872351226 peak_cycle=542 peak_axis=3 peak_previous_v=-22.354539336021162 peak_v=-8.7736904636699364 first_stop_cycle=543 radius_min=324.6382065036737 radius_max=379.99999999994509 T11_ratio=0.83189866666665402 T11_peak_cycle=296
+FAIL S2 current third-round generator; B not implemented
+S3_START mode=1 dir=1 delta_now=-5 delta_try=-5 limited=0 a2=0.0214715933725276 a3=0 a4=-0.0214715933725276
+S3 mode=1 dir=1 speed=5 cycles=2000 displacement_mm=7.4999999999998952 final_alpha_deg=177.73503798050979 min_delta_deg=-5 final_path_speed=5 limited=0 line_mm=3.3306690738754696e-13 finite=1 joint_cap=1 max_joint_speed=1.5101711504477144 max_joint_acceleration=11.392162433626794 peak_cycle=9 peak_axis=4 peak_previous_v=-0.0024156616839959137 peak_v=0.0089765007496308818 first_stop_cycle=0 radius_min=19.999999999999989 radius_max=21.360009363293745 T11_ratio=0.9999986666665942 T11_peak_cycle=501
+S3_START mode=1 dir=-1 delta_now=-5 delta_try=-5 limited=0 a2=-0.021471593372527596 a3=0 a4=0.021471593372527596
+S3 mode=1 dir=-1 speed=5 cycles=2000 displacement_mm=7.4999999999998401 final_alpha_deg=177.73503798050979 min_delta_deg=-5 final_path_speed=5 limited=0 line_mm=3.3306690738754696e-13 finite=1 joint_cap=1 max_joint_speed=28.990506763433288 max_joint_acceleration=44.028501749782123 peak_cycle=498 peak_axis=4 peak_previous_v=14.549392622240642 peak_v=14.593421123990424 first_stop_cycle=0 radius_min=19.999999999999989 radius_max=21.360009363293777 T11_ratio=0.9999986666665942 T11_peak_cycle=501
+S3_START mode=2 dir=1 delta_now=-5 delta_try=-5 limited=1 a2=0 a3=0 a4=0
+S3 mode=2 dir=1 speed=5 cycles=2000 displacement_mm=0 final_alpha_deg=180 min_delta_deg=-5 final_path_speed=0 limited=1 line_mm=0 finite=1 joint_cap=1 max_joint_speed=0 max_joint_acceleration=0 peak_cycle=0 peak_axis=0 peak_previous_v=0 peak_v=0 first_stop_cycle=1 radius_min=20 radius_max=20 T11_ratio=0 T11_peak_cycle=0
+S3_START mode=2 dir=-1 delta_now=-5 delta_try=-4.9998346564225358 limited=0 a2=-1488.0921968964572 a3=-165.34357747654303 a4=1653.4357743730002
+S3 mode=2 dir=-1 speed=5 cycles=2000 displacement_mm=7.2347061624036257 final_alpha_deg=174.4154991509439 min_delta_deg=-5 final_path_speed=5 limited=0 line_mm=1.1102230246251565e-13 finite=1 joint_cap=1 max_joint_speed=29.999985162373122 max_joint_acceleration=1653.4357743730002 peak_cycle=1 peak_axis=4 peak_previous_v=0 peak_v=1.6534357743730002 first_stop_cycle=0 radius_min=20.000000007495004 radius_max=27.23470616240364 T11_ratio=0.82694266666664495 T11_peak_cycle=293
+PASS S3 zero-position direction behavior only; acceleration is tested separately by S4
+FAIL S4 includes every S1/S2/S3 cycle, including limited and start/reversal cycles
+ST_EQ new_diagnostic_cycles=64000 max_difference=0 discrete_equal=1
+PASS ST/C++ diagnostic cycle equivalence
+T11_DIAGNOSTICS maximum_ratio=0.99999866666667314 velocity_difference=0 acceleration_difference=0
+PASS T11 diagnostics with the unchanged second-round rule
+TOTAL failures=4; B stopped, diagnostic failures are not waived
+arm_cart_jog_tests_build exit=0
+arm_cart_jog_tests.cpp
+kinematics.cpp
+program_zero.cpp
+正在生成代码...
+arm_cart_jog_tests exit=1
+T1 wrist_mm=1.22932107379e-12 inverse_rad=4.61852778244e-14
+PASS T1 
+T2 line_mm=6.66133814775e-13 invariant_max=5.08888749034e-14
+PASS T2 
+T3 acc_s=1.001 stop_s=0.501 peak_mm_s2=7.49999 stop_mm=1.25
+PASS T3 
+T4 mode=1 tier=0 stop_distance=7.5 expected=7.5 limited=0
+T4 mode=1 tier=1 stop_distance=3.75 expected=3.75 limited=0
+T4 mode=1 tier=2 stop_distance=1.25 expected=1.25 limited=0
+T4 mode=2 tier=0 stop_distance=7.5 expected=7.5 limited=0
+T4 mode=2 tier=1 stop_distance=3.75 expected=3.75 limited=0
+T4 mode=2 tier=2 stop_distance=1.25 expected=1.25 limited=0
+T4 mode=3 tier=0 stop_distance=0.75 expected=0.75 limited=0
+T4 mode=3 tier=1 stop_distance=0.625 expected=0.625 limited=0
+T4 mode=3 tier=2 stop_distance=0.3125 expected=0.3125 limited=0
+T4 mode=4 tier=0 stop_distance=0.3 expected=0.3 limited=0
+T4 mode=4 tier=1 stop_distance=0.2 expected=0.2 limited=0
+T4 mode=4 tier=2 stop_distance=0.1 expected=0.1 limited=0
+T4 mode=5 tier=0 stop_distance=0.6 expected=0.6 limited=0
+T4 mode=5 tier=1 stop_distance=0.4 expected=0.4 limited=0
+T4 mode=5 tier=2 stop_distance=0.2 expected=0.2 limited=0
+PASS T4 
+T5 up_s=1.001 down_s=0.501
+PASS T5 
+T6 switch_after_s=0.5 path_speed=15
+PASS T6 Gen only; stage 25 ownership checked in ST static audit
+T11 T7 boundary_cycle=2201 B_k_minus_2=15 B_k_minus_1=15 B_k=2.64 max_B=15 previous_path_speed=3.24719396 path_speed=3.24000263824 acceleration=7.19132176 allowed=15.15 ratio=0.479421450667
+T7 minimum=3.24000263824 repressed=3.24719396 final=5
+PASS T7 
+T8 age_cycles=500 stop_mm=1.25
+PASS T8 alive-age predicate matches ArmCartJog; no error path
+T9 max_joint_deg_s=29.9999914915 radius_min_mm=369.99999997 radius_max_mm=380 outward_final_speed=0 outward_effective_elbow_deg=0.00596968894436 reverse_full_speed_s=1.501 reverse_final_speed=5
+PASS T9 
+T10 mode=3 distance=4.5 analytic_integral_error=8.52651282912e-14
+T10 mode=4 distance=1.8 analytic_integral_error=5.41788836017e-14
+PASS T10 trapezoidal step versus continuous cubic integral, tolerance 1e-4
+PASS T12 UI speed table checked separately
+Y1 config elbow=30 q5=0 dir=1 yaw_change=1.03023981801 limited=1 sigma=1.03023981801 integral_error=1.00000000058e-07
+Y1 config elbow=30 q5=0 dir=-1 yaw_change=-2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=30 q5=30 dir=1 yaw_change=1.11684527416 limited=1 sigma=1.11684527416 integral_error=1.00000000058e-07
+Y1 config elbow=30 q5=30 dir=-1 yaw_change=-2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=30 q5=-30 dir=1 yaw_change=1.11684527416 limited=1 sigma=1.11684527416 integral_error=1.00000000058e-07
+Y1 config elbow=30 q5=-30 dir=-1 yaw_change=-2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=90 q5=0 dir=1 yaw_change=2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=90 q5=0 dir=-1 yaw_change=-2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=90 q5=30 dir=1 yaw_change=2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=90 q5=30 dir=-1 yaw_change=-2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=90 q5=-30 dir=1 yaw_change=2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=90 q5=-30 dir=-1 yaw_change=-2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=150 q5=0 dir=1 yaw_change=2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=150 q5=0 dir=-1 yaw_change=-2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=150 q5=30 dir=1 yaw_change=2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=150 q5=30 dir=-1 yaw_change=-2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=150 q5=-30 dir=1 yaw_change=2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=150 q5=-30 dir=-1 yaw_change=-2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 cases=18 cycles=63000 tcp_max_mm=1.3922125901e-12 z_max_mm=1.66533453694e-13 pitch_max_deg=1.27222187259e-14 psi_sigma_error_deg=3.19744231092e-14 integral_error_deg=1.99999921513e-07
+FAIL Y1 
+Y2 acc_s=1.001 stop_s=0.501 stop_deg=0.2 peak_deg_s2=1.1999984
+PASS Y2 
+Y3 elbow=30 q5=0 requested_deg_s=2.4 required_wrist_mm_s=30.0800620726 required_q2_deg_s=16.5924754406 required_q3_deg_s=35.1680388159 required_q4_deg_s=20.9755633753 limited=1 actual_yaw_speed_deg_s=0 tcp_max_mm=1.35064460289e-12
+Y3 elbow=30 q5=0 requested_deg_s=1.6 required_wrist_mm_s=20.053374715 required_q2_deg_s=11.0594975407 required_q3_deg_s=23.4408809698 required_q4_deg_s=13.9813834292 limited=1 actual_yaw_speed_deg_s=0 tcp_max_mm=1.35064460289e-12
+Y3 elbow=30 q5=0 requested_deg_s=0.8 required_wrist_mm_s=10.0266873575 required_q2_deg_s=5.52867322317 required_q3_deg_s=11.718203115 required_q4_deg_s=6.98952989185 limited=1 actual_yaw_speed_deg_s=0 tcp_max_mm=1.3922125901e-12
+Y3 elbow=30 q5=30 requested_deg_s=2.4 required_wrist_mm_s=27.7477673087 required_q2_deg_s=15.3052713068 required_q3_deg_s=32.439799692 required_q4_deg_s=19.5345283852 limited=1 actual_yaw_speed_deg_s=0 tcp_max_mm=1.3922125901e-12
+Y3 elbow=30 q5=30 requested_deg_s=1.6 required_wrist_mm_s=18.4985115391 required_q2_deg_s=10.2016810534 required_q3_deg_s=21.6227229948 required_q4_deg_s=13.0210419414 limited=1 actual_yaw_speed_deg_s=0 tcp_max_mm=1.3922125901e-12
+Y3 elbow=30 q5=30 requested_deg_s=0.8 required_wrist_mm_s=9.24925576957 required_q2_deg_s=5.09992460205 required_q3_deg_s=10.8094578046 required_q4_deg_s=6.5095332026 limited=1 actual_yaw_speed_deg_s=0 tcp_max_mm=1.3922125901e-12
+Y3 elbow=30 q5=-30 requested_deg_s=2.4 required_wrist_mm_s=27.7477673087 required_q2_deg_s=15.3052713068 required_q3_deg_s=32.439799692 required_q4_deg_s=19.5345283852 limited=1 actual_yaw_speed_deg_s=0 tcp_max_mm=1.3922125901e-12
+Y3 elbow=30 q5=-30 requested_deg_s=1.6 required_wrist_mm_s=18.4985115391 required_q2_deg_s=10.2016810534 required_q3_deg_s=21.6227229948 required_q4_deg_s=13.0210419414 limited=1 actual_yaw_speed_deg_s=0 tcp_max_mm=1.3922125901e-12
+Y3 elbow=30 q5=-30 requested_deg_s=0.8 required_wrist_mm_s=9.24925576957 required_q2_deg_s=5.09992460205 required_q3_deg_s=10.8094578046 required_q4_deg_s=6.5095332026 limited=1 actual_yaw_speed_deg_s=0 tcp_max_mm=1.3922125901e-12
+Y3 elbow=90 q5=0 requested_deg_s=2.4 required_wrist_mm_s=30.0800620726 required_q2_deg_s=5.76520378587 required_q3_deg_s=12.8822707018 required_q4_deg_s=9.51706691586 limited=0 actual_yaw_speed_deg_s=2.4 tcp_max_mm=1.3922125901e-12
+Y3 elbow=90 q5=0 requested_deg_s=1.6 required_wrist_mm_s=20.053374715 required_q2_deg_s=3.84335096784 required_q3_deg_s=8.58802042347 required_q4_deg_s=6.34466945561 limited=0 actual_yaw_speed_deg_s=1.6 tcp_max_mm=1.3922125901e-12
+Y3 elbow=90 q5=0 requested_deg_s=0.8 required_wrist_mm_s=10.0266873575 required_q2_deg_s=1.92161637467 required_q3_deg_s=4.29393019729 required_q4_deg_s=3.1723138226 limited=0 actual_yaw_speed_deg_s=0.8 tcp_max_mm=1.3922125901e-12
+Y3 elbow=90 q5=30 requested_deg_s=2.4 required_wrist_mm_s=27.7477673087 required_q2_deg_s=5.31816313201 required_q3_deg_s=11.8833764181 required_q4_deg_s=8.96521328607 limited=0 actual_yaw_speed_deg_s=2.4 tcp_max_mm=1.3922125901e-12
+Y3 elbow=90 q5=30 requested_deg_s=1.6 required_wrist_mm_s=18.4985115391 required_q2_deg_s=3.54533935656 required_q3_deg_s=7.92211476012 required_q4_deg_s=5.97677540355 limited=0 actual_yaw_speed_deg_s=1.6 tcp_max_mm=1.3922125901e-12
+Y3 elbow=90 q5=30 requested_deg_s=0.8 required_wrist_mm_s=9.24925576957 required_q2_deg_s=1.77261831414 required_q3_deg_s=3.96098929343 required_q4_deg_s=2.9883709793 limited=0 actual_yaw_speed_deg_s=0.8 tcp_max_mm=1.3922125901e-12
+Y3 elbow=90 q5=-30 requested_deg_s=2.4 required_wrist_mm_s=27.7477673087 required_q2_deg_s=5.31816313201 required_q3_deg_s=11.8833764181 required_q4_deg_s=8.96521328607 limited=0 actual_yaw_speed_deg_s=2.4 tcp_max_mm=1.3922125901e-12
+Y3 elbow=90 q5=-30 requested_deg_s=1.6 required_wrist_mm_s=18.4985115391 required_q2_deg_s=3.54533935656 required_q3_deg_s=7.92211476012 required_q4_deg_s=5.97677540355 limited=0 actual_yaw_speed_deg_s=1.6 tcp_max_mm=1.3922125901e-12
+Y3 elbow=90 q5=-30 requested_deg_s=0.8 required_wrist_mm_s=9.24925576957 required_q2_deg_s=1.77261831414 required_q3_deg_s=3.96098929343 required_q4_deg_s=2.9883709793 limited=0 actual_yaw_speed_deg_s=0.8 tcp_max_mm=1.3922125901e-12
+Y3 elbow=150 q5=0 requested_deg_s=2.4 required_wrist_mm_s=30.0800620726 required_q2_deg_s=1.16983835508 required_q3_deg_s=9.59690749744 required_q4_deg_s=10.8270691424 limited=0 actual_yaw_speed_deg_s=2.4 tcp_max_mm=1.3922125901e-12
+Y3 elbow=150 q5=0 requested_deg_s=1.6 required_wrist_mm_s=20.053374715 required_q2_deg_s=0.779568976519 required_q3_deg_s=6.39792766271 required_q4_deg_s=7.21835868617 limited=0 actual_yaw_speed_deg_s=1.6 tcp_max_mm=1.3922125901e-12
+Y3 elbow=150 q5=0 requested_deg_s=0.8 required_wrist_mm_s=10.0266873575 required_q2_deg_s=0.389622826766 required_q3_deg_s=3.19895849892 required_q4_deg_s=3.60933567217 limited=0 actual_yaw_speed_deg_s=0.8 tcp_max_mm=1.3922125901e-12
+Y3 elbow=150 q5=30 requested_deg_s=2.4 required_wrist_mm_s=27.7477673087 required_q2_deg_s=1.07905520765 required_q3_deg_s=8.85279598697 required_q4_deg_s=10.1737407793 limited=0 actual_yaw_speed_deg_s=2.4 tcp_max_mm=1.3922125901e-12
+Y3 elbow=150 q5=30 requested_deg_s=1.6 required_wrist_mm_s=18.4985115391 required_q2_deg_s=0.719089331881 required_q3_deg_s=5.90185491352 required_q4_deg_s=6.78276558165 limited=0 actual_yaw_speed_deg_s=1.6 tcp_max_mm=1.3922125901e-12
+Y3 elbow=150 q5=30 requested_deg_s=0.8 required_wrist_mm_s=9.24925576957 required_q2_deg_s=0.359404237457 required_q3_deg_s=2.95092291944 required_q4_deg_s=3.39151868201 limited=0 actual_yaw_speed_deg_s=0.8 tcp_max_mm=1.3922125901e-12
+Y3 elbow=150 q5=-30 requested_deg_s=2.4 required_wrist_mm_s=27.7477673087 required_q2_deg_s=1.07905520765 required_q3_deg_s=8.85279598697 required_q4_deg_s=10.1737407793 limited=0 actual_yaw_speed_deg_s=2.4 tcp_max_mm=1.3922125901e-12
+Y3 elbow=150 q5=-30 requested_deg_s=1.6 required_wrist_mm_s=18.4985115391 required_q2_deg_s=0.719089331881 required_q3_deg_s=5.90185491352 required_q4_deg_s=6.78276558165 limited=0 actual_yaw_speed_deg_s=1.6 tcp_max_mm=1.3922125901e-12
+Y3 elbow=150 q5=-30 requested_deg_s=0.8 required_wrist_mm_s=9.24925576957 required_q2_deg_s=0.359404237457 required_q3_deg_s=2.95092291944 required_q4_deg_s=3.39151868201 limited=0 actual_yaw_speed_deg_s=0.8 tcp_max_mm=1.3922125901e-12
+PASS Y3 cases=9x3 cycles=81000 max_joint_deg_s=29.999997
+Y4 radius_min=378.557998485 radius_max=380 boundary_limited=1 stop_cycle=5311 reverse_reach_s=1.501 reverse_peak_speed=0.8 reverse_final_speed=0.8 reverse_limited=1 max_joint_deg_s=5.2461301282 start_q=-4.73617390803,-170,315.285089431 end_wrist_r=379.049097541
+PASS Y4 boundary stop and reversal verified; JOINT_VCAP limits recovery rate when 0.8 deg/s is infeasible
+Y5 dir=1 yaw_deg=0.680371599421 final_path_speed=0.6609375 tcp_error_mm=4.57756679852e-13 limited=1 no_motion=0
+Y5 dir=-1 yaw_deg=-0 final_path_speed=0 tcp_error_mm=0 limited=1 no_motion=1
+PASS Y5 from zero q=(100,0,0,0,0)
+Y6 yaw_reanchor_cycle=2500 y_reanchor_cycle=6000 yaw_tcp_error_mm=1.05471187339e-12 stage25_model=true
+PASS Y6 
+PASS BRANCH folded/straight and multi-turn equivalents retain both previous branches
+T13 mode=1 dir=1 displacement_mm=7.5 final_path_speed=5 line_mm=3.33066907388e-13 max_joint_deg_s=1.51017115045 q3_deg=-2.26496201949 limited=0
+T13 mode=1 dir=-1 displacement_mm=7.5 final_path_speed=5 line_mm=3.33066907388e-13 max_joint_deg_s=28.9905067634 q3_deg=-2.26496201949 limited=0
+T13 mode=2 dir=1 displacement_mm=0 final_path_speed=0 line_mm=0 max_joint_deg_s=0 q3_deg=0 limited=1
+T13 mode=2 dir=-1 displacement_mm=7.2347061624 final_path_speed=5 line_mm=1.11022302463e-13 max_joint_deg_s=29.9999851624 q3_deg=-5.58450084906 limited=0
+PASS T13 program zero wrist=(0,-20 mm); Y+ is toward axis2 pivot; Gen has no error output
+T11 case=T1 path_acceleration_ratio=0.000999333333333
+T11 case=T10 path_acceleration_ratio=0.999998666667
+T11 case=T13 path_acceleration_ratio=0.999998666667
+T11 case=T2 path_acceleration_ratio=0.999998666667
+T11 case=T3 path_acceleration_ratio=0.999998666667
+T11 case=T4 path_acceleration_ratio=0.999998666667
+T11 case=T5 path_acceleration_ratio=0.999998666667
+T11 case=T6 path_acceleration_ratio=0.999998666667
+T11 case=T7 path_acceleration_ratio=0.999998666667
+T11 case=T8 path_acceleration_ratio=0.999998666667
+T11 case=T9 path_acceleration_ratio=0.999998666667
+T11 case=T9 reverse path_acceleration_ratio=0.999998666667
+T11 case=Y1 path_acceleration_ratio=0.999998666667
+T11 case=Y2 path_acceleration_ratio=0.999998666667
+T11 case=Y3 path_acceleration_ratio=0.999998666667
+T11 case=Y4 path_acceleration_ratio=0.999998666667
+T11 case=Y4 reverse path_acceleration_ratio=0.999998666667
+T11 case=Y5 path_acceleration_ratio=0.580094666667
+T11 case=Y6 path_acceleration_ratio=0.999998666667
+T11 velocity_difference=0 acceleration_difference=0 maximum_path_acceleration_ratio=0.999998666667
+T11 peak_case=T7 cycle=2701 v0=3.24 v1=5 T=1 tau=0.501 previous_nominal=4.12 nominal=4.12263999648 previous_path_speed=4.11868000176 path_speed=4.12131999824 acceleration=2.63999648 B_k_minus_2=2.64 B_k_minus_1=2.64 B_k=2.64 allowed=2.6664
+PASS T11 
+S4 case=T1 max_joint_acceleration=0.209892306202 cycle=573 axis=3 previous_velocity=0 velocity=-0.000209892306202 q3=178.940937739 limited=0
+S4 case=T13 max_joint_acceleration=1653.43577437 cycle=6001 axis=4 previous_velocity=0 velocity=1.65343577437 q3=-0.000165343577477 limited=0
+S4 case=T2 max_joint_acceleration=37.6608299177 cycle=3290 axis=3 previous_velocity=-5.26843388087 velocity=-5.23077305095 q3=-163.44675601 limited=0
+S4 case=T3 max_joint_acceleration=3.27772733044 cycle=2252 axis=2 previous_velocity=0.545338404578 velocity=0.542060677247 q3=-90.0577736662 limited=0
+S4 case=T4 max_joint_acceleration=49.6755434227 cycle=32273 axis=3 previous_velocity=-7.95327365485 velocity=-7.90359811143 q3=-114.862235916 limited=0
+S4 case=T5 max_joint_acceleration=18.9346639026 cycle=4253 axis=2 previous_velocity=4.4140676997 velocity=4.3951330358 q3=-95.2776772913 limited=0
+S4 case=T6 max_joint_acceleration=10.2848330599 cycle=2253 axis=2 previous_velocity=1.70395587125 velocity=1.69367103819 q3=-90.5202706458 limited=0
+S4 case=T7 max_joint_acceleration=3.13684279263 cycle=2200 axis=2 previous_velocity=0.713280690043 velocity=0.71014384725 q3=-90.0557761482 limited=0
+S4 case=T8 max_joint_acceleration=3.30233967816 cycle=2751 axis=2 previous_velocity=0.549413522833 velocity=0.546111183155 q3=-90.0965619803 limited=0
+S4 case=T9 max_joint_acceleration=25583.4499529 cycle=860 axis=3 previous_velocity=-25.5834499529 velocity=0 q3=-179.994030311 limited=1
+S4 case=T9 reverse max_joint_acceleration=5774.77595496 cycle=277 axis=3 previous_velocity=0 velocity=-5.77477595496 q3=-179.999805087 limited=1
+S4 case=Y1 max_joint_acceleration=24397.1238814 cycle=1982 axis=3 previous_velocity=-24.3971238814 velocity=0 q3=-179.987864453 limited=1
+S4 case=Y2 max_joint_acceleration=13.7642801832 cycle=2253 axis=3 previous_velocity=-2.28196255017 velocity=-2.26819826999 q3=-97.573139284 limited=0
+S4 case=Y3 max_joint_acceleration=24397.1238814 cycle=7982 axis=3 previous_velocity=-24.3971238814 velocity=0 q3=-179.987864453 limited=1
+S4 case=Y4 max_joint_acceleration=20070.1970806 cycle=5310 axis=3 previous_velocity=-29.5410380555 velocity=-9.4708409749 q3=-179.998306713 limited=1
+S4 case=Y4 reverse max_joint_acceleration=1545.01250529 cycle=326 axis=3 previous_velocity=0 velocity=-1.54501250529 q3=-179.999851726 limited=1
+S4 case=Y5 max_joint_acceleration=1866.46252943 cycle=1 axis=4 previous_velocity=0 velocity=1.86646252943 q3=-0.000186642808291 limited=0
+S4 case=Y6 max_joint_acceleration=14.4595871205 cycle=5753 axis=3 previous_velocity=-2.39857343988 velocity=-2.38411385276 q3=-102.35926141 limited=0
+FAIL S4 all planar/yaw cycles included; B stopped on nonmonotone specification
+PASS OFFSET 
+PASS FINITE 
+ST_EQ exact_T_and_Y_cycles=305946 max_difference=0 discrete_equal=1
+PASS ST_EQ 
+TOTAL failures=2
+arm_cart_jog_equivalence_build exit=0
+arm_cart_jog_equivalence.cpp
+arm_cart_jog_equivalence exit=0
+PASS ST translated statements versus handwritten reference, cycles=765311, max_position_velocity_acceleration_path_difference=0
+arm_ads_tests_build exit=0
+arm_ads_test.cpp
+arm_manual_ads_service.cpp
+kinematics.cpp
+program_zero.cpp
+正在生成代码...
+arm_ads_tests exit=0
+定位臂末端点动接口版本: 1
+E10 already_home status=3 error=0 requests=0
+ADS lease observed_ms=518
+E10 occupied status=5 error=1008 requests=0 (request and PLC ownership)
+E10 normal status=1 -> 2 error=0 curve_mode=0 requests=1
+E10 planning_failure status=5 error=1002 requests=1
+E10 plc_rejection status=5 error=2003 requests=2
+PASS ADS: single-axis tiers/deadman, atomic jog forwarding/alive despite snapshot read failure, speed and mode changes, release/lease, unhealthy gate, home mutual exclusion/regression, reset/disable/shutdown; no hardware.
+kinematics_tests_build exit=0
+kinematics_test.cpp
+kinematics.cpp
+program_zero.cpp
+正在生成代码...
+kinematics_tests exit=0
+PASS Known mechanical and program-zero geometry
+PASS Analytical Jacobian finite differences
+PASS Encoder conversion uses the new mechanical-zero reference
+PASS Invalid configuration and explicit unlimited axes
+PASS XY and yaw isolation
+PASS Z and pitch bypass planar singularity
+PASS Jog input, velocity and position rejection
+PASS All finite physical boundaries
+PASS Analytic Cartesian jog with unlimited axes and bounded pitch
+PASS Continuous planar jog and quaternion sign
+PASS Unreachable preserves state and reachable IK is analytic
+PASS Home windows include exact boundaries without motion
+PASS Home does not wrap angles or relabel measured position
+Home example: duration=2.23212 s, tip bound=70.6724 mm, rotation bound=6.32428 deg
+PASS Home path approaches folded zero with bounded dynamics
+PASS Home positive and negative corrections
+PASS Home rejects missing dynamics and invalid sampling
+PASS Home checks initial and final joint limits
+PASS Home retiming and deterministic planning
+PASS Near-singular speed reduction and malformed inputs
+PASS Home single-axis recovery and dense dynamic consistency
+20/20 tests passed (no hardware).

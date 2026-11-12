@@ -1,0 +1,54 @@
+handle_tests.cpp
+motion_sync.cpp
+control_types.cpp
+plc_io.cpp
+force_feedback.cpp
+ads_mock.cpp
+正在生成代码...
+
+已接入远程手柄（物理 SN 587）。
+已接入远程手柄（物理 SN 582）。
+已接入远程手柄（物理 SN 582）。
+手柄582采样间隔 0 ms 后重建；：实际位置与手柄基准已重建。
+PASS H scenario=reopen_2mm_10deg SN=582 held_ms=500 max_delta=0 rebases=1 follow_resumed=1
+已接入远程手柄（物理 SN 587）。
+已接入远程手柄（物理 SN 582）。
+手柄587采样间隔 1600 ms 后重建；手柄582采样间隔 1600 ms 后重建；：实际位置与手柄基准已重建。
+PASS H scenario=gap1600 SN=582 held_ms=500 max_delta=0 rebases=1 follow_resumed=1
+已接入远程手柄（物理 SN 587）。
+已接入远程手柄（物理 SN 582）。
+手柄582采样间隔 0 ms 后重建；：实际位置与手柄基准已重建。
+PASS H scenario=epoch50_zero_shift SN=582 held_ms=500 max_delta=0 rebases=1 follow_resumed=1
+已接入远程手柄（物理 SN 587）。
+已接入远程手柄（物理 SN 582）。
+手柄582采样间隔 0 ms 后重建；：实际位置与手柄基准已重建。
+PASS H scenario=epoch_wrap SN=582 held_ms=500 max_delta=0 rebases=1 follow_resumed=1
+已接入远程手柄（物理 SN 587）。
+已接入远程手柄（物理 SN 582）。
+已接入远程手柄（物理 SN 587）。
+手柄587采样间隔 0 ms 后重建；：实际位置与手柄基准已重建。
+PASS H scenario=reopen_2mm_10deg SN=587 held_ms=500 max_delta=0 rebases=1 follow_resumed=1
+已接入远程手柄（物理 SN 587）。
+已接入远程手柄（物理 SN 582）。
+手柄587采样间隔 1600 ms 后重建；手柄582采样间隔 1600 ms 后重建；：实际位置与手柄基准已重建。
+PASS H scenario=gap1600 SN=587 held_ms=500 max_delta=0 rebases=1 follow_resumed=1
+已接入远程手柄（物理 SN 587）。
+已接入远程手柄（物理 SN 582）。
+手柄587采样间隔 0 ms 后重建；：实际位置与手柄基准已重建。
+PASS H scenario=epoch50_zero_shift SN=587 held_ms=500 max_delta=0 rebases=1 follow_resumed=1
+已接入远程手柄（物理 SN 587）。
+已接入远程手柄（物理 SN 582）。
+手柄587采样间隔 0 ms 后重建；：实际位置与手柄基准已重建。
+PASS H scenario=epoch_wrap SN=587 held_ms=500 max_delta=0 rebases=1 follow_resumed=1
+已接入远程手柄（物理 SN 587）。
+已接入远程手柄（物理 SN 582）。
+手柄587采样间隔 0 ms 后重建；手柄582采样间隔 0 ms 后重建；：实际位置与手柄基准已重建。
+PASS H continuity_reset=251ms_gap timer_ms=500
+已接入远程手柄（物理 SN 587）。
+已接入远程手柄（物理 SN 582）。
+手柄587采样间隔 0 ms 后重建；手柄582采样间隔 0 ms 后重建；：实际位置与手柄基准已重建。
+PASS H continuity_reset=invalid_frame timer_ms=500
+已接入远程手柄（物理 SN 587）。
+已接入远程手柄（物理 SN 582）。
+PASS H force_hold_gate all_outputs_zero=1
+

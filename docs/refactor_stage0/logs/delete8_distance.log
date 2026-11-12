@@ -1,0 +1,4 @@
+handle_net_distance_test.cpp
+PASS: production gates exclude full handoff, automatic modes, faults, axis4 jog and inactive axes
+PASS: signed actual travel, handoff boundaries, invalid snapshots, rebasing, independent axes
+Offline test artifacts: C:\Users\Sui\AppData\Local\Temp\ads-offline-diagnostics-dvq7p98r

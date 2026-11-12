@@ -1,0 +1,2 @@
+FAIL second-round bitwise regression scenarios=30 cycles=99619 bytes=12851099 baseline_bytes=12851099
+first differing byte=375285

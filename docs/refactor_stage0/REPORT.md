@@ -16,7 +16,7 @@
 
 这不是已经证明存在的 ST 编译错误。需要本机 XAE 的 TwinCAT 工程/PLC 编译组件能成功加载该工程，之后重跑脚本。遵守第1节前置条件，本阶段暂停两个未编入工程的 PLC 文件删除。已编入工程的 POU 不改。
 
-与继续摘要的差异：250902 子目录确实没有 sln，但 C从端/250902.sln 存在。使用该实际解决方案。解决方案还引用测量工程；脚本只 BuildProject 250902。
+工程路径核查：250902 子目录没有 sln，实际解决方案为 C从端/250902.sln。解决方案还引用测量工程；脚本只 BuildProject 250902。
 
 删除前标准离线套件 run_offline_tests.cjs all：11/11 程序成功。日志见 logs/before/。调研 F 已知的定位臂旧黄金/诊断失败保留为既有问题，不能通过改动断言掩盖。
 
@@ -28,7 +28,7 @@ R2-8 的51条原断言已复制到 tools/refactor_baseline/behavior_probes.cpp�
 
 运行：python tools/refactor_baseline/run.py；python tools/refactor_baseline/run_behavior_probes.py；node 介入机器人/B数据端/工程/ADS项目/tools/run_offline_tests.cjs all <日志目录>。
 
-早期 c986d50 只保存现有套件清单；本节的完整黄金提交才完成逐拍基线。草稿黄金留在 scratch，未作为正式预期值提交。
+早期 c986d50 只保存现有套件清单；本节的完整黄金提交才完成逐拍基线。早期草稿黄金已从scratch清理，未作为正式预期值提交。
 
 ## 3. 逐组删除记录
 
@@ -65,3 +65,20 @@ R2-8 的51条原断言已复制到 tools/refactor_baseline/behavior_probes.cpp�
 ### 3.1.8 残余状态与说明
 
 已确认：删除只自清零/无读取的旧模式和启动字段、未调用的 PLC/坐标辅助、无调用者的旧软限位保持 lambda；当前 Follow 候选目标和计划回退目标的软限位校验仍在。电缸 Position 保留原数值 3。主端和数据端运动说明移除当前章节中的已删模块与流程，历史变更日志单独保留。黄金 34 场景/27,197 拍完全相等（logs/delete8_final/result.json）；全部现有离线套件退出 0，47 条保留 R2 断言通过。专项净距离测试通过（logs/delete8_distance.log）。PLC 两个未编入文件因离线编译未开始而暂停删除；已编入 POU 无改动。
+
+
+## 4. 事件记录
+
+已确认：提交45929f2使events.csv增加ads_snapshot_sequence列，session schema由8升到9；事件/原因集中在experiment_events.h。新增32个事件码，共34个；仅观察原有状态/通信结果，不改控制量。取消Clear的结果用一个仅记录序号继续观察；新增三项长驻记录状态。完整码表见事件码表.md，主端/数据端实验记录说明同步更新。
+
+最终真实主循环事件检查：36场景、293项检查、1,155条事件，全部34个码出现；从事件重建五项逐拍状态与黄金逐拍一致。34个旧黄金场景仍27,197拍逐字节相等，未改输入或黄金。真实CSV序列化/schema9/新序号列也由recording_feedback_test通过。证据：logs/timeline_final_check/event_checks.json、result.json和logs/all_final_check/recording_feedback_test.log。
+
+历史手柄/网络回放起初因旧标记和新增事件fixture字段缺失而失败。最终8717e42仅适配抽取/声明，控制断言未变，两类回放已通过；12e75c7的中间恢复操作未改生产源码。日志分别保留在logs/regression和logs/replay_final。
+
+## 5. 最终验收与规模
+
+主端、宿主、数据端构建均0警告0错误；标准11测试、R2保留47断言、WPF 11621、managed协议178、C++协议84、跨语言回环200、归零链路5场景、网络6场景及第五轮恢复/ST均通过。定位臂仍有R1已列明的5项旧黄金/算法失败，不能声明全部既有测试全绿。完整表和日志见验证结果.md。
+
+同一脚本统计：main删除前5424行、删除后8f39072为3429行、加事件后3597行；main长驻可变声明165→117→120（对象/数组各计1）；内部命令含None为39→20。来源size_comparison.json及scratch/inventory.py。当前地图和声明表见B_main解剖_精简.md。
+
+PLC编译仍未开始，两个PLC删除项暂停；状态30不可达块与旧接口保留。未下载/激活/连接设备或推送。未决事项见99_未决问题.md。本报告没有提出后续设计。

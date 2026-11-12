@@ -1,0 +1,63 @@
+{
+  "net_distance": {
+    "exit": 0,
+    "started": "2026-11-13T00:04:28.161622",
+    "finished": "2026-11-13T00:04:29.922764",
+    "command": [
+      "D:\\Study_software\\Anaconda\\python.exe",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\介入机器人\\B数据端\\工程\\ADS项目\\tools\\run_ads_diagnostics_test.py",
+      "handle_net_distance_test"
+    ],
+    "cwd": "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541"
+  },
+  "v5_recovery": {
+    "exit": 0,
+    "started": "2026-11-13T00:04:29.924420",
+    "finished": "2026-11-13T00:04:32.159555",
+    "command": [
+      "D:\\Study_software\\Anaconda\\python.exe",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage0\\logs\\regression\\v5_recovery_runner.py"
+    ],
+    "cwd": "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541"
+  },
+  "v5_st": {
+    "exit": 0,
+    "started": "2026-11-13T00:04:32.161172",
+    "finished": "2026-11-13T00:04:56.585780",
+    "command": [
+      "D:\\Study_software\\Anaconda\\python.exe",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage0\\logs\\regression\\v5_st_runner.py"
+    ],
+    "cwd": "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541"
+  },
+  "handle_replay": {
+    "exit": 1,
+    "started": "2026-11-13T00:04:56.587370",
+    "finished": "2026-11-13T00:04:56.655268",
+    "command": [
+      "D:\\Study_software\\Anaconda\\python.exe",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage0\\logs\\regression\\handle_replay_runner.py"
+    ],
+    "cwd": "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541"
+  },
+  "network_replay": {
+    "exit": 2,
+    "started": "2026-11-13T00:04:56.659535",
+    "finished": "2026-11-13T00:05:02.304582",
+    "command": [
+      "D:\\Study_software\\Anaconda\\python.exe",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage0\\logs\\regression\\network_replay_runner.py"
+    ],
+    "cwd": "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541"
+  },
+  "arm": {
+    "exit": 1,
+    "started": "2026-11-13T00:04:28.163864",
+    "finished": "2026-11-13T00:05:18.453652",
+    "command": [
+      "D:\\Study_software\\Anaconda\\python.exe",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage0\\logs\\regression\\arm_runner.py"
+    ],
+    "cwd": "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541"
+  }
+}

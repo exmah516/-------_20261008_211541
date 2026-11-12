@@ -1,0 +1,9 @@
+2026-11-13 本地只读核查（未修改安装/注册/目标配置）：
+HKLM\SOFTWARE\WOW6432Node\Beckhoff\TwinCAT3\TwinCATDir = D:\Work_software\Twincat3_ADS\
+已安装程序：Beckhoff TwinCAT 3.1 (Build 4024)，DisplayVersion=3.1.4024.79。
+已安装程序：Beckhoff TwinCAT XAE Shell，DisplayVersion=1.23.0.0。
+文件存在：C:\Program Files (x86)\Beckhoff\TcXaeShell\Common7\IDE\TcXaeShell.exe。
+文件存在：D:\Work_software\Twincat3_ADS\3.1\Components\Plc（组件目录）。
+HKCR可见：TcXaeShell.DTE.15.0；本脚本使用该ProgID。
+Shell COM可创建，离线打开250902.sln时250902.FullName为空，Kind为unmodeled项目GUID。
+这证明工程没有加载；不能据此声称ST源码有编译错误，也不能确定组件集成失效的根因。
