@@ -1,0 +1,119 @@
+ads_diagnostics_test.cpp
+plc_io.cpp
+正在生成代码...
+PASS: resolve production symbol tables
+PASS: normal 1000/1000 output succeeds
+PASS: enqueue two-leg prepare
+PASS: production prepare writes both targets
+PASS: production commit writes both requests
+PASS: queue-only item failure preserves core communication
+PASS: failed prepare cannot become successful
+PASS: item error and symbol preserved
+PASS: heartbeat write failure invalidates core cycle
+PASS: heartbeat failure classified as SUM_WRITE
+PASS: transport timeout invalidates core cycle
+PASS: uncertain commit retains both possibly-started bits
+PASS: commit context retained with timeout
+PASS: success cannot erase captured failure
+PASS: valid snapshot accepted
+PASS: direct/fallback snapshot reads velocity
+PASS: axis 1/3/5/6 signed velocities map to their own snapshot fields
+PASS: control reads position and velocity from same published snapshot
+PASS: nonfinite velocity rejects motion snapshot
+PASS: invalid velocity cannot reach motion control
+PASS: nonfinite velocity rejects motion snapshot
+PASS: invalid velocity cannot reach motion control
+PASS: nonfinite velocity rejects motion snapshot
+PASS: invalid velocity cannot reach motion control
+PASS: nonfinite velocity rejects motion snapshot
+PASS: invalid velocity cannot reach motion control
+PASS: direct/fallback snapshot reads velocity
+PASS: axis 1/3/5/6 signed velocities map to their own snapshot fields
+PASS: control reads position and velocity from same published snapshot
+PASS: nonfinite velocity rejects motion snapshot
+PASS: invalid velocity cannot reach motion control
+PASS: nonfinite velocity rejects motion snapshot
+PASS: invalid velocity cannot reach motion control
+PASS: nonfinite velocity rejects motion snapshot
+PASS: invalid velocity cannot reach motion control
+PASS: nonfinite velocity rejects motion snapshot
+PASS: invalid velocity cannot reach motion control
+PASS: startup compatibility read maps all four velocities
+PASS: read timeout invalidates snapshot
+PASS: read timeout distinguished from write timeout
+PASS: three stalled PLC samples identified
+PASS: nonfinite position identified
+[ADS-STATE] 0 -> 5 reason=PLC_TIME_REGRESSED: cycle=2 dc_time=20000000 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: regressed PLC task identified
+PASS: disconnect clears self-check cache without a PLC self-check restart
+PASS: published snapshot retains its own confirmed self-check state after cache reset
+PASS: disconnect cleanup preserves evidence
+PASS: both connection failures remain failures
+PASS: fallback failure cannot erase primary connection error
+PASS: missing return symbol prevents readiness before first return
+PASS: missing symbol failure preserves variable name
+PASS: reconnection reloads actual PLC self-check instead of retaining cleared cache
+PASS: two-byte PLC state notification is accepted
+PASS: wrong-size state notification is rejected
+PASS: V3 start production fast and slow threads
+[ADS-STATE] 0 -> 1 reason=建立ADS连接 target=offline:851 timeout_ms=300
+[ADS-STATE] 1 -> 2 reason=完整ADS读写成功 target=offline:851 timeout_ms=300
+PASS: V3 first full cycle Running
+[ADS-STATE] 2 -> 3 reason=SUM_READ: injected single read failure target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: V3 exactly one failed snapshot enters SoftHold
+[ADS-STATE] 3 -> 2 reason=完整ADS读写成功 target=offline:851 timeout_ms=300
+PASS: V3 single failed cycle preserves queued return
+PASS: V3 one failed cycle preserves low-frequency request without CloseComm
+[ADS-STATE] 2 -> 3 reason=SUM_READ: injected read timeout code=1861 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: V3 failure enters SoftHold
+PASS: V3 short failure preserves return queue and connection
+PASS: V3 SoftHold preserves low-frequency queue beyond API timeout
+[ADS-STATE] 3 -> 2 reason=完整ADS读写成功 target=offline:851 timeout_ms=300
+PASS: V3 complete successful cycle restores Running
+PASS: V3 queued return succeeds after short failure
+PASS: V3 queued low-frequency request succeeds after short failure
+[ADS-STATE] 2 -> 3 reason=SUM_READ: injected read timeout code=1861 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: V3 failure enters SoftHold
+PASS: V3 short failure preserves return queue and connection
+PASS: V3 SoftHold preserves low-frequency queue beyond API timeout
+[ADS-STATE] 3 -> 2 reason=完整ADS读写成功 target=offline:851 timeout_ms=300
+PASS: V3 complete successful cycle restores Running
+PASS: V3 queued return succeeds after short failure
+PASS: V3 queued low-frequency request succeeds after short failure
+[ADS-STATE] 2 -> 3 reason=SUM_READ: injected read timeout code=1861 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: V3 failure enters SoftHold
+[ADS-STATE] 3 -> 4 reason=SUM_READ: injected read timeout code=1861 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+[ADS-STATE] 4 -> 3 reason=SUM_READ: injected read timeout code=1861 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: V3 1.2s failure closes communication and fails queue
+[ADS-STATE] 3 -> 2 reason=完整ADS读写成功 target=offline:851 timeout_ms=300
+PASS: V3 complete successful cycle restores Running
+PASS: V3 disconnected low-frequency request fails
+[ADS-STATE] 2 -> 3 reason=SUM_WRITE: injected write timeout code=1861 planned_operation=none legs=0 clear_mask=0 transport_ok=0 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: V3 failure enters SoftHold
+PASS: V3 short failure preserves return queue and connection
+PASS: V3 SoftHold preserves low-frequency queue beyond API timeout
+[ADS-STATE] 3 -> 2 reason=完整ADS读写成功 target=offline:851 timeout_ms=300
+PASS: V3 complete successful cycle restores Running
+PASS: V3 queued return succeeds after short failure
+PASS: V3 queued low-frequency request succeeds after short failure
+[ADS-STATE] 2 -> 3 reason=SUM_WRITE: injected write timeout code=1861 planned_operation=none legs=0 clear_mask=0 transport_ok=0 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: V3 failure enters SoftHold
+PASS: V3 short failure preserves return queue and connection
+PASS: V3 SoftHold preserves low-frequency queue beyond API timeout
+[ADS-STATE] 3 -> 2 reason=完整ADS读写成功 target=offline:851 timeout_ms=300
+PASS: V3 complete successful cycle restores Running
+PASS: V3 queued return succeeds after short failure
+PASS: V3 queued low-frequency request succeeds after short failure
+[ADS-STATE] 2 -> 3 reason=SUM_WRITE: injected write timeout code=1861 planned_operation=none legs=0 clear_mask=0 transport_ok=0 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: V3 failure enters SoftHold
+[ADS-STATE] 3 -> 4 reason=SUM_WRITE: injected write timeout code=1861 planned_operation=none legs=0 clear_mask=0 transport_ok=0 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+[ADS-STATE] 4 -> 3 reason=SUM_WRITE: injected write timeout code=1861 planned_operation=none legs=0 clear_mask=0 transport_ok=0 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+PASS: V3 1.2s failure closes communication and fails queue
+[ADS-STATE] 3 -> 2 reason=完整ADS读写成功 target=offline:851 timeout_ms=300
+PASS: V3 complete successful cycle restores Running
+PASS: V3 disconnected low-frequency request fails
+PASS: V3 low-frequency mock blocks for2s
+PASS: V3 blocked low-frequency operation completes
+V3 2s block: fast_snapshot_delta=200 heartbeat_delta=200 rtt_us=31
+PASS: V3 low-frequency blocking cannot block fast snapshot or heartbeat
+[ADS-STATE] 2 -> 0 reason=通信线程已停止 target=offline:851 timeout_ms=300

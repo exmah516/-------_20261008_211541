@@ -1,0 +1,187 @@
+{
+  "schema_version": 1,
+  "generated_utc": "2026-11-12T14:09:18.426Z",
+  "production_source_hashes": {
+    "main.cpp": "4b7602cc1c41be019dfbbaecdc4c015dd2708da427d510d1be3607c05885d1ff",
+    "control_types.h": "922a26e320d93f5573e083b8ae021f632368f4de8b6b6af7e8c693b3e492612d",
+    "control_types.cpp": "bf00263c9bec43dc5f489a7800df38bce348d9cc4cb4baf595cad719bb3cb092",
+    "motion_sync.h": "326c4627989b5f5a9524231ca95afe73f8fb1d9e224150cec072f27003987cbe",
+    "motion_sync.cpp": "f846b04eeb9df13d694cd3ea0a4c198f7f058c2e46d7dae97c41d6a5dae58fa4",
+    "return_recovery.h": "7c984bf78172dfe2799a3ed2027c252ee0ce69ae7dce65cb3d38490816e5d161",
+    "force_feedback.h": "a7c24573f0342c4bf20315a011f641539f0f64ec973bd9a3267afac4dc36f815",
+    "force_feedback.cpp": "e2f8704bfc4d3eabda1a8a180d779ac9455c3d6ee153273add51890c1304cc8a",
+    "control_messages.h": "088ab213a4c9b3a77f6b15c2e046f57bf83cb55724be4eb3945ec7b6180e8633",
+    "plc_io.h": "0c072b282e9e1958e329e3e9a3d6a6d054bfafc11c45df7b46787a3b65fa9004",
+    "plc_io.cpp": "c0b249b3d58c6c48f9919e326e403be57f1eb4055f0dfe10dc0d24bc6ebbde8d",
+    "ads_communication.h": "61d03c05b96d61388436b7d590b693b084651ba7d1b6aaaa275c71714c58dffe",
+    "ads_communication.cpp": "72d502dde53c1a4e82733924d495a74ffdf6effa3305be351969de5fd4131920"
+  },
+  "suites": [
+    {
+      "suite": "dual",
+      "log": "docs/refactor_stage0/logs/baseline/dual.log",
+      "sha256": "e170ed3fdf6fa1c06a28bba5209507dbd44c714d4b4fd347b645c46c0c4f2f1f",
+      "status": "pass"
+    },
+    {
+      "suite": "recovery",
+      "log": "docs/refactor_stage0/logs/baseline/recovery.log",
+      "sha256": "840567eceaaa55ba553db09828dc258e90b2d8da96753ead55b487c68ad4c832",
+      "status": "pass"
+    },
+    {
+      "suite": "cylinder",
+      "log": "docs/refactor_stage0/logs/baseline/cylinder.log",
+      "sha256": "258f8a71ceb1a857728af52f188e2675bf584e42b17d9e7ac59126370481bcbb",
+      "status": "pass"
+    },
+    {
+      "suite": "ads",
+      "log": "docs/refactor_stage0/logs/baseline/ads.log",
+      "sha256": "90eaec8b918b8f2bf0b1cd90964cdab82470f3c0c39b4c8dd8ac9444e6078165",
+      "status": "pass"
+    },
+    {
+      "suite": "handle",
+      "log": "docs/refactor_stage0/logs/baseline/handle.log",
+      "sha256": "b74f820df1b7a4f534cf3fb8f57f1597c32ac78c44bf7a9788df6c93e066b84b",
+      "status": "pass"
+    },
+    {
+      "suite": "recording",
+      "log": "docs/refactor_stage0/logs/baseline/recording.log",
+      "sha256": "1502747dbabcf458c39d87fa2273aab07a710f95fff54e4cf0239ebff8286baa",
+      "status": "pass"
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "普通双手柄跟随",
+      "suite": "dual",
+      "trace": "existing-offline-suite",
+      "per_tick_fields": [
+        "refer[7]",
+        "cylinder[4]",
+        "axis1_fast_return",
+        "axis6_fast_retract",
+        "planned_return_req",
+        "state"
+      ],
+      "exact_before_after": "pending-after-deletion"
+    },
+    {
+      "name": "轴1先行",
+      "suite": "dual",
+      "trace": "existing-offline-suite",
+      "per_tick_fields": [
+        "refer[7]",
+        "cylinder[4]",
+        "axis1_fast_return",
+        "axis6_fast_retract",
+        "planned_return_req",
+        "state"
+      ],
+      "exact_before_after": "pending-after-deletion"
+    },
+    {
+      "name": "轴4对轴6联动",
+      "suite": "dual",
+      "trace": "existing-offline-suite",
+      "per_tick_fields": [
+        "refer[7]",
+        "cylinder[4]",
+        "axis1_fast_return",
+        "axis6_fast_retract",
+        "planned_return_req",
+        "state"
+      ],
+      "exact_before_after": "pending-after-deletion"
+    },
+    {
+      "name": "双手柄换手四种触发",
+      "suite": "dual",
+      "trace": "existing-offline-suite",
+      "per_tick_fields": [
+        "refer[7]",
+        "cylinder[4]",
+        "axis1_fast_return",
+        "axis6_fast_retract",
+        "planned_return_req",
+        "state"
+      ],
+      "exact_before_after": "pending-after-deletion"
+    },
+    {
+      "name": "计划回退 Dual/重试/可能已启动/故障续做",
+      "suite": "recovery",
+      "trace": "existing-offline-suite",
+      "per_tick_fields": [
+        "refer[7]",
+        "cylinder[4]",
+        "axis1_fast_return",
+        "axis6_fast_retract",
+        "planned_return_req",
+        "state"
+      ],
+      "exact_before_after": "pending-after-deletion"
+    },
+    {
+      "name": "屈曲恢复与保持后重新按键",
+      "suite": "dual",
+      "trace": "existing-offline-suite",
+      "per_tick_fields": [
+        "refer[7]",
+        "cylinder[4]",
+        "axis1_fast_return",
+        "axis6_fast_retract",
+        "planned_return_req",
+        "state"
+      ],
+      "exact_before_after": "pending-after-deletion"
+    },
+    {
+      "name": "连接保持、急停、回退故障、寻参复用",
+      "suite": "recovery",
+      "trace": "existing-offline-suite",
+      "per_tick_fields": [
+        "refer[7]",
+        "cylinder[4]",
+        "axis1_fast_return",
+        "axis6_fast_retract",
+        "planned_return_req",
+        "state"
+      ],
+      "exact_before_after": "pending-after-deletion"
+    },
+    {
+      "name": "开始控制、电缸手动、Y阀、注射器、轴4租约",
+      "suite": "cylinder",
+      "trace": "existing-offline-suite",
+      "per_tick_fields": [
+        "refer[7]",
+        "cylinder[4]",
+        "axis1_fast_return",
+        "axis6_fast_retract",
+        "planned_return_req",
+        "state"
+      ],
+      "exact_before_after": "pending-after-deletion"
+    },
+    {
+      "name": "力反馈滤波、换手保持、取零",
+      "suite": "recording",
+      "trace": "existing-offline-suite",
+      "per_tick_fields": [
+        "refer[7]",
+        "cylinder[4]",
+        "axis1_fast_return",
+        "axis6_fast_retract",
+        "planned_return_req",
+        "state"
+      ],
+      "exact_before_after": "pending-after-deletion"
+    }
+  ],
+  "r2_8_assertions": 51,
+  "note": "现有离线 runner 没有统一逐拍 trace 接口；本文件先固定完整套件输出与生产源哈希，不能把日志摘要冒充逐拍黄金值。"
+}

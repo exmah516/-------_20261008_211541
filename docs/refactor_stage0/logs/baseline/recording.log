@@ -1,0 +1,15 @@
+recording_feedback_test.cpp
+experiment_recorder.cpp
+force_feedback.cpp
+手柄.cpp
+正在生成代码...
+已接入远程手柄（物理 SN 582）。
+已接入远程手柄（物理 SN 587）。
+PASS: fixed-count two-layer calibration, exact slopes, torque units, mounted zero, limits, catheter587/wire582 routing, no axial/torque cross-talk.
+PASS: handoff publish remains one-shot and obeys existing motion/fast-return gates.
+实验记录默认开启：records/日期/时间_auto，退出程序时保存完成。
+PASS: recorder actual CSV writes, 100/50 samples, events, validity, NaN, drain, duplicate rejection, schema8, separate sessions, I/O failure.
+已接入远程手柄（物理 SN 582）。
+已接入远程手柄（物理 SN 587）。
+PASS: independent feedback/scales, per-handle handoff hold, 100ms smoothed latch, bidirectional 2mm / 400ms release, 300ms blend, disable/re-enable, invalid samples.
+Offline test artifacts: C:\Users\Sui\AppData\Local\Temp\handoff-offline-u2J9gI

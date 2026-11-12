@@ -1,0 +1,3 @@
+cylinder_manual_test.cpp
+电缸位置请求已拒绝：无法读取有效原位置。
+PASS 71 assertions; independent cylinders, saved values, output masks and PLC/automatic ownership gates
