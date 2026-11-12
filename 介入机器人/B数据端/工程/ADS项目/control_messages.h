@@ -158,10 +158,6 @@ enum class VisCommandType : int
 	ZeroForceSensor = 4,
 	ToggleForceFeedback = 5,
 	// 7 为已删除的旧力记录命令，保留数值空洞。
-	SetStartupAxisPos = 8,
-	SetStartupAxisDeg = 9,
-	SetStartupSpeed = 10,
-	ExecuteStartup = 11,
 	SelectDirectControl = 12,
 	SetGravityCompensation = 13,
 	SetSpacingRecovery = 18, // param1: 0=退出，1=进入

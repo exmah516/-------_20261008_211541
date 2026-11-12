@@ -44,10 +44,10 @@ if (selected === 'all' || selected === 'dual') {
         mapping_complete: between(source,'\t\t\t\t\t\t\tif (planned_return.contains_axis(0) && !axis1_reverse_pressed)', '\t\t\t\t\t\t\treset_planned_return();'),
         windows: between(sync,'\tdouble from_left_to_abs','\tbool rebase_axis1_after_return'),
         target_safety: between(source,'\t\t\tauto planned_return_targets_safe =','\t\t\tauto rebase_planned_return ='),
-        recovery_type: between(header,'enum class SpacingRecoveryPhase','// 启动准备是在'),
+        recovery_type: between(header,'enum class SpacingRecoveryPhase','// 公共开始控制保留'),
         handoff_type: between(header,'struct DualHandoffRequest','enum class SpacingRecoveryPhase'),
-        mode: between(source,'\tbool spacing_recovery_button_pressed_prev =','\n\tstruct PendingStartupParams'),
-        direction: between(source,'\t\t// 换手/屈曲恢复期间冻结方向','\t\tconst bool startup_sequence_active'),
+        mode: between(source,'\tbool spacing_recovery_button_pressed_prev =','\n\tdouble pending_selfcheck_target'),
+        direction: between(source,'\t\t// 换手/屈曲恢复期间冻结方向','\t\tif (spacing_recovery_button_press_edge)'),
         save: between(source,'\t\tif (spacing_recovery_button_press_edge)','\t\t// 该映射只属于'),
         exit: between(source,'\t\t\t\tconst double recovered_axis3_from_left_mm =','\t\t\t\tstd::cout << "屈曲恢复退出后'),
         switch: between(source,'\t\tif (axis1_reverse_pressed != axis1_reverse_pressed_prev)','\t\taxis1_reverse_pressed_prev ='),
@@ -67,11 +67,11 @@ if (selected === 'all' || selected === 'dual') {
 if (selected === 'all' || selected === 'recovery') {
     const source = read('main.cpp'), header = read('control_types.h');
     const parts = {
-        types: between(header, 'struct ControlConfig', '// 启动准备是在'),
+        types: between(header, 'struct ControlConfig', '// 公共开始控制保留'),
         cancel: between(source, '\tauto reset_planned_return =', '\tauto axis6_from_left_mm ='),
         guard: between(source, '\t\tif ((planned_return.active() || dual_handoff.active()) &&', '\t\t// 正式控制阶段：'),
         save: between(source, '\t\tif (spacing_recovery_button_press_edge)', '\t\t// 该映射只属于'),
-        enter: between(source, '\t\t\tauto calculate_spacing_recovery_remaining =', '\t\t\tif (axis6_soft_limit_hold && !motion_startup_active)'),
+        enter: between(source, '\t\t\tauto calculate_spacing_recovery_remaining =', '\t\t\tif (axis6_soft_limit_hold)'),
         output: between(source, '\t\t\tauto apply_planned_return_outputs =', '\t\t\tauto enter_planned_return_retry ='),
         refresh: between(source, '\t\t\tauto refresh_planned_return_leg =', '\t\t\tauto planned_return_targets_safe ='),
         failure: between(source, '\t\t\tauto fail_planned_return =', '\t\tauto begin_planned_return ='),

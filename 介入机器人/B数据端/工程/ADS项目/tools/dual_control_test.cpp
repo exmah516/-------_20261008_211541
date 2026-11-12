@@ -616,7 +616,7 @@ static void test_pending_guards() {
     require(cancel_calls==0&&dual_handoff.active(),"transient connection hold preserves handoff ownership");
     connection_hold_active=false;
     for(bool* flag:{&estop_hold_active,&return_ads_fault_hold,
-                   &startup_sequence_active,&axis6_soft_limit_hold,
+                   &axis6_soft_limit_hold,
                    &spacing_recovery.requested}) {
         dual_handoff.axis6=true; *flag=true;
         const int before=cancel_calls;
@@ -730,7 +730,7 @@ static void test_lead_lifecycle() {
     require(!axis1_delivery_mapping_active,"双手柄撤出换手不启用先行");
     axis1_reverse_pressed=false; planned_return.running=false; complete();
     for(bool* flag:{&connection_hold_active,&ads_soft_hold_active,&return_ads_fault_hold,
-        &estop_hold_active,&startup_sequence_active,
+        &estop_hold_active,
         &axis6_soft_limit_hold,&spacing_recovery.requested}) {
         arm_axis1_delivery_mapping(); *flag=true; guard();
         require(!axis1_delivery_mapping_active,"保持与恢复接管清除先行");

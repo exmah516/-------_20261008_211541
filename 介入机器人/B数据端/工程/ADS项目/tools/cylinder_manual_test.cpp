@@ -93,7 +93,7 @@ int main() {
         f.open(index);
         check(f.ads_communication.reads==1, "repeated opening retains the initial PLC value without extra ADS reads");
     }
-    for (int gate=0;gate<15;++gate) {
+    for (int gate : {0,1,2,3,4,5,6,8,9,10,11,12,13,14}) {
         Fixture f; f.open(0);
         switch(gate) {
         case 0: f.has_new_ads_snapshot=false; break;
@@ -103,7 +103,6 @@ int main() {
         case 4: f.ads_events.host_comm_timeout=true; break;
         case 5: f.estop_hold_active=true; break;
         case 6: f.ads_events.estop_hold_req=true; break;
-        case 7: f.startup.on=true; break;
         case 8: f.ads_events.selfcheck_status=2; break;
         case 9: f.planned_return.on=true; break;
         case 10: f.dual_handoff.on=true; break;

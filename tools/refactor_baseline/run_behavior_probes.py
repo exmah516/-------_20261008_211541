@@ -29,14 +29,14 @@ def extract(name, filename, start, end):
                          source_sha256=hashlib.sha256(original).hexdigest(),
                          fragment_sha256=hashlib.sha256(fragment.encode()).hexdigest()))
 
-extract('types', 'control_types.h', 'struct ControlConfig', '// 启动准备是在')
+extract('types', 'control_types.h', 'struct ControlConfig', '// 公共开始控制保留')
 extract('mapping_helpers', 'main.cpp', '\tauto clear_axis1_delivery_mapping =', '\tauto apply_axis1_mirror_from_abs =')
 extract('connection', 'main.cpp', '\t\tconst bool connection_hold_active =', '\t\tif (!initial_sync_done)')
 extract('button', 'main.cpp', '\t\tconst bool spacing_recovery_button_pressed =', '\t\t// 换手/屈曲恢复期间冻结方向')
 extract('save', 'main.cpp', '\t\tif (spacing_recovery_button_press_edge)', '\t\t// 该映射只属于')
 extract('mapping_guard', 'main.cpp', '\t\tif (axis1_reverse_pressed ||', '\t\t// 恢复键只登记请求')
-extract('entry', 'main.cpp', '\t\t\tauto calculate_spacing_recovery_remaining =', '\t\t\tif (axis6_soft_limit_hold && !motion_startup_active)')
-extract('action', 'main.cpp', '\t\t\telse if (spacing_recovery.active())', '\t\t\telse if (motion_startup_active)')
+extract('entry', 'main.cpp', '\t\t\tauto calculate_spacing_recovery_remaining =', '\t\t\tif (axis6_soft_limit_hold)')
+extract('action', 'main.cpp', '\t\t\telse if (spacing_recovery.active())', '            else if (return_recovery.resume_pending())')
 extract('exit', 'main.cpp', '\t\tconst DWORD spacing_recovery_exit_elapsed_ms =', '\t\tconst bool axis4_manual_error_now =')
 extract('dual_mapping', 'main.cpp', '\t\t\t\t// g约束始终使用轴3/5的名义增量', '\t\t\t\tconst double g_now =')
 (BUILD/'behavior_extractions.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')

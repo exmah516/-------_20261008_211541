@@ -11,7 +11,6 @@
 #include "motion_sync.h"
 #include "plc_io.h"
 #include "zenoh_service.h"
-#include "startup_sequence.h"
 #include "control_messages.h"
 
 #include <cmath>
@@ -142,7 +141,6 @@ int main()
 	double plc_leftlimit[7] = { 0 }; // 左限位绝对位置（G.leftlimit）
 	double plc_act_pos_from_left[7] = { 0 };
 	double plc_v_limit[7] = { 0 };
-	bool startup_smoothing_bypass = false;
 
 	// 主循环共享上下文：集中收敛模块调用所需的运行态对象与缓存指针。
 	AppContext ctx;
@@ -161,7 +159,6 @@ int main()
 	ctx.plc_leftlimit = plc_leftlimit;
 	ctx.plc_act_pos_from_left = plc_act_pos_from_left;
 	ctx.plc_v_limit = plc_v_limit;
-	ctx.startup_smoothing_bypass = &startup_smoothing_bypass;
 	// 绑定上下文中的 ADS 通信后台服务指针。
 	ctx.ads_service = &ads_communication;
 
@@ -241,7 +238,6 @@ int main()
 	ctx.dual_reverse = &dual_reverse_active;
 	ctx.axis1_crawl = &axis1_crawl;
 	ctx.axis6_crawl = &axis6_crawl;
-	ctx.startup = &startup;
 	ctx.ff = &ff;
 	ctx.axis3_base_rel = &axis3_base_rel;
 	ctx.axis5_base_rel = &axis5_base_rel;
@@ -281,49 +277,19 @@ int main()
 	{
 		motion_sync::apply_axis1_mirror_from_abs(ctx, axis1_abs_cmd, include_axis6);
 	};
-	auto start_startup_sequence = [&]() -> bool { return startup_sequence::start_startup_sequence(ctx); };
-	auto consume_startup_loading_ready = [&]() -> bool { return startup_sequence::consume_startup_loading_ready(ctx); };
-	auto restore_startup_v_limit = [&]() -> bool { return startup_sequence::restore_startup_v_limit(ctx); };
-	auto prompt_startup_mode = [&]() { startup_sequence::prompt_startup_mode(ctx); };
 	bool control_active = false;
-	auto begin_direct_positioning = [&]() -> bool
+	auto consume_startup_loading_ready = [&]() -> bool
 	{
-		if (!read_plc_state())
+		if (!startup.loading_ready_symbol_available)
 		{
-			std::cout << "开始控制失败：无法读取当前轴位置。" << std::endl;
+			return true;
+		}
+		if (!plc_io::write_startup_loading_ready(ctx, false))
+		{
+			std::cout << "启动准备已拒绝：无法消费 PLC 装卸位就绪标志。" << std::endl;
 			return false;
 		}
-
-		const double axis3_from_left_mm =
-			(plc_act_pos[2] + plc_init_pos[2]) - plc_leftlimit[2];
-		const double stage_axis5_from_left_mm = axis3_from_left_mm + 5.0;
-		const double stage_axis6_from_left_mm = axis3_from_left_mm + 5.0 + cfg.startup_g_mm;
-		if (!std::isfinite(axis3_from_left_mm) ||
-			stage_axis5_from_left_mm < 10.0 ||
-			stage_axis5_from_left_mm > 670.0 ||
-			stage_axis6_from_left_mm < 10.0 ||
-			stage_axis6_from_left_mm > cfg.axis6_soft_limit_from_left_mm)
-		{
-			std::cout << "开始控制失败：当前轴3位置无法建立安全的轴5/轴6相对位置。" << std::endl;
-			return false;
-		}
-
-		startup.direct_axis5_stage_from_left_mm = stage_axis5_from_left_mm;
-		startup.direct_axis6_stage_from_left_mm = stage_axis6_from_left_mm;
-		startup.axis1_hold_rel = plc_act_pos[0];
-		startup.axis3_hold_rel = plc_act_pos[2];
-		startup.axis5_hold_rel = plc_act_pos[4];
-		startup.axis6_hold_rel = plc_act_pos[5];
-		startup.axis2_hold_rel = plc_act_pos[1];
-		startup.axis7_hold_rel = plc_act_pos[6];
-		startup.direct_positioning = true;
-		startup.recovery_mode = false;
-		startup.phase = StartupPhase::PositionAxis156;
-		startup.phase_t0 = GetTickCount();
-		startup.completed = false;
-		startup.prompted = false;
-		control_active = false;
-		std::cout << "开始控制：轴1与轴5/6先调整到安全相对位置，随后轴3/5/6共同到达目标。" << std::endl;
+		startup.loading_ready_plc = false;
 		return true;
 	};
 	// 尚未进入窗口时保留原有入窗方向；进入窗口后由窗口夹紧负责限制越界，
@@ -612,7 +578,6 @@ int main()
 
 
 
-	startup_smoothing_bypass = false;
 
 	std::cout << "力反馈：关闭，可由主端切换。" << std::endl;
 
@@ -719,24 +684,10 @@ int main()
 	};
 	bool spacing_recovery_button_pressed_prev = false;
 
-	struct PendingStartupParams {
-		double axis1_from_left_mm = 0.0;
-		double axis3_from_left_mm = 0.0;
-		double axis5_from_left_mm = 0.0;
-		double axis6_from_left_mm = 0.0;
-		double axis2_deg = 0.0;
-		double axis7_deg = 0.0;
-		double speed_scale = 0.0;
-	} pending_startup;
 	double pending_selfcheck_target[7] = { 96.0, 0.0, 500.0, 0.0, 530.0, 580.0, 0.0 };
 	unsigned int pending_selfcheck_axes = 0;
 	bool selfcheck_command_error = false;
 	bool selfcheck_start_pending = false;
-	pending_startup.axis1_from_left_mm = startup.final_axis1_from_left_mm;
-	pending_startup.axis3_from_left_mm = startup.final_axis3_from_left_mm;
-	pending_startup.axis5_from_left_mm = startup.final_axis5_from_left_mm;
-	pending_startup.axis6_from_left_mm = startup.final_axis6_from_left_mm;
-	pending_startup.speed_scale = cfg.startup_motion_speed_scale;
 	bool manual_cylinder_override_active = false;
 	ads_snapshot_sequence = 0;
 	std::uint64_t handled_plc_restart_count = 0;
@@ -1058,7 +1009,6 @@ int main()
 					control_active = false;
 					startup.phase = StartupPhase::WaitForEnter;
 					startup.completed = false;
-					startup.prompted = false;
 					axis2_hold_rel = plc_act_pos[1];
 					axis7_hold_rel = plc_act_pos[6];
 					std::cout << "系统初始同步完成，进入就绪状态。" << std::endl;
@@ -1247,7 +1197,6 @@ int main()
 			(void)cancel_active_return_motion(true);
 		}
 		bool axis6_effective_reverse_pressed = axis1_reverse_pressed;
-		const bool startup_sequence_active = startup.is_active();
 		if (spacing_recovery_button_press_edge)
 		{
 			spacing_recovery.requested = true;
@@ -1269,7 +1218,7 @@ int main()
 			ads_soft_hold_active ||
 			return_ads_fault_hold ||
 			estop_hold_active ||
-			startup_sequence_active ||
+			
 			spacing_recovery.active() ||
 			spacing_recovery.requested ||
 
@@ -1284,7 +1233,7 @@ int main()
 			(!control_active ||
 			estop_hold_active || return_ads_fault_hold ||
 			spacing_recovery.active() || (spacing_recovery.requested && !planned_return.active()) ||
-			startup_sequence_active || axis6_soft_limit_hold))
+			 axis6_soft_limit_hold))
 		{
 			(void)cancel_active_return_motion(true);
 		}
@@ -1308,7 +1257,7 @@ int main()
 			axis4_ui_reverse_pressed = false;
 			axis4_ui_jog_deadline_ms = 0;
 		}
-		const bool axis4_jog_allowed = ads_motion_cycle_valid && !estop_hold_active && !startup_sequence_active &&
+		const bool axis4_jog_allowed = ads_motion_cycle_valid && !estop_hold_active && 
 			!spacing_recovery.active() && !spacing_recovery.requested;
 		// 轴4只保留UI点动，物理手柄按键不再映射到轴4。
 		const bool axis4_forward_semantic = axis4_ui_forward_pressed;
@@ -1426,17 +1375,11 @@ int main()
 				}
 				spacing_recovery.reset();
 				(void)cancel_active_return_motion(true);
-				if (!restore_startup_v_limit())
-				{
-					std::cout << "警告：PLC 自检切换后恢复启动期速度限制参数失败。" << std::endl;
-				}
 				axis6_crawl.enabled = false;
                 const bool restored_homing = homing_restore_applied;
                 homing_restore_applied = false;
                 startup.completed = !restored_homing || control_before_plc_restart;
                 startup.phase = startup.completed ? StartupPhase::Done : StartupPhase::WaitForEnter;
-				startup.direct_positioning = false;
-				startup.prompted = false;
 				if (coordinates_refreshed && !estop_hold_active &&
 					!ads_soft_hold_active && sync_all(30))
 				{
@@ -1485,7 +1428,7 @@ int main()
 			const bool coordinates_refreshed = ads_communication.refresh_coordinates();
 			if (!coordinates_refreshed) ads_communication.request_coordinate_refresh();
 			if (coordinates_refreshed && !estop_hold_active &&
-				!ads_soft_hold_active && !startup.is_active() &&
+				!ads_soft_hold_active && 
 				sync_all(30))
 			{
 				control_active = startup.completed && (startup.phase == StartupPhase::Done);
@@ -1511,7 +1454,6 @@ int main()
             conditions.host_timeout = ads_snapshot.host_comm_timeout;
             conditions.handle_reinit_done = ads_snapshot.handle_reinit_done;
             conditions.handles_valid = !handle_soft_hold_active;
-            conditions.startup_active = startup.is_active();
             conditions.exclusive_task = planned_return.active() || spacing_recovery.active() ||
                 spacing_recovery.requested || ads_events.axis4_manual_busy;
             for (int slot = 0; slot < 2; ++slot)
@@ -1535,9 +1477,7 @@ int main()
         }
 
 		// 8) 当启动已完成但控制未激活时，通过全量重同步恢复。
-		const bool motion_startup_active = startup.is_active();
-		startup_smoothing_bypass = motion_startup_active;
-		if (!control_active && !return_ads_fault_hold && !motion_startup_active &&
+		if (!control_active && !return_ads_fault_hold && 
 			!planned_return.active() && !spacing_recovery.active() &&
 			ads_motion_cycle_valid && initial_sync_done && !connection_hold_active &&
 			!handle_soft_hold_active && self_check_done &&
@@ -1570,7 +1510,7 @@ int main()
 		{
 			return control_active && initial_sync_done && !connection_hold_active &&
 				!ads_soft_hold_active && !handle_soft_hold_active && !return_ads_fault_hold &&
-				!estop_hold_active && !startup.is_active() && 
+				!estop_hold_active &&  
 				!spacing_recovery.active() && !spacing_recovery.requested &&
 				!planned_return.active() && !axis6_soft_limit_hold &&
 				!manual_cylinder_override_active;
@@ -1589,7 +1529,7 @@ int main()
 
 		// 9) 根据当前顶层模式构建一帧 refer 和一组气缸指令。
 		if (!ads_soft_hold_active && !handle_soft_hold_active && !return_ads_fault_hold && !estop_hold_active &&
-			(control_active || motion_startup_active) && read_plc_state())
+			(control_active) && read_plc_state())
 		{
 			load_pos_from_actual();
 			pos[1] = axis2_hold_rel;
@@ -2584,7 +2524,7 @@ int main()
 				}
 			}
 
-			if (axis6_soft_limit_hold && !motion_startup_active)
+			if (axis6_soft_limit_hold)
 			{
 				// 实际越限时继续冻结；启动准备的安全目标允许把 axis6 拉回限制内。
 				axis4_axis6_coupling_active_prev = false;
@@ -2658,244 +2598,6 @@ int main()
 				pos[2] = spacing_recovery.axis3_cmd_rel;
 				pos[4] = spacing_recovery.axis5_cmd_rel;
 				pos[5] = spacing_recovery.axis6_cmd_rel;
-			}
-			else if (motion_startup_active)
-			{
-				// 合并后的开始控制只做两阶段定位，不执行旧启动准备的夹爪时序。
-				pos[0] = startup.axis1_hold_rel;
-				pos[1] = startup.direct_positioning ? 0.0 : startup.final_axis2_deg;
-				pos[2] = startup.axis3_hold_rel;
-				pos[4] = startup.axis5_hold_rel;
-				pos[5] = startup.axis6_hold_rel;
-				pos[6] = startup.direct_positioning ? 0.0 : startup.final_axis7_deg;
-
-				const double startup_axis1_ready_abs = from_left_to_abs(0, cfg.startup_axis1_ready_from_left_mm);
-				const double startup_axis5_ready_abs = from_left_to_abs(4, cfg.startup_axis5_ready_from_left_mm);
-				const double startup_axis6_ready_abs = from_left_to_abs(5, cfg.startup_axis5_ready_from_left_mm + cfg.axis56_ready_gap_mm);
-				const double startup_final_axis1_abs = from_left_to_abs(0, startup.final_axis1_from_left_mm);
-				const double startup_final_axis3_abs = from_left_to_abs(2, startup.final_axis3_from_left_mm);
-				const double startup_final_axis5_abs = from_left_to_abs(4, startup.final_axis5_from_left_mm);
-				const double startup_final_axis6_abs = from_left_to_abs(5, startup.final_axis6_from_left_mm);
-				const double axis1_abs = plc_act_pos[0] + plc_init_pos[0];
-				const double axis5_abs = plc_act_pos[4] + plc_init_pos[4];
-				const double axis6_abs_now = plc_act_pos[5] + plc_init_pos[5];
-				const double axis3_abs = plc_act_pos[2] + plc_init_pos[2];
-				const double axis2_rel = plc_act_pos[1];
-				const double axis7_rel = plc_act_pos[6];
-
-				auto apply_startup_final_targets = [&]()
-				{
-					pos[0] = from_left_to_rel(0, startup.final_axis1_from_left_mm);
-					pos[1] = startup.final_axis2_deg;
-					pos[2] = from_left_to_rel(2, startup.final_axis3_from_left_mm);
-					pos[4] = from_left_to_rel(4, startup.final_axis5_from_left_mm);
-					pos[5] = from_left_to_rel(5, startup.final_axis6_from_left_mm);
-					pos[6] = startup.final_axis7_deg;
-				};
-				auto startup_final_targets_reached = [&]() -> bool
-				{
-					return (std::abs(axis1_abs - startup_final_axis1_abs) <= cfg.crawl_arrive_tol_mm) &&
-						(std::abs(axis3_abs - startup_final_axis3_abs) <= cfg.crawl_arrive_tol_mm) &&
-						(std::abs(axis5_abs - startup_final_axis5_abs) <= cfg.crawl_arrive_tol_mm) &&
-						(std::abs(axis6_abs_now - startup_final_axis6_abs) <= cfg.crawl_arrive_tol_mm) &&
-						(std::abs(axis2_rel - startup.final_axis2_deg) <= cfg.startup_rot_arrive_tol_deg) &&
-						(std::abs(axis7_rel - startup.final_axis7_deg) <= cfg.startup_rot_arrive_tol_deg);
-				};
-				auto complete_startup_sequence = [&]()
-				{
-					if (!restore_startup_v_limit())
-					{
-						std::cout << "警告：启动准备完成后恢复启动期速度限制参数失败。" << std::endl;
-					}
-					startup.phase = StartupPhase::Done;
-					startup.completed = true;
-					if (sync_all(30))
-					{
-						control_active = true;
-						plc_restart_recovery_latched = false;
-						std::cout << (startup.recovery_mode ? "中断恢复启动已完成。" : "启动准备流程已完成。") << std::endl;
-					}
-					else
-					{
-						control_active = false;
-						std::cout << (startup.recovery_mode
-							? "中断恢复启动已完成，但重同步失败。"
-							: "启动准备流程已完成，但重同步失败。") << std::endl;
-					}
-				};
-
-				if (startup.direct_positioning)
-				{
-					const double final_axis1_abs =
-						from_left_to_abs(0, startup.final_axis1_from_left_mm);
-					const double final_axis3_abs =
-						from_left_to_abs(2, startup.final_axis3_from_left_mm);
-					const double final_axis5_abs =
-						from_left_to_abs(4, startup.final_axis5_from_left_mm);
-					const double final_axis6_abs =
-						from_left_to_abs(5, startup.final_axis6_from_left_mm);
-					const bool axis156_reached =
-						std::abs(axis1_abs - final_axis1_abs) <= cfg.crawl_arrive_tol_mm &&
-						std::abs(axis5_abs - from_left_to_abs(4, startup.direct_axis5_stage_from_left_mm)) <= cfg.crawl_arrive_tol_mm &&
-						std::abs(axis6_abs_now - from_left_to_abs(5, startup.direct_axis6_stage_from_left_mm)) <= cfg.crawl_arrive_tol_mm;
-					const bool final_targets_reached =
-						std::abs(axis1_abs - final_axis1_abs) <= cfg.crawl_arrive_tol_mm &&
-						std::abs(axis3_abs - final_axis3_abs) <= cfg.crawl_arrive_tol_mm &&
-						std::abs(axis5_abs - final_axis5_abs) <= cfg.crawl_arrive_tol_mm &&
-						std::abs(axis6_abs_now - final_axis6_abs) <= cfg.crawl_arrive_tol_mm &&
-						std::abs(axis2_rel) <= cfg.startup_rot_arrive_tol_deg &&
-						std::abs(axis7_rel) <= cfg.startup_rot_arrive_tol_deg;
-
-					if (startup.phase == StartupPhase::PositionAxis156)
-					{
-						pos[0] = from_left_to_rel(0, startup.final_axis1_from_left_mm);
-						pos[1] = 0.0;
-						pos[4] = from_left_to_rel(4, startup.direct_axis5_stage_from_left_mm);
-						pos[5] = from_left_to_rel(5, startup.direct_axis6_stage_from_left_mm);
-						if (axis156_reached)
-						{
-							startup.phase = StartupPhase::PositionAxis356;
-							std::cout << "开始控制：轴1与轴5/6相对位置已就绪，轴3/5/6开始共同到位。" << std::endl;
-						}
-					}
-					else
-					{
-						pos[0] = from_left_to_rel(0, startup.final_axis1_from_left_mm);
-						pos[1] = 0.0;
-						pos[2] = from_left_to_rel(2, startup.final_axis3_from_left_mm);
-						pos[4] = from_left_to_rel(4, startup.final_axis5_from_left_mm);
-						pos[5] = from_left_to_rel(5, startup.final_axis6_from_left_mm);
-						if (final_targets_reached)
-						{
-							startup.direct_positioning = false;
-							startup.phase = StartupPhase::Done;
-							startup.completed = true;
-							startup.prompted = false;
-							control_active = sync_all(20);
-							plc_restart_recovery_latched = false;
-							std::cout << (control_active
-								? "开始控制定位完成，已进入手柄控制。"
-								: "开始控制定位完成，但重同步失败。")
-								<< std::endl;
-						}
-					}
-				}
-				else if (startup.recovery_mode)
-				{
-					// 上位机中断恢复：全程保持正常抓持组合，不再执行标准装卸夹爪阶段。
-					cylinder1_cmd = cyl.cyl1_open;
-					cylinder2_cmd = cyl.cyl2_clamp;
-					cylinder3_cmd = cyl.cyl3_open;
-					cylinder4_cmd = cyl.cyl4_clamp;
-					pos[0] = from_left_to_rel(0, startup.final_axis1_from_left_mm);
-					pos[5] = from_left_to_rel(5, startup.final_axis6_from_left_mm);
-
-					if (startup.phase == StartupPhase::RecoveryMoveAxis1267)
-					{
-						if ((now_ms - startup.phase_t0) >= cfg.startup_recovery_stage_delay_ms)
-						{
-							startup.phase = StartupPhase::RecoveryMoveAxis5;
-							startup.phase_t0 = now_ms;
-							std::cout << "中断恢复启动：axis1/2/6/7 已启动 2 秒，开始移动 axis5。" << std::endl;
-						}
-					}
-					else if (startup.phase == StartupPhase::RecoveryMoveAxis5)
-					{
-						pos[4] = from_left_to_rel(4, startup.final_axis5_from_left_mm);
-						if ((now_ms - startup.phase_t0) >= cfg.startup_recovery_stage_delay_ms)
-						{
-							startup.phase = StartupPhase::RecoveryMoveAxis3;
-							startup.phase_t0 = now_ms;
-							std::cout << "中断恢复启动：axis5 已启动 2 秒，开始移动 axis3。" << std::endl;
-						}
-					}
-					else if (startup.phase == StartupPhase::RecoveryMoveAxis3)
-					{
-						pos[4] = from_left_to_rel(4, startup.final_axis5_from_left_mm);
-						pos[2] = from_left_to_rel(2, startup.final_axis3_from_left_mm);
-						if (startup_final_targets_reached())
-						{
-							complete_startup_sequence();
-						}
-					}
-				}
-				else if (startup.phase == StartupPhase::ReleaseClamps)
-				{
-					// 阶段 1：打开全部夹爪并等待机构稳定。
-					cylinder1_cmd = cyl.cyl1_open;
-					cylinder2_cmd = cyl.cyl2_open;
-					cylinder3_cmd = cfg.startup_cyl3_open;
-					cylinder4_cmd = cfg.startup_cyl4_open;
-					if ((now_ms - startup.phase_t0) >= cfg.startup_clamp_settle_delay_ms)
-					{
-						startup.phase = StartupPhase::MoveAxis56ToLeftReady;
-					}
-				}
-				else if (startup.phase == StartupPhase::MoveAxis56ToLeftReady)
-				{
-					// 阶段 2：将 1/5/6 轴同步移动到左限位参考的准备点。
-					cylinder1_cmd = cyl.cyl1_open;
-					cylinder2_cmd = cyl.cyl2_open;
-					cylinder3_cmd = cfg.startup_cyl3_open;
-					cylinder4_cmd = cfg.startup_cyl4_open;
-					pos[0] = from_left_to_rel(0, cfg.startup_axis1_ready_from_left_mm);
-					pos[4] = from_left_to_rel(4, cfg.startup_axis5_ready_from_left_mm);
-					pos[5] = from_left_to_rel(5, cfg.startup_axis5_ready_from_left_mm + cfg.axis56_ready_gap_mm);
-					if ((std::abs(axis1_abs - startup_axis1_ready_abs) <= cfg.crawl_arrive_tol_mm) &&
-						(std::abs(axis5_abs - startup_axis5_ready_abs) <= cfg.crawl_arrive_tol_mm) &&
-						(std::abs(axis6_abs_now - startup_axis6_ready_abs) <= cfg.crawl_arrive_tol_mm))
-					{
-						// 锁存 axis1 阶段2到位值，避免后续阶段回到旧 hold 点。
-						startup.axis1_hold_rel = pos[0];
-						startup.phase = StartupPhase::ClampCylinder34Wait;
-						startup.phase_t0 = now_ms;
-					}
-				}
-				else if (startup.phase == StartupPhase::ClampCylinder34Wait)
-				{
-					// 阶段 3：在 axis3 移动前先闭合导丝侧夹爪对。
-					cylinder1_cmd = cyl.cyl1_open;
-					cylinder2_cmd = cyl.cyl2_open;
-					cylinder3_cmd = cfg.startup_cyl3_clamp;
-					cylinder4_cmd = cfg.startup_cyl4_clamp;
-					pos[4] = from_left_to_rel(4, cfg.startup_axis5_ready_from_left_mm);
-					pos[5] = from_left_to_rel(5, cfg.startup_axis5_ready_from_left_mm + cfg.axis56_ready_gap_mm);
-					if ((now_ms - startup.phase_t0) >= cfg.startup_clamp_settle_delay_ms)
-					{
-						startup.axis3_move_base_rel = plc_act_pos[2];
-						startup.axis5_move_base_rel = plc_act_pos[4];
-						startup.axis6_move_base_rel = plc_act_pos[5];
-						startup.phase = StartupPhase::MoveAxis356BackToReady;
-						std::cout << "启动准备：阶段4按 UI 最终目标移动 1/3/5/6 轴，axis2/7 继续保持启动目标。" << std::endl;
-					}
-				}
-				else if (startup.phase == StartupPhase::MoveAxis356BackToReady)
-				{
-					// 阶段 4：直线轴 UI 最终目标在此阶段生效；旋转轴目标已从阶段1开始执行。
-					cylinder1_cmd = cyl.cyl1_open;
-					cylinder2_cmd = cyl.cyl2_open;
-					cylinder3_cmd = cfg.startup_cyl3_clamp;
-					cylinder4_cmd = cfg.startup_cyl4_clamp;
-					apply_startup_final_targets();
-					if (startup_final_targets_reached())
-					{
-						startup.phase = StartupPhase::ClampCylinder2AfterAxis3;
-						startup.phase_t0 = now_ms;
-					}
-				}
-				else if (startup.phase == StartupPhase::ClampCylinder2AfterAxis3)
-				{
-					cylinder1_cmd = cyl.cyl1_open;
-					cylinder2_cmd = cyl.cyl2_clamp;
-					cylinder3_cmd = cfg.startup_cyl3_clamp;
-					cylinder4_cmd = cfg.startup_cyl4_clamp;
-					apply_startup_final_targets();
-					if ((now_ms - startup.phase_t0) >= cfg.startup_clamp_settle_delay_ms &&
-						startup_final_targets_reached())
-					{
-						complete_startup_sequence();
-					}
-				}
 			}
             else if (return_recovery.resume_pending())
             {
@@ -3220,8 +2922,8 @@ int main()
 			!ads_snapshot.host_comm_timeout && !ads_events.host_comm_timeout &&
 			!estop_hold_active && !ads_snapshot.estop_hold_req && !ads_events.estop_hold_req;
 		const bool cylinder_manual_allowed = cylinder_plc_ready &&
-			!startup.is_active() && !selfcheck_start_pending && ads_events.selfcheck_status != 2 &&
-			!motion_startup_active && 
+			 !selfcheck_start_pending && ads_events.selfcheck_status != 2 &&
+			 
 			!spacing_recovery.active() && !spacing_recovery.requested &&
 			!axis6_soft_limit_hold && !planned_return.active() && !dual_handoff.active() &&
 			!ads_events.axis1_return_busy && !ads_events.axis6_return_busy;
@@ -3231,7 +2933,7 @@ int main()
 			clear_cylinder_manual_overrides();
 		}
 		const bool automatic_cylinder_output_enabled = !connection_hold_active &&
-			!estop_hold_active && (control_active || motion_startup_active);
+			!estop_hold_active && (control_active);
 		const std::uint8_t cylinder_write_mask = automatic_cylinder_output_enabled
 			? 0x0f : (cylinder_manual_allowed ? cylinder_manual_written_mask : 0);
 		const bool cylinder_output_enabled = cylinder_write_mask != 0;
@@ -3324,7 +3026,7 @@ int main()
 		AdsOutputCommand ads_output{};
 		const bool normal_motion_output_enabled = ads_motion_cycle_valid && !connection_hold_active &&
 			!return_ads_fault_hold && !estop_hold_active &&
-			(control_active || motion_startup_active);
+			(control_active);
 		ads_output.motion_enabled = normal_motion_output_enabled;
 		for (int axis = 0; axis < 7; ++axis) ads_output.refer[axis] = pos[axis];
 		ads_output.axis1_fast_return = ads_output.motion_enabled && axis1_fast_return;
@@ -3361,7 +3063,7 @@ int main()
 			ads_output.inject_push_req[injector_index] = injector_push_request[injector_index];
 			ads_output.inject_pull_req[injector_index] = injector_pull_request[injector_index];
 		}
-		ads_output.startup_smoothing_bypass = ads_output.motion_enabled && startup_smoothing_bypass;
+		ads_output.startup_smoothing_bypass = false;
 		const bool distance_follow_output = ads_output.motion_enabled && ads_output.cylinder_valid &&
 			handle_distance_follow_allowed();
 		axis1_net_distance.set_following(distance_follow_output &&
@@ -3942,72 +3644,12 @@ int main()
 					}
 					break;
 				}
-				case VisCommandType::SetStartupAxisPos:
-				{
-					double pos_mm = vcmd.param2 / 100.0;
-					switch (vcmd.param1)
-					{
-					case 1: pending_startup.axis1_from_left_mm = pos_mm; break;
-					case 3: pending_startup.axis3_from_left_mm = pos_mm; break;
-					case 5: pending_startup.axis5_from_left_mm = pos_mm; break;
-					case 6: pending_startup.axis6_from_left_mm = pos_mm; break;
-					}
-					break;
-				}
-				case VisCommandType::SetStartupAxisDeg:
-				{
-					double deg = vcmd.param2 / 100.0;
-					if (vcmd.param1 == 2) pending_startup.axis2_deg = deg;
-					else if (vcmd.param1 == 7) pending_startup.axis7_deg = deg;
-					break;
-				}
-				case VisCommandType::SetStartupSpeed:
-					pending_startup.speed_scale = vcmd.param1 / 100000.0;
-					break;
-				case VisCommandType::ExecuteStartup:
-				{
-					bool valid = true;
-					if (pending_startup.axis1_from_left_mm < 5.0 || pending_startup.axis1_from_left_mm > 95.0) valid = false;
-					if (pending_startup.axis3_from_left_mm < 10.0 || pending_startup.axis3_from_left_mm > 650.0) valid = false;
-					if (pending_startup.axis5_from_left_mm < 10.0 || pending_startup.axis5_from_left_mm > 670.0) valid = false;
-					if (pending_startup.axis6_from_left_mm < 10.0 || pending_startup.axis6_from_left_mm > cfg.axis6_soft_limit_from_left_mm) valid = false;
-					if (pending_startup.axis2_deg < -360.0 || pending_startup.axis2_deg > 360.0) valid = false;
-					if (pending_startup.axis7_deg < -360.0 || pending_startup.axis7_deg > 360.0) valid = false;
-					if (pending_startup.axis6_from_left_mm < pending_startup.axis5_from_left_mm) valid = false;
-					if (pending_startup.axis5_from_left_mm < pending_startup.axis3_from_left_mm) valid = false;
-					if (pending_startup.axis3_from_left_mm < pending_startup.axis1_from_left_mm) valid = false;
-					if (pending_startup.speed_scale < 0.00001 || pending_startup.speed_scale > 0.5) valid = false;
-					if (!valid)
-					{
-						std::cout << "UI：启动准备参数已拒绝，请检查直线轴范围、axis2/7 的 [-360, 360] deg 范围及速度比例。" << std::endl;
-						break;
-					}
-					if (!startup.completed && startup.phase == StartupPhase::WaitForEnter &&
-						!estop_hold_active && !ads_soft_hold_active &&
-						has_self_check_flag && self_check_done)
-					{
-						startup.final_axis1_from_left_mm = pending_startup.axis1_from_left_mm;
-						startup.final_axis3_from_left_mm = pending_startup.axis3_from_left_mm;
-						startup.final_axis5_from_left_mm = pending_startup.axis5_from_left_mm;
-						startup.final_axis6_from_left_mm = pending_startup.axis6_from_left_mm;
-						startup.final_axis2_deg = pending_startup.axis2_deg;
-						startup.final_axis7_deg = pending_startup.axis7_deg;
-						cfg.startup_motion_speed_scale = pending_startup.speed_scale;
-						if (start_startup_sequence())
-						{
-							clear_cylinder_manual_overrides();
-							control_active = false;
-							std::cout << "启动准备流程已开始（UI 参数）。" << std::endl;
-						}
-					}
-					break;
-				}
 				case VisCommandType::SelectDirectControl:
 					{
 						if (control_active || planned_return.active() || spacing_recovery.active()) break;
 						// 自检完成后点击“开始控制”：不再走到准备位置，直接在当前位置开始手柄控制。
 						pending_selfcheck_axes = 0;
-						if (!startup.is_active() &&
+						if (
 							!return_ads_fault_hold && !handle_soft_hold_active && initial_sync_done &&
 							!estop_hold_active &&
 							!ads_soft_hold_active &&
@@ -4015,11 +3657,7 @@ int main()
 						{
 							clear_cylinder_manual_overrides();
 							spacing_recovery.reset();
-							if (!restore_startup_v_limit())
-							{
-								std::cout << "开始控制失败：无法恢复启动期速度限制参数。" << std::endl;
-							}
-							else if (!consume_startup_loading_ready())
+							if (!consume_startup_loading_ready())
 							{
 								std::cout << "开始控制失败：无法清除 PLC 装卸位就绪标志。" << std::endl;
 							}
@@ -4029,11 +3667,8 @@ int main()
 								{
 									axis6_crawl.enabled = false;
 								}
-								startup.recovery_mode = false;
-								startup.direct_positioning = false;
 								startup.phase = StartupPhase::Done;
 								startup.completed = true;
-								startup.prompted = false;
 								control_active = true;
 								plc_restart_recovery_latched = false;
 								std::cout << "已在当前位置开始控制。" << std::endl;
@@ -4094,7 +3729,6 @@ int main()
 	shutdown_output.cylinder5_press_req = false;
 	shutdown_output.axis4_forward_req = false;
 	shutdown_output.axis4_reverse_req = false;
-	shutdown_output.startup_smoothing_bypass = false;
 	ads_communication.publish_output(shutdown_output);
 	AdsFastSnapshot shutdown_snapshot{};
 	(void)ads_communication.wait_for_snapshot(ads_snapshot_sequence, 50, shutdown_snapshot);

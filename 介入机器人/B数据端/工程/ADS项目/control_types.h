@@ -408,21 +408,11 @@ struct SpacingRecoveryState
 	}
 };
 
-// 启动准备是在自检后进入的显式上位机流程。
+// 公共开始控制保留等待/完成语义及协议数值。
 enum class StartupPhase
 {
-	WaitForEnter,
-	PositionAxis156,
-	PositionAxis356,
-	ReleaseClamps,
-	MoveAxis56ToLeftReady,
-	ClampCylinder34Wait,
-	MoveAxis356BackToReady,
-	ClampCylinder2AfterAxis3,
-	RecoveryMoveAxis1267,
-	RecoveryMoveAxis5,
-	RecoveryMoveAxis3,
-	Done
+	WaitForEnter = 0,
+	Done = 11
 };
 
 struct CrawlState
@@ -626,47 +616,16 @@ struct ForceOutputCmd
 
 struct StartupState
 {
-	// 启动序列开始时一次性采集保持位姿。
-	// move_base_rel 是启动阶段4动作前的锁存基准，最终目标由 UI 参数决定。
 	StartupPhase phase = StartupPhase::WaitForEnter;
 	bool completed = false;
-	bool prompted = false;
-	bool direct_positioning = false;
-	DWORD phase_t0 = 0;
-
-	double axis1_hold_rel = 0.0;
-	double axis2_hold_rel = 0.0;
-	double axis3_hold_rel = 0.0;
-	double axis5_hold_rel = 0.0;
-	double axis6_hold_rel = 0.0;
-	double axis7_hold_rel = 0.0;
-
-	double axis3_move_base_rel = 0.0;
-	double axis5_move_base_rel = 0.0;
-	double axis6_move_base_rel = 0.0;
-	double direct_axis5_stage_from_left_mm = 0.0;
-	double direct_axis6_stage_from_left_mm = 0.0;
-
 	double final_axis1_from_left_mm = 20.0;
 	double final_axis3_from_left_mm = 649.0;
 	double final_axis5_from_left_mm = 649.0;
 	double final_axis6_from_left_mm = 650.0;
 	double final_axis2_deg = 0.0;
 	double final_axis7_deg = 0.0;
-
-	// 标准装卸启动与上位机中断恢复启动的入口判定状态。
-	bool recovery_mode = false;
-	bool loading_pose_match = false;
 	bool loading_ready_symbol_available = false;
 	bool loading_ready_plc = false;
-
-	double v_limit_backup[7] = {};
-	bool v_limit_scaled = false;
-
-	bool is_active() const
-	{
-		return phase != StartupPhase::WaitForEnter && phase != StartupPhase::Done;
-	}
 };
 
 struct AppContext
@@ -700,7 +659,6 @@ struct AppContext
 	bool* dual_reverse = nullptr;
 	CrawlState* axis1_crawl = nullptr;
 	CrawlState* axis6_crawl = nullptr;
-	StartupState* startup = nullptr;
 	ForceFeedbackState* ff = nullptr;
 
 	// 常规导管/导丝基线状态。
@@ -721,5 +679,4 @@ struct AppContext
 	double* axis6_prev_abs_for_trigger = nullptr;
 	bool* axis1_prev_abs_valid = nullptr;
 	bool* axis6_prev_abs_valid = nullptr;
-	bool* startup_smoothing_bypass = nullptr;
 };

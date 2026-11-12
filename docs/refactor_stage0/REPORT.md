@@ -49,3 +49,7 @@ R2-8 的51条原断言已复制到 tools/refactor_baseline/behavior_probes.cpp�
 ### 3.1.4 紧急回撤
 
 已确认：删除 EmergencyRetractDevice 命令、固定夹持撤出动作、到位处理、速度备份/恢复及全部生产 emergency_retract 状态。删除测试中仅用于验证该门控的两次循环项，其他控制断言不变。抽取边界改用仍在的轴6限位入口。黄金34场景/27,197拍逐值相等，11个离线程序、47条保留断言通过（logs/delete4*）。
+
+### 3.1.5 内部启动序列
+
+已确认：删除 ExecuteStartup、标准/恢复启动序列模块、direct positioning 两阶段、SetStartupAxisPos/AxisDeg/Speed 与 pending_startup。公共 SelectDirectControl、startup.completed、StartupPhase::Done=11、PLC loading_ready 消费和自检后的重同步保留；协议中的 startup_phase/waiting/completed 字段保留。黄金34场景/27,197拍逐值相等，11个离线程序、47条保留断言通过（logs/delete5*）。电缸测试移除仅检查已删除启动占用门的场景，其他断言未改。
