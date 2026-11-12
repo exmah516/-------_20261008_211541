@@ -39,18 +39,11 @@ fixture = (ads / "tools/main_recovery_test.cpp").read_text(encoding="utf-8-sig")
 fixture = fixture[:fixture.index("\nint main()")]
 fixture = re.sub(r"^#include <.*>\n", "", fixture, flags=re.M)
 fixture = re.sub(r"^enum class (AdsConnectionState|StartupPhase|GuidewireMode).*\n", "", fixture, flags=re.M)
-fixture = fixture.replace('#include "../experiment_events.h"\n', '')
-fixture = re.sub(r"^\s*GuidewireMode guidewire_mode.*\n", "", fixture, flags=re.M)
-fixture = fixture.replace("enum class SpacingRecoveryPhase { Idle };",
-    "enum class SpacingRecoveryPhase { Idle, ExitSync };")
-fixture = fixture.replace("struct GapHandle {",
-    "struct GapHandle { bool resume_settling() const { return false; }")
 fixture = fixture.replace("void reset() {} } spacing_recovery;",
-    "bool requested=false; void reset() {} } spacing_recovery;")
+    "SpacingRecoveryPhase phase = SpacingRecoveryPhase::Idle; void reset() {} } spacing_recovery;")
 fixture = fixture.replace("    void recover() {", """
-    double plc_act_pos[7] = {}, axis2_hold_rel = 0, axis7_hold_rel = 0;
-    int event_hold_sources = 0;
-    bool event_connection_hold_active = false, handle1_poll_ok = true, handle6_poll_ok = true;
+    double plc_act_pos[7] = {}, axis2_hold_rel = 0, axis7_hold_rel = 0, independent_axis2_hold_rel = 0;
+    struct { void disable_compensation() {} } tracking_controller;
     void clear_force_output() {}
     void edge() {
 #include "main_connection.inc"

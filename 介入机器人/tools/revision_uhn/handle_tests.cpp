@@ -40,7 +40,8 @@ struct Replay
     HandleFilterState axis1_handle_filter, axis6_handle_filter;
     ControlConfig cfg;
     CrawlState axis1_crawl, axis6_crawl;
-    bool ads_soft_hold_active = false, handle_soft_hold_active = false;
+    GuidewireMode guidewire_mode = GuidewireMode::None;
+    bool single_handle_mode = false, ads_soft_hold_active = false, handle_soft_hold_active = false;
     bool initial_sync_done = true, connection_hold_active_prev = false;
     bool axis1_fast_return = false, axis6_fast_retract = false;
     PlannedReturnCoordinator planned_return;
@@ -56,7 +57,9 @@ struct Replay
     double axis1_prev_linear_filtered = 0, axis6_prev_linear_filtered = 0;
     double axis1_prev_rot_filtered = 0, axis6_prev_rot_filtered = 0;
     double axis1_follow_cmd_abs = 20, axis6_follow_cmd_abs = 625;
-    double axis3_base_rel = 600, axis5_base_rel = 610;
+    double axis3_base_rel = 600, axis5_base_rel = 610, axis6_mirror_base_rel = 625;
+    double axis1_prev_abs_for_trigger = 20, axis6_prev_abs_for_trigger = 625;
+    bool axis1_prev_abs_valid = true, axis6_prev_abs_valid = true, axis1_reverse_switch_guard_active = false;
     std::string recovery_event_text;
     AppContext ctx;
     std::array<double, 4> command{20, 30, 625, 40};
@@ -75,7 +78,11 @@ struct Replay
         ctx.axis6_prev_linear_filtered = &axis6_prev_linear_filtered;
         ctx.axis1_prev_rot_filtered = &axis1_prev_rot_filtered; ctx.axis6_prev_rot_filtered = &axis6_prev_rot_filtered;
         ctx.axis1_follow_cmd_abs = &axis1_follow_cmd_abs; ctx.axis6_follow_cmd_abs = &axis6_follow_cmd_abs;
+        ctx.axis1_reverse_switch_guard_active = &axis1_reverse_switch_guard_active;
+        ctx.axis1_prev_abs_for_trigger = &axis1_prev_abs_for_trigger; ctx.axis6_prev_abs_for_trigger = &axis6_prev_abs_for_trigger;
+        ctx.axis1_prev_abs_valid = &axis1_prev_abs_valid; ctx.axis6_prev_abs_valid = &axis6_prev_abs_valid;
         ctx.axis3_base_rel = &axis3_base_rel; ctx.axis5_base_rel = &axis5_base_rel;
+        ctx.axis6_mirror_base_rel = &axis6_mirror_base_rel;
         ff.set_enabled(1, true); ff.set_enabled(2, true);
         cal_state.zeroed = true; force_sample.valid = true;
         force_sample.fn_1_value_v = force_sample.fn_2_value_v = 1;

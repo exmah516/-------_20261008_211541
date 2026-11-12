@@ -6,7 +6,6 @@
 #include "ads_mock.inc"
 #include "zenoh_service.h"
 #include "手柄/Handle.h"
-#include "experiment_events.h"
 
 namespace main_fixture {
 #include "main_fixture.inc"
@@ -64,8 +63,6 @@ int main(int argc, char** argv)
         if (!wire.is_open()) wire.init();
         if (!catheter.is_open()) catheter.init();
         const bool wire_ok = wire.poll(), catheter_ok = catheter.poll();
-        control.handle1_poll_ok = catheter_ok;
-        control.handle6_poll_ok = wire_ok;
         if (!wire_ok && wire.is_open()) wire.close();
         if (!catheter_ok && catheter.is_open()) catheter.close();
         control.handle_soft_hold_active = !wire_ok || !catheter_ok ||
