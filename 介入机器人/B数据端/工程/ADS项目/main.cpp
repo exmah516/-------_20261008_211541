@@ -3601,22 +3601,4 @@ int main()
 		}
 	}
 
-	AdsOutputCommand shutdown_output{};
-	shutdown_output.motion_enabled = false;
-	shutdown_output.cylinder_valid = false;
-	shutdown_output.cylinder5_press_req = false;
-	shutdown_output.axis4_forward_req = false;
-	shutdown_output.axis4_reverse_req = false;
-	ads_communication.publish_output(shutdown_output);
-	AdsFastSnapshot shutdown_snapshot{};
-	(void)ads_communication.wait_for_snapshot(ads_snapshot_sequence, 50, shutdown_snapshot);
-	clear_force_output();
-	handle_velocity_recorder.stop();
-	experiment_recorder.stop_and_wait("program_exit");
-	arm_manual_ads.stop();
-	ads_communication.stop();
-	zenoh_service.stop();
-	handle_axis1.close();
-	handle_axis6.close();
-	return 0;
 }

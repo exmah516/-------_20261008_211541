@@ -57,3 +57,7 @@ R2-8 的51条原断言已复制到 tools/refactor_baseline/behavior_probes.cpp�
 ### 3.1.6 无公共映射的内部命令
 
 已确认：清单余下10项内部命令及枚举删除；RequestModeSwitch/SetReverseMode、两项tracking命令已随前组删除。三个 StartControl 抽取边界统一换为仍存在的 default，保留断言不变。主端 ToggleForceFeedback 方法发送公共 SetForceFeedback，不引用被删内部枚举，无需修改。自动实验记录、物理恢复键、公共电缸Position/Reset、力反馈Set/Hold均保留。黄金34场景/27,197拍逐值相等，11个离线程序、47条保留断言通过（logs/delete6*）。
+
+### 3.1.7 不可达退出块
+
+已确认：while(true) 后的退出清理块删除，循环内无退出该无限循环的公共路径。黄金34场景/27,197拍逐值相等，11个离线程序、47条保留断言通过（logs/delete7*）。未增加退出机制。
