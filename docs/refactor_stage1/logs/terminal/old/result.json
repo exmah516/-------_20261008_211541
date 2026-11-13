@@ -1,0 +1,182 @@
+{
+  "build": "C:\\Users\\Sui\\AppData\\Local\\Temp\\refactor-baseline-dzfgetsd",
+  "sources": {
+    "ads_communication.h": "61d03c05b96d61388436b7d590b693b084651ba7d1b6aaaa275c71714c58dffe",
+    "arm_cartesian_motion.h": "6b20673a198997a14c80e9e5901cfef14be3eb34f9b8e7abae2cc940e6bab103",
+    "arm_manual_ads_service.h": "1e677f04668d33665c0467b27af426f5127e535aa98b62f5518e10a4ce31b472",
+    "async_csv_writer.h": "9f26c33db984be6c9d8348e45dcc1ff46b2be459c7f0bc8c7e14991ebe82633d",
+    "control_messages.h": "176f066f4705420c17fdac0b1292d3a7f5ca7e9c428d8e2ff6e6845bbe17481e",
+    "control_types.h": "91ada2faac753be994ba51f236f8a0b1a57d33d7096cb17774efed68a6a3b3d6",
+    "experiment_events.h": "b71711ce5c6f960c050cb468c6aa55a28cabe013997f62e64b08ef2779472965",
+    "experiment_recorder.h": "e38393645b8f77cce07775c66d1773ab1f90860ffb456faee072699cfed3a1a5",
+    "force_calibration.h": "e34959c244ec8fb5fadb095aa781ee962a1ae81f1c236dfffe6602484387ed2e",
+    "force_feedback.h": "a7c24573f0342c4bf20315a011f641539f0f64ec973bd9a3267afac4dc36f815",
+    "handle_net_distance.h": "a3e05320b71d50e89711d45d84160eaafd2a38edd7bcc0dacae99c353759be45",
+    "handle_velocity_recorder.h": "3858c01b298765f1e40841cfa3f133a26bc6434aa9b98170db9178b6681fd5eb",
+    "homing_record.h": "6317a2ecc61fe1b578938395442b3f70b5fb7f7a568fccbe9c18a6f35eab8336",
+    "motion_sync.h": "95db90429c794a213846363d85c41081b4a1fc6f2027b9ac57c74d890d502119",
+    "plc_io.h": "e12f6dc3e2b28149529b71425c8f2e791764b100c4525691ee311e0ebbee75b1",
+    "return_recovery.h": "7c984bf78172dfe2799a3ed2027c252ee0ce69ae7dce65cb3d38490816e5d161",
+    "zenoh_service.h": "da8d6da860d3fa6558f57dabfd158dd502acc74d716f5075c302ed3f9cd8b854",
+    "手柄/Handle.h": "9e9db14eee91e4e2437cb2c281db2c1eb2036a8c94876c00cea6502991625597",
+    "手柄/remote_handle_bridge.h": "b17d36def018293a4e0a6c79b6054461527ec6b25c79ee1d8521a088c845c952",
+    "control_types.cpp": "bf00263c9bec43dc5f489a7800df38bce348d9cc4cb4baf595cad719bb3cb092",
+    "motion_sync.cpp": "89e570de93d4da07afcff2e41252a9e4340ff5e5c87cfad6148aa4f2254d5c06",
+    "plc_io.cpp": "d03a1e706db9956e109870d7b45c3165a15cb6eb42baa2b53ac01d1ecaecabcc",
+    "force_feedback.cpp": "3d3963e74da023d20adff29d17822650947134405fa51db0f6c9a23b3fa14622",
+    "手柄/手柄.cpp": "d05ab00c32bae1cdbde311fce5614519fd3f13c4aa8ae798673f6b0bc2c5b8ce",
+    "main.cpp": "6d6be20891f44b3cf2d55f835bc4b961e5e017ccf64b9957bda27e52925b778c"
+  },
+  "scenarios": [
+    {
+      "scenario": "follow_delivery",
+      "ticks": 800,
+      "sha256": "e8a74fbac9d498c5fe2270968a11b46ae3a3f1fed1b5d69839937e4d5e913530",
+      "equal": true
+    },
+    {
+      "scenario": "follow_retraction",
+      "ticks": 800,
+      "sha256": "7b272e5e94c340315896a5ac5324f6561e856acb191bc36b046492dd2f1052c0",
+      "equal": true
+    },
+    {
+      "scenario": "handoff_axis1",
+      "ticks": 800,
+      "sha256": "16d1de44205b59864e60df54d566472b95531c2e249d34b942bba372b9c63fb4",
+      "equal": true
+    },
+    {
+      "scenario": "handoff_active",
+      "ticks": 800,
+      "sha256": "14a1ead1765a060f2268bfcce45c940d14aec17422448158abbc30f447d4f8a4",
+      "equal": true
+    },
+    {
+      "scenario": "handoff_passive",
+      "ticks": 800,
+      "sha256": "b5685e1eb6360fdae6c1d5cc3a06adbdcce161f66fe5b18a7cb56a46e149f751",
+      "equal": true
+    },
+    {
+      "scenario": "handoff_merge",
+      "ticks": 800,
+      "sha256": "3dbca6a05afabf1a3683bdc5740b183a1d4959689fb6ba2f89dab1f25ac62116",
+      "equal": true
+    },
+    {
+      "scenario": "return_axis1",
+      "ticks": 800,
+      "sha256": "d347fecb6bf2a4e690711a8e4585ee0966afd52ff85b3a20e07d4c100a837309",
+      "equal": true
+    },
+    {
+      "scenario": "return_axis6",
+      "ticks": 800,
+      "sha256": "bf4a7f1df126756d12a9b01e3f26b296f825468a16fa245eb4de9546a97f53f9",
+      "equal": true
+    },
+    {
+      "scenario": "return_both",
+      "ticks": 800,
+      "sha256": "3dbca6a05afabf1a3683bdc5740b183a1d4959689fb6ba2f89dab1f25ac62116",
+      "equal": true
+    },
+    {
+      "scenario": "return_retry",
+      "ticks": 800,
+      "sha256": "6e15ec9915904b58ca9a6a3eefd4e2d7ca2f3a490a8264a5d80260f3b47942df",
+      "equal": true
+    },
+    {
+      "scenario": "return_retry_axis6",
+      "ticks": 800,
+      "sha256": "c80f23fab48a9201563c7cd950c528f50f6c83b16813cda73cdd70814b7471d8",
+      "equal": true
+    },
+    {
+      "scenario": "return_retry_both",
+      "ticks": 800,
+      "sha256": "c2eec16d0cb27a2b5ddf1b5cf81d79719c2cf0cfc85707724f3bf93fb0a45e09",
+      "equal": true
+    },
+    {
+      "scenario": "return_possible",
+      "ticks": 800,
+      "sha256": "256761d2f34dafdd309f991a540b83b12ce916d0b0b9e6a857ede01837f42d72",
+      "equal": true
+    },
+    {
+      "scenario": "return_possible_axis6",
+      "ticks": 800,
+      "sha256": "9ef1bda0d4a59ecf7df86057a8a35ed500a097ae1b806013617a029c373615bd",
+      "equal": true
+    },
+    {
+      "scenario": "return_possible_both",
+      "ticks": 800,
+      "sha256": "e95b12b382ec0c97f04b2a394a882bbd88016671e0d6358514d5f9c7e1bb799f",
+      "equal": true
+    },
+    {
+      "scenario": "return_fault",
+      "ticks": 800,
+      "sha256": "eb95b7e902c2626f089046ad708f146a77e139c4e63d5dd1b62666e0340d71e8",
+      "equal": true
+    },
+    {
+      "scenario": "return_fault_axis6",
+      "ticks": 800,
+      "sha256": "427ed8dff910036b57a0735c8f254cb7bb545fa0d9a363edf4cbe457194c5f6d",
+      "equal": true
+    },
+    {
+      "scenario": "return_fault_both",
+      "ticks": 800,
+      "sha256": "aeee2b89350921b0e3f876c99826490ae6e3498ecf5891bec94d7883f0f2de1b",
+      "equal": true
+    },
+    {
+      "scenario": "return_estop",
+      "ticks": 800,
+      "sha256": "3201aab28966cf73970f121e2ea099eb46ace01e9f99d9b86108cb48ce393ff5",
+      "equal": true
+    },
+    {
+      "scenario": "lead_hold",
+      "ticks": 800,
+      "sha256": "d347fecb6bf2a4e690711a8e4585ee0966afd52ff85b3a20e07d4c100a837309",
+      "equal": true
+    },
+    {
+      "scenario": "lead_axis6",
+      "ticks": 800,
+      "sha256": "d347fecb6bf2a4e690711a8e4585ee0966afd52ff85b3a20e07d4c100a837309",
+      "equal": true
+    },
+    {
+      "scenario": "ads_hold",
+      "ticks": 800,
+      "sha256": "ac9adfdfe8a1d940c18e77bff26fe67f99464be2034832ba4f55188bcbc86d41",
+      "equal": true
+    },
+    {
+      "scenario": "handle_gap_short",
+      "ticks": 800,
+      "sha256": "52d7e736e6703a65abd3800a1f809c105229498f05f219fca190f406c1c8a422",
+      "equal": true
+    },
+    {
+      "scenario": "device_epoch",
+      "ticks": 800,
+      "sha256": "f6bcbef9dda487f4dabebff62b40ca5709adf4cd3fe826528e9370bef7334a65",
+      "equal": true
+    },
+    {
+      "scenario": "feedback",
+      "ticks": 797,
+      "sha256": "b988e83beb2c9c1d59dfb72e8ba0e3996acb6b61107366376efd611e1ab7c793",
+      "equal": true
+    }
+  ]
+}

@@ -7,6 +7,7 @@
 #include <iostream>
 enum class AdsConnectionState { Running, Reconnecting };
 enum class CylinderManualMode { Automatic, Open, Closed, Position };
+#include "../handoff_types.h"
 #include "cylinder_type.inc"
 #include "cylinder_handles.inc"
 #include "cylinder_changed.inc"
@@ -21,7 +22,7 @@ struct Fixture {
     bool connection_hold_active=false, control_active=false, estop_hold_active=false;
     bool return_ads_fault_hold=false, motion_startup_active=false, emergency_retract_active=false;
     bool axis6_soft_limit_hold=false, selfcheck_start_pending=false, y_valve_open=false;
-    struct { bool position_valid=true, host_comm_timeout=false, estop_hold_req=false; } ads_snapshot;
+    struct { bool position_valid=true, host_comm_timeout=false, estop_hold_req=false; HandoffStatus handoff; } ads_snapshot;
     struct { AdsConnectionState state=AdsConnectionState::Running; } ads_stats;
     struct {
         bool host_comm_timeout=false, estop_hold_req=false, axis1_return_busy=false, axis6_return_busy=false;
@@ -106,8 +107,8 @@ int main() {
         case 8: f.ads_events.selfcheck_status=2; break;
         case 9: f.planned_return.on=true; break;
         case 10: f.dual_handoff.on=true; break;
-        case 11: f.ads_events.axis1_return_busy=true; break;
-        case 12: f.ads_events.axis6_return_busy=true; break;
+        case 11: f.ads_snapshot.handoff.phase=30; break;
+        case 12: f.ads_snapshot.handoff.phase=60; break;
         case 13: f.spacing_recovery.requested=true; break;
         }
         f.tick();

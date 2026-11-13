@@ -1,0 +1,9 @@
+scenario,cycles,max_difference,completion
+handle_follow,1000,0,initialized_and_following
+ordinary_err,2500,0,clear_err
+clear_err,250,0,handle_reinit_requested
+selfcheck_finish_block,10,0,self_check_done
+selfcheck_start_to_done,5686,0,self_check_done_true_and_handle
+MAIN_idle_dispatch,20,0,selfcheck_wait
+Axis2Sync,1000,0,in_gear
+ordinary_err_MAIN_to_handle,435,0,handle_reinit_done_and_hold_released

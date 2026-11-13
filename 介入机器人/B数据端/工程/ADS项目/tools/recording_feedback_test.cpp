@@ -103,7 +103,7 @@ static void recording()
     assert(motion[25][10] == "1" && motion[25][11] == "1" && std::stod(motion[25][8]) == 15);
     std::ifstream metadata(session / "session.json");
     std::string json((std::istreambuf_iterator<char>(metadata)), {});
-    assert(json.find("\"schema_version\": 9") != std::string::npos && json.find("test_complete") != std::string::npos);
+    assert(json.find("\"schema_version\": 10") != std::string::npos && json.find("test_complete") != std::string::npos);
     assert(recorder.start("auto", info)); recorder.stop_and_wait("second");
     int sessions = 0;
     for (const auto& file : fs::recursive_directory_iterator("records"))
@@ -114,36 +114,42 @@ static void recording()
     { std::ofstream file("records"); file << "not a directory"; }
     assert(!recorder.start("auto", info) && recorder.snapshot().error == ExperimentRecordingError::CreateDirectoryFailed);
     fs::current_path(original);
-    std::cout << "PASS: recorder actual CSV writes, 100/50 samples, events, validity, NaN, drain, duplicate rejection, schema9, separate sessions, I/O failure.\n";
+    std::cout << "PASS: recorder actual CSV writes, 100/50 samples, events, validity, NaN, drain, duplicate rejection, schema10, separate sessions, I/O failure.\n";
 }
 static bool close(double a, double b) { return std::abs(a-b) < 1e-9; }
 static void handoff_holds()
 {
-    PlannedReturnCoordinator planned_return;
-    struct { bool motion_enabled = true, axis1_fast_return = false, axis6_fast_retract = false; } ads_output;
-    const std::uint64_t output_generation = 42;
-    planned_return.leg_count = 2;
-    planned_return.legs[0].axis_index = 0; planned_return.legs[1].axis_index = 5;
-    auto tick = [&] {
+    HandoffCoordinator planned_return;
+    struct { bool motion_enabled=true; } ads_output;
+    const std::uint64_t output_generation=42;
+    auto tick=[&] {
 #include "recording_handoff.inc"
-        return planned_return.phase;
+        return planned_return.handoff_generation;
     };
-    auto test = [&](bool catheter, bool wire) {
-        planned_return.phase = PlannedReturnPhase::PublishHandoff;
-        planned_return.legs[0].active = catheter; planned_return.legs[1].active = wire;
-        const auto result = tick();
-        assert(result == PlannedReturnPhase::AwaitHandoffApplied);
-        assert(planned_return.handoff_generation == output_generation);
-    };
-    test(true, false); test(false, true); test(true, true);
-    assert(tick() == PlannedReturnPhase::AwaitHandoffApplied);
-    planned_return.phase = PlannedReturnPhase::PublishHandoff;
-    ads_output.motion_enabled = false; assert(tick() == PlannedReturnPhase::PublishHandoff);
-    ads_output.motion_enabled = true; ads_output.axis1_fast_return = true;
-    assert(tick() == PlannedReturnPhase::PublishHandoff);
-    ads_output.axis1_fast_return = false; ads_output.axis6_fast_retract = true;
-    assert(tick() == PlannedReturnPhase::PublishHandoff);
-    std::cout << "PASS: handoff publish remains one-shot and obeys existing motion/fast-return gates.\n";
+    for (bool rebased : {false,true}) for (bool enabled : {false,true}) {
+        planned_return.reset(); planned_return.phase=HandoffPhase::Takeover;
+        planned_return.rebased=rebased; ads_output.motion_enabled=enabled;
+        assert(tick()==(rebased && enabled ? output_generation : 0));
+    }
+    assert(tick()==output_generation);
+    std::cout << "PASS: takeover generation waits for rebased motion output and is one-shot.\n";
+    planned_return.reset();
+    assert(planned_return.public_phase_for_axis(0)==0);
+    planned_return.phase=HandoffPhase::Requested;
+    planned_return.leg_count=1;
+    planned_return.legs[0].active=true;
+    planned_return.legs[0].axis_index=0;
+    assert(planned_return.public_phase_for_axis(5)==0 && planned_return.public_phase_for_axis(0)==2);
+    for (int phase : {10,20,30,40,50,60}) {
+        planned_return.status.phase=static_cast<std::int16_t>(phase);
+        assert(planned_return.public_phase_for_axis(0)==(phase<=20?1:phase==30?2:3));
+    }
+    planned_return.phase=HandoffPhase::Takeover;
+    planned_return.status.phase=0;
+    assert(planned_return.public_phase_for_axis(0)==3);
+    planned_return.reset();
+    assert(planned_return.public_phase_for_axis(0)==0);
+    std::cout << "PASS: unchanged public phase values 0/1/2/3 cover participant and nonparticipant axes.\n";
 }
 static void calibration()
 {

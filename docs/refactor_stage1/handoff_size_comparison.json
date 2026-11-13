@@ -1,0 +1,312 @@
+{
+  "before": {
+    "main_lines": 3597,
+    "scheduler_block_lines": 1019,
+    "blocks": [
+      {
+        "name": "clear_axis_return_request",
+        "first": 168,
+        "last": 171
+      },
+      {
+        "name": "clear_axis_return_requests",
+        "first": 172,
+        "last": 175
+      },
+      {
+        "name": "clear_axis1_group_return_requests",
+        "first": 176,
+        "last": 179
+      },
+      {
+        "name": "planned_return_phase_for_axis",
+        "first": 324,
+        "last": 327
+      },
+      {
+        "name": "record_return_command",
+        "first": 329,
+        "last": 334
+      },
+      {
+        "name": "clear_planned_return_ads_command_tracking",
+        "first": 335,
+        "last": 340
+      },
+      {
+        "name": "planned_return_active_axis_mask",
+        "first": 341,
+        "last": 352
+      },
+      {
+        "name": "latch_planned_return_possibly_started",
+        "first": 353,
+        "last": 366
+      },
+      {
+        "name": "submit_planned_return_ads_command",
+        "first": 367,
+        "last": 401
+      },
+      {
+        "name": "poll_planned_return_ads_command",
+        "first": 408,
+        "last": 436
+      },
+      {
+        "name": "planned_return_ads_command_timed_out",
+        "first": 437,
+        "last": 445
+      },
+      {
+        "name": "reset_planned_return",
+        "first": 446,
+        "last": 453
+      },
+      {
+        "name": "cancel_active_return_motion",
+        "first": 456,
+        "last": 497
+      },
+      {
+        "name": "planned_return_event_view",
+        "first": 1596,
+        "last": 1630
+      },
+      {
+        "name": "refresh_planned_return_leg",
+        "first": 1632,
+        "last": 1692
+      },
+      {
+        "name": "planned_return_any_started",
+        "first": 1694,
+        "last": 1702
+      },
+      {
+        "name": "planned_return_all_acknowledged",
+        "first": 1704,
+        "last": 1712
+      },
+      {
+        "name": "planned_return_all_done",
+        "first": 1714,
+        "last": 1722
+      },
+      {
+        "name": "planned_return_has_error",
+        "first": 1724,
+        "last": 1732
+      },
+      {
+        "name": "planned_return_targets_safe",
+        "first": 1734,
+        "last": 1774
+      },
+      {
+        "name": "rebase_planned_return",
+        "first": 1776,
+        "last": 1783
+      },
+      {
+        "name": "fail_planned_return",
+        "first": 1785,
+        "last": 1818
+      },
+      {
+        "name": "begin_planned_return",
+        "first": 1820,
+        "last": 1879
+      },
+      {
+        "name": "planned_return_settle_wait_ms",
+        "first": 1881,
+        "last": 1913
+      },
+      {
+        "name": "apply_planned_return_outputs",
+        "first": 1915,
+        "last": 1985
+      },
+      {
+        "name": "enter_planned_return_retry",
+        "first": 1987,
+        "last": 2010
+      },
+      {
+        "name": "step_planned_return",
+        "first": 2012,
+        "last": 2436
+      },
+      {
+        "name": "PlannedReturnEventView",
+        "first": 1582,
+        "last": 1595
+      }
+    ],
+    "lexical_reference_lines": 475,
+    "fields": {
+      "PlannedReturnLeg": [
+        "active",
+        "axis_index",
+        "target_abs",
+        "entry_rel",
+        "request_armed",
+        "acknowledged",
+        "started",
+        "possibly_started",
+        "done",
+        "request_event_sequence",
+        "ack_event_sequence",
+        "error_event_sequence",
+        "reported_error_id",
+        "cancel_event_sequence",
+        "cancel_event_required"
+      ],
+      "PlannedReturnCoordinator": [
+        "phase",
+        "mode",
+        "rebase_scope",
+        "legs",
+        "leg_count",
+        "int",
+        "phase_t0_ms",
+        "request_t0_ms",
+        "execution_t0_ms",
+        "retry_clear_t0_ms",
+        "clamp_output_generation",
+        "clamp_output_applied",
+        "request_prepared",
+        "commit_guard_generation",
+        "retry_clear_issued",
+        "retry_clear_snapshot_sequence",
+        "ads_command_purpose",
+        "ads_command_sequence",
+        "ads_command_submit_ms",
+        "cancel_clear_confirmed",
+        "completion_clear_confirmed",
+        "cancel_snapshot_sequence",
+        "cancel_t0_ms",
+        "cancel_clear_retry_after_ms",
+        "cancel_timeout_reported",
+        "cancel_rebased",
+        "cancel_hold_generation",
+        "done_snapshot_sequence",
+        "handoff_generation",
+        "hold_axis3_rel",
+        "hold_axis5_rel",
+        "hold_axis1_rel",
+        "hold_axis6_rel",
+        "char",
+        "char",
+        "release_output_generation",
+        "release_applied"
+      ]
+    },
+    "expanded_fields": 66
+  },
+  "after": {
+    "main_lines": 2683,
+    "scheduler_block_lines": 263,
+    "blocks": [
+      {
+        "name": "planned_return_phase_for_axis",
+        "first": 309,
+        "last": 312
+      },
+      {
+        "name": "planned_return_targets_safe",
+        "first": 1343,
+        "last": 1383
+      },
+      {
+        "name": "begin_planned_return",
+        "first": 1385,
+        "last": 1462
+      },
+      {
+        "name": "if (has_new_ads_snapshot && ads_snapshot.position_valid && !planned_return.active()",
+        "first": 472,
+        "last": 497
+      },
+      {
+        "name": "if (planned_return.active() && handoff_ready)",
+        "first": 1941,
+        "last": 2020
+      },
+      {
+        "name": "if (planned_return.phase == HandoffPhase::Requested && !planned_return.request_timed_out",
+        "first": 2184,
+        "last": 2185
+      },
+      {
+        "name": "if (planned_return.phase == HandoffPhase::Takeover && planned_return.rebased && handoff_ready)",
+        "first": 2186,
+        "last": 2192
+      },
+      {
+        "name": "事务期间保持输出",
+        "first": 2021,
+        "last": 2045
+      }
+    ],
+    "lexical_reference_lines": 223,
+    "fields": {
+      "HandoffLeg": [
+        "active",
+        "axis_index",
+        "target_abs",
+        "entry_rel"
+      ],
+      "HandoffCoordinator": [
+        "phase",
+        "mode",
+        "command",
+        "status",
+        "legs",
+        "leg_count",
+        "request_t0_ms",
+        "last_send_ms",
+        "send_token",
+        "done_snapshot_sequence",
+        "handoff_generation",
+        "rebased",
+        "request_timed_out",
+        "hold_axis1_rel",
+        "hold_axis6_rel",
+        "hold_axis3_rel",
+        "hold_axis5_rel"
+      ]
+    },
+    "payload_fields": {
+      "HandoffCommand": [
+        "leg_mask",
+        "target_abs",
+        "velocity",
+        "acc",
+        "dec",
+        "jerk",
+        "cyl_clamp",
+        "cyl_open",
+        "wait_ms",
+        "request_id"
+      ],
+      "HandoffStatus": [
+        "ack_id",
+        "phase",
+        "phase_seq",
+        "done_id",
+        "result",
+        "error_code",
+        "error_axis",
+        "nc_error_code",
+        "reject_reason",
+        "leg_mask",
+        "phase_ms"
+      ]
+    },
+    "expanded_fields": 43
+  },
+  "baseline": "d2bb5fc4de8e53aad750b2a048008b52fa488453",
+  "definition": "调度块计完整lambda/事件视图或新协调器推进/保持/请求/接管块的并集，包含目标校验和规划，排除双柄触发运动树及分散门控；结构体按字段声明计，数组不展开，方法不计。"
+}

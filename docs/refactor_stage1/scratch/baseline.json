@@ -1,0 +1,11 @@
+{
+  "head": "d2bb5fc4de8e53aad750b2a048008b52fa488453",
+  "files": {
+    "介入机器人/C从端/250902/Untitled2/POUs/handle.TcPOU": "6631b01613f11c509efbc85b53261747fbe3b2ddac593d2c699ebd5b40fc9e00",
+    "介入机器人/C从端/250902/Untitled2/POUs/MAIN.TcPOU": "edc78a8dc9d73ff1d976ff00c044f4cd3717a854b54b029aa25b8f01f127ad16",
+    "介入机器人/C从端/250902/Untitled2/GVLs/G.TcGVL": "f061535c23a23a9d5e9067b9308ce12c38e82a378df167ed0600257decf3adf4",
+    "介入机器人/B数据端/工程/ADS项目/main.cpp": "6d6be20891f44b3cf2d55f835bc4b961e5e017ccf64b9957bda27e52925b778c",
+    "tools/plc_build.ps1": "20f8aba39fd85c5d4ef04a5807d60f5332597ac40f9dd0bcf4357002ff90c4df"
+  },
+  "initial_status": " M docs/refactor_stage0/00_总览.md\n M docs/refactor_stage0/99_未决问题.md\n M docs/refactor_stage0/REPORT.md\n M docs/refactor_stage0/logs/plc/build.log\n M docs/refactor_stage0/logs/plc/environment.txt\n M docs/refactor_stage0/logs/plc/result.json\n M docs/refactor_stage0/删除落实表.md\n M docs/refactor_stage0/验证结果.md\n M tools/plc_build.ps1\n D 介入机器人/C从端/250902.project.~u\n D 介入机器人/C从端/250902/Untitled2/POUs/handle(备份).TcPOU\n D 介入机器人/C从端/250902/Untitled2/POUs/move_edge.TcPOU\n M 介入机器人/C从端/PLC状态机与流程说明.md\n M 介入机器人/C从端/PLC项目说明.md\n M \"介入机器人/C从端/TwinCAT Measurement Project3/VSSettings/.vsm\"\n?? docs/refactor_stage0/PLC编译诊断.md\n?? docs/refactor_stage0/logs/plc_diagnosis/\n?? docs/refactor_stage0/logs/twincat_uninstall/\n?? tools/tests/\n?? 介入机器人/C从端/UpgradeLog6.htm\n?? 介入机器人/C从端/UpgradeLog7.htm\n"
+}

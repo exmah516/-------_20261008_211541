@@ -13,6 +13,7 @@ BUILD = Path(tempfile.mkdtemp(prefix='behavior-probes-'))
 BUILD.mkdir(exist_ok=True)
 manifest = []
 (BUILD/'experiment_events.h').write_bytes((ADS/'experiment_events.h').read_bytes())
+(BUILD/'handoff_types.h').write_bytes((ADS/'handoff_types.h').read_bytes())
 
 def extract(name, filename, start, end):
     p = ADS / filename
@@ -54,5 +55,9 @@ log = result.stdout.decode('utf-8', errors='replace')
 (BUILD/'behavior_probes.log').write_text(log, encoding='utf-8')
 (BUILD/'behavior_result.json').write_text(json.dumps(dict(exit_code=result.returncode,
     build_cmd='behavior_build/build.cmd', log='behavior_probes.log', extractions='behavior_extractions.json'), indent=2), encoding='utf-8')
+report = ROOT/'docs/refactor_stage1/logs/behavior_probes'
+report.mkdir(parents=True, exist_ok=True)
+for name in ['behavior_probes.log', 'behavior_extractions.json', 'behavior_result.json']:
+    (report/name).write_bytes((BUILD/name).read_bytes())
 print(log)
 raise SystemExit(result.returncode)

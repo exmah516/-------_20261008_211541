@@ -1,0 +1,111 @@
+{
+  "build": "C:\\Users\\Sui\\AppData\\Local\\Temp\\refactor-baseline-oorh7ijr",
+  "sources": {
+    "ads_communication.h": "fcf3b4b5b6e03416c36c64fe0b3b2e380d48335ded79faab80fe799f6ba95dad",
+    "arm_cartesian_motion.h": "6b20673a198997a14c80e9e5901cfef14be3eb34f9b8e7abae2cc940e6bab103",
+    "arm_manual_ads_service.h": "1e677f04668d33665c0467b27af426f5127e535aa98b62f5518e10a4ce31b472",
+    "async_csv_writer.h": "4ca995c944c5157acbbcd4762480b0de6bfebd7bf36ad329197cb0055da0a1e3",
+    "control_messages.h": "176f066f4705420c17fdac0b1292d3a7f5ca7e9c428d8e2ff6e6845bbe17481e",
+    "control_types.h": "b581e9a9dde9e4fab65d7ed7d231aa16225fa61ccd40f56887ff615fd54c69a7",
+    "experiment_events.h": "054c9e1b468ffea2ffc52629b26785e5fe465d3e6ba2f8550af386817715d63b",
+    "experiment_recorder.h": "e38393645b8f77cce07775c66d1773ab1f90860ffb456faee072699cfed3a1a5",
+    "force_calibration.h": "e34959c244ec8fb5fadb095aa781ee962a1ae81f1c236dfffe6602484387ed2e",
+    "force_feedback.h": "a7c24573f0342c4bf20315a011f641539f0f64ec973bd9a3267afac4dc36f815",
+    "handle_net_distance.h": "39a1f1b5a5a17ed4d0a48a390ebbe603a2cbd8a014279fb0b74c52f594853c6c",
+    "handle_velocity_recorder.h": "3858c01b298765f1e40841cfa3f133a26bc6434aa9b98170db9178b6681fd5eb",
+    "handoff_types.h": "b274eb479c4dc7aa3497c9a0be7bf00357485d5042272fa2299e9db9d0b37eb5",
+    "homing_record.h": "6317a2ecc61fe1b578938395442b3f70b5fb7f7a568fccbe9c18a6f35eab8336",
+    "motion_sync.h": "95db90429c794a213846363d85c41081b4a1fc6f2027b9ac57c74d890d502119",
+    "plc_io.h": "dd0231e99d84c4e8e94851f71266d67ebfbd8aa999d4b263ac0c454ea6bb0e9e",
+    "return_recovery.h": "33f66b6b88e5527cffc0638b021cc55381c9e26e3c6ce3bdabd2eb2400eea131",
+    "zenoh_service.h": "511a74d124f17004c241a769cba18ca16817f635705cc01f9d61d535fe3cefca",
+    "手柄/Handle.h": "9e9db14eee91e4e2437cb2c281db2c1eb2036a8c94876c00cea6502991625597",
+    "手柄/remote_handle_bridge.h": "19f4142beb946efca7a61a29b3910c65be592d414ebf359f6cb3ce795c22547d",
+    "control_types.cpp": "bf00263c9bec43dc5f489a7800df38bce348d9cc4cb4baf595cad719bb3cb092",
+    "motion_sync.cpp": "6d08cf539ce81e8fd04e67cb596e572e09294358f13a96915fb0fbfbc112dd3d",
+    "plc_io.cpp": "e5a0109bca90d18928aeda80fc1bb3fb0c5c912f3de7e42089edfe29506347be",
+    "force_feedback.cpp": "e2f8704bfc4d3eabda1a8a180d779ac9455c3d6ee153273add51890c1304cc8a",
+    "手柄/手柄.cpp": "d05ab00c32bae1cdbde311fce5614519fd3f13c4aa8ae798673f6b0bc2c5b8ce",
+    "main.cpp": "005a739048e1b9a7f5fc584ba841234bf1816b022327a900d582e5401c1266d1"
+  },
+  "scenarios": [
+    {
+      "scenario": "txn_pause",
+      "ticks": 800,
+      "sha256": "238bc31ccba264501edba569db270e470c35cb70a9e3d17b94e55508106826e4",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "txn_ads_hold",
+      "ticks": 800,
+      "sha256": "2637f9e585305bf9b7ca0d7b6b73182f73d98bf3b9d46500fdd3a9a29f7aa91e",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "txn_handle_hold",
+      "ticks": 800,
+      "sha256": "9d3a671fdc252b59502e62bc1155f89e01b16800abcca0e7cd8ec5d4f83f505d",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "txn_restart",
+      "ticks": 799,
+      "sha256": "38a367c81c415a5be24e6eb59ca65c50ead62d49fbdbde58bc1c35d6b6ad30bc",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "txn_start_wait",
+      "ticks": 800,
+      "sha256": "c7b6d2378246b750c8a1de5eef06d8390096f29b943ffc3ac25cd86ab4912e50",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "txn_no_ack",
+      "ticks": 800,
+      "sha256": "833bf6ef71295dc3a75180b836aba1b323f151ec42811041a5769349ee110b2b",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "txn_always_fail",
+      "ticks": 800,
+      "sha256": "978109b00de15f09962af16a2cfb73b75d48081f24f1bc9940b37bc47b5d6ff1",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "txn_version",
+      "ticks": 800,
+      "sha256": "5924adcf092469a5e86592ac47a4e9682db0631d451fa09dee3b7d51d2aeae9e",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "return_retry",
+      "ticks": 800,
+      "sha256": "d3e28c1dcefa32a65c548ceb3b3d682e5b03c9ed82899a58f6bc24a3e3f2ff9c",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 11,
+        "trigger_tick": 12
+      }
+    },
+    {
+      "scenario": "return_estop",
+      "ticks": 800,
+      "sha256": "488f2787f259428326c35a8f4cc34dfbb691c5f4736c38b22d657f87baa62f8a",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 11,
+        "trigger_tick": 12
+      }
+    }
+  ]
+}

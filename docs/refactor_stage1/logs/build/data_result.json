@@ -1,0 +1,20 @@
+{
+  "exit": 0,
+  "command": [
+    "D:\\Work_software\\VS2022\\MSBuild\\Current\\Bin\\MSBuild.exe",
+    "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\介入机器人\\B数据端\\工程\\ADS项目\\ADS.vcxproj",
+    "/t:Rebuild",
+    "/p:Configuration=Release",
+    "/p:Platform=x64",
+    "/p:OutDir=D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\build\\native\\",
+    "/p:IntDir=D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\build\\native_obj\\",
+    "/m:2",
+    "/v:minimal",
+    "/nologo",
+    "/warnaserror",
+    "/p:TreatWarningAsError=true",
+    "/clp:Summary"
+  ],
+  "warnings": 0,
+  "errors": 0
+}

@@ -1,0 +1,102 @@
+[
+  {
+    "name": "types",
+    "source": "介入机器人/B数据端/工程/ADS项目/control_types.h",
+    "start_line": 57,
+    "end_line": 263,
+    "start_marker": "struct ControlConfig",
+    "end_marker_exclusive": "// 公共开始控制保留",
+    "source_sha256": "b581e9a9dde9e4fab65d7ed7d231aa16225fa61ccd40f56887ff615fd54c69a7",
+    "fragment_sha256": "4d378c7d84e2e09f9f4df88ce80f1e788cc7ef38b69c0ff4336446cf76824069"
+  },
+  {
+    "name": "mapping_helpers",
+    "source": "介入机器人/B数据端/工程/ADS项目/main.cpp",
+    "start_line": 224,
+    "end_line": 237,
+    "start_marker": "\tauto clear_axis1_delivery_mapping =",
+    "end_marker_exclusive": "\tauto apply_axis1_mirror_from_abs =",
+    "source_sha256": "005a739048e1b9a7f5fc584ba841234bf1816b022327a900d582e5401c1266d1",
+    "fragment_sha256": "6445b56b47cb5e335ebce1c4092fc83a8c82007f949320a751106ddf7ad75b7a"
+  },
+  {
+    "name": "connection",
+    "source": "介入机器人/B数据端/工程/ADS项目/main.cpp",
+    "start_line": 710,
+    "end_line": 758,
+    "start_marker": "\t\tconst bool connection_hold_active =",
+    "end_marker_exclusive": "\t\tif (!initial_sync_done)",
+    "source_sha256": "005a739048e1b9a7f5fc584ba841234bf1816b022327a900d582e5401c1266d1",
+    "fragment_sha256": "53ed5cfd7f27be6a0939b51955a59964df33de7a23e10238706fffe6d6b4e9d7"
+  },
+  {
+    "name": "button",
+    "source": "介入机器人/B数据端/工程/ADS项目/main.cpp",
+    "start_line": 938,
+    "end_line": 944,
+    "start_marker": "\t\tconst bool spacing_recovery_button_pressed =",
+    "end_marker_exclusive": "\t\t// 换手/屈曲恢复期间冻结方向",
+    "source_sha256": "005a739048e1b9a7f5fc584ba841234bf1816b022327a900d582e5401c1266d1",
+    "fragment_sha256": "f05c556a4842d37b460227e04ed35bd5c6ee231fd686164448e046dcb9137aa7"
+  },
+  {
+    "name": "save",
+    "source": "介入机器人/B数据端/工程/ADS项目/main.cpp",
+    "start_line": 959,
+    "end_line": 977,
+    "start_marker": "\t\tif (spacing_recovery_button_press_edge)",
+    "end_marker_exclusive": "\t\t// 该映射只属于",
+    "source_sha256": "005a739048e1b9a7f5fc584ba841234bf1816b022327a900d582e5401c1266d1",
+    "fragment_sha256": "202d2cdae6759d11ef6d717f6160cde9fec789752e766be2bfc06790a54ce745"
+  },
+  {
+    "name": "mapping_guard",
+    "source": "介入机器人/B数据端/工程/ADS项目/main.cpp",
+    "start_line": 981,
+    "end_line": 1004,
+    "start_marker": "\t\tif (axis1_reverse_pressed ||",
+    "end_marker_exclusive": "\t\t// 恢复键只登记请求",
+    "source_sha256": "005a739048e1b9a7f5fc584ba841234bf1816b022327a900d582e5401c1266d1",
+    "fragment_sha256": "bc4c68b2ce515d4f30f91df4e9e25fe4bdf66bb8943a8127dcd7a711677f0159"
+  },
+  {
+    "name": "entry",
+    "source": "介入机器人/B数据端/工程/ADS项目/main.cpp",
+    "start_line": 1477,
+    "end_line": 1564,
+    "start_marker": "\t\t\tauto calculate_spacing_recovery_remaining =",
+    "end_marker_exclusive": "\t\t\tif (spacing_recovery.active())",
+    "source_sha256": "005a739048e1b9a7f5fc584ba841234bf1816b022327a900d582e5401c1266d1",
+    "fragment_sha256": "ed20e5d6a3025805e62fc5ac1405c8d49f2717c0f2734ee6b6ef30a40e9d5017"
+  },
+  {
+    "name": "action",
+    "source": "介入机器人/B数据端/工程/ADS项目/main.cpp",
+    "start_line": 1565,
+    "end_line": 1633,
+    "start_marker": "\t\t\tif (spacing_recovery.active())",
+    "end_marker_exclusive": "            else if (return_recovery.resume_pending())",
+    "source_sha256": "005a739048e1b9a7f5fc584ba841234bf1816b022327a900d582e5401c1266d1",
+    "fragment_sha256": "cb76a7499c23f165c412bb02e52245ca1f5d6bc6c4e37817ed3d4fc64dbbd251"
+  },
+  {
+    "name": "exit",
+    "source": "介入机器人/B数据端/工程/ADS项目/main.cpp",
+    "start_line": 1897,
+    "end_line": 1928,
+    "start_marker": "\t\tconst DWORD spacing_recovery_exit_elapsed_ms =",
+    "end_marker_exclusive": "\t\tconst bool axis4_manual_error_now =",
+    "source_sha256": "005a739048e1b9a7f5fc584ba841234bf1816b022327a900d582e5401c1266d1",
+    "fragment_sha256": "d1b6aaceb670eb994f45c0697114e74a97d84c59286b3d0eb9509afc5b889461"
+  },
+  {
+    "name": "dual_mapping",
+    "source": "介入机器人/B数据端/工程/ADS项目/main.cpp",
+    "start_line": 1736,
+    "end_line": 1787,
+    "start_marker": "\t\t\t\t// g约束始终使用轴3/5的名义增量",
+    "end_marker_exclusive": "\t\t\t\tconst double g_now =",
+    "source_sha256": "005a739048e1b9a7f5fc584ba841234bf1816b022327a900d582e5401c1266d1",
+    "fragment_sha256": "c5d242031633e10ed72c1c86122b08b4a8e8a974e83ca424ca5117468eb61507"
+  }
+]

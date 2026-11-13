@@ -1,0 +1,3 @@
+Zenoh: authenticated client session.
+Force zero/independent feedback/hold command tests passed.
+PASS: FIFO256/overflow/order, independent handle, 2s expiry, session/sequence replay, results32 excluding jog/alive, task IDs/state observation, authentication isolation, handle replay, resource transitions.

@@ -1,0 +1,12 @@
+已接入远程手柄（物理 SN 582）。
+已接入远程手柄（物理 SN 587）。
+[ADS-STATE] 0 -> 1 reason=建立ADS连接 target=offline:851 timeout_ms=300
+[ADS-STATE] 1 -> 2 reason=完整ADS读写成功 target=offline:851 timeout_ms=300
+[ADS-STATE] 2 -> 3 reason=SUM_READ: network read timeout code=1861 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+连接保持激活：source=ADS; 保留回退任务，等待有效快照与手柄采样，清零力反馈。
+[ADS-STATE] 3 -> 4 reason=SUM_READ: network read timeout code=1861 target=offline:851 timeout_ms=300 target=offline:851 timeout_ms=300
+[ADS-STATE] 4 -> 2 reason=完整ADS读写成功 target=offline:851 timeout_ms=300
+ADS 快照恢复：实际位置与手柄基准已重建。
+连接保持退出：source=ADS 快照恢复 保持 PLC 当前反馈位置，不恢复历史目标。axis2=0，axis7=0（相对角度）
+[ADS-STATE] 2 -> 0 reason=通信线程已停止 target=offline:851 timeout_ms=300
+PASS N scenario=ads duration_s=10 outage_ms=10000 recovery_ms=109 entries=1 exits=1 control_active=1

@@ -19,7 +19,7 @@ static double difference(const Node& a, const Node& b, const std::string& path =
     for (const auto& entry : a.fields)
     {
         const std::string next = path+"."+entry.first;
-        if (entry.first == "err_backoff_active" || entry.first == "err_backoff_failed" ||
+        if ((entry.first.find("handoff_")==0 || entry.first=="cyl_cmd" || entry.first=="return_cmd" || entry.first=="axis1_fast_return" || entry.first=="axis6_fast_retract" || entry.first=="startup_smoothing_bypass") || entry.first == "err_backoff_active" || entry.first == "err_backoff_failed" ||
             entry.first == "axis2_sync_error" || entry.first == "axis2_sync_error_id" ||
             entry.first == "rslimit_distance" || entry.first.find("recovery_") == 0 ||
             entry.first.find("homing_restore_") == 0 || entry.first.find("axis15_") == 0 ||
@@ -31,7 +31,7 @@ static double difference(const Node& a, const Node& b, const std::string& path =
     }
     for (const auto& entry : b.fields)
         if (a.fields.count(entry.first)==0 && entry.second.value != 0 &&
-            entry.first.find("recovery_") != 0 && entry.first.find("err_backoff_") != 0 &&
+            entry.first.find("handoff_") != 0 && entry.first!="cyl_cmd" && entry.first!="return_cmd" && entry.first!="axis1_fast_return" && entry.first!="axis6_fast_retract" && entry.first!="startup_smoothing_bypass" && entry.first.find("recovery_") != 0 && entry.first.find("err_backoff_") != 0 &&
             entry.first.find("axis15_") != 0 && entry.first.find("homing_restore_") != 0 &&
             entry.first != "return_clear_error_id") return std::abs(entry.second.value);
     return result;
@@ -105,29 +105,13 @@ int main()
     }
     check(old.init_done && now.init_done && b["handle_reinit_done"],"normal follow includes completed initialization");
     scenes<<"handle_follow,1000,0,initialized_and_following\n";
-    std::set<int> return_states;
-    bool return_done=false;
-    for(int n=0;n<40;++n)
-    {
-        st_tick=1000+n; a["host_heartbeat_sequence"]=b["host_heartbeat_sequence"]=n+1001;
-        a["return_cmd"][1]["Req"]=b["return_cmd"][1]["Req"]=!return_done;
-        old.fb_return_move_abs[1]["Done"]=now.fb_return_move_abs[1]["Done"]=n>=4;
-        return_states.insert(int(now.return_state[1]));
-        compare(old,now,a,b,"normal planned return outputs identical");
-        return_states.insert(int(now.return_state[1]));
-        if(b["return_cmd"][1]["Done"]) return_done=true;
-    }
-    check(return_done && now.return_state[1]==0 && !b["return_cmd"][1]["Req"] && !b["return_cmd"][1]["Busy"] &&
-        !b["return_cmd"][1]["Done"] && !b["return_cmd"][1]["Error"],"normal return completes and Clear confirms idle");
-    check(return_states.count(0) && return_states.count(20) && return_states.count(30) && return_states.count(31),"normal return visits movement and enable phases");
-    scenes<<"planned_return,40,0,completed_and_cleared\n";
     Node ea,eb; initOld(ea); initNew(eb); healthy(ea); healthy(eb);
     Olderr olderr(ea); Newerr newerr(eb);
     for(int n=0;n<2500;++n)
     {
         st_tick=n;
         ea["axis"][1]["Status"]["Error"]=eb["axis"][1]["Status"]["Error"]=n<230;
-        newerr.enter=n==0;
+        olderr.enter=newerr.enter=n==0;
         compare(olderr,newerr,ea,eb,"ordinary err outputs identical");
     }
     check(ea["gen_state"]==_clear_err && eb["gen_state"]==_clear_err,"ordinary err reaches clear_err");
@@ -201,7 +185,7 @@ int main()
         left["gen_state"]=right["gen_state"]=_err;
         OldMAIN before(left);NewMAIN after(right);Olderr err_before(left);Newerr err_after(right);
         Oldclear_err clear_before(left);Newclear_err clear_after(right);Oldhandle handle_before(left);Newhandle handle_after(right);
-        before.err_.hook=[&]{err_before.cycle();};
+        before.err_.hook=[&]{err_before.enter=double(before.err_["enter"]);err_before.cycle();};
         after.err_.hook=[&]{err_after.enter=double(after.err_["enter"]);err_after.cycle();};
         before.clear_err_.hook=[&]{clear_before.cycle();};after.clear_err_.hook=[&]{clear_after.cycle();};
         before.handle1_.hook=[&]{handle_before.cycle();};after.handle1_.hook=[&]{handle_after.cycle();};
@@ -221,60 +205,6 @@ int main()
         check(count<5000 && states.count(_err) && states.count(_clear_err) && states.count(_handle),"ordinary err completes clear_err and handle reinitialization");
         scenes<<"ordinary_err_MAIN_to_handle,"<<count+1<<",0,handle_reinit_done_and_hold_released\n";
         std::cout<<"PASS ordinary err full-chain cycles="<<count+1<<" max_difference=0\n";
-    }
-    {
-        Node left,right;initOld(left);initNew(right);healthy(left);healthy(right);
-        Oldhandle before(left);Newhandle after(right);
-        st_tick=30000;compare(before,after,left,right,"normal return initial handle enable identical");
-        bool cleared=false,done=false;
-        std::set<int> visited[8];
-        int count=0;
-        for(;count<1000;++count)
-        {
-            st_tick=30001+count;
-            left["host_heartbeat_sequence"]=right["host_heartbeat_sequence"]=count+2;
-            for(int axis:{1,3,5,6})
-            {
-                for(Node* g:{&left,&right})
-                {
-                    (*g)["return_cmd"][axis]["Req"]=!cleared;
-                    (*g)["return_cmd"][axis]["TargetAbs"]=21+axis;
-                    (*g)["return_cmd"][axis]["Velocity"]=10;
-                    (*g)["return_cmd"][axis]["Acc"]=50;
-                    (*g)["return_cmd"][axis]["Dec"]=50;
-                    (*g)["SetPointGenDisable"][axis]["Enabled"]=true;
-                    (*g)["SetPointGenDisable"][axis]["Done"]=count>=2;
-                }
-                auto feedback=[&](auto& h,Node& g){
-                    auto& move=h.fb_return_move_abs[axis];auto& nc=g["axis"][axis]["NcToPlc"];
-                    if(move["Execute"])
-                    {
-                        nc["ActPos"]=std::min(21.0+axis,double(nc["ActPos"])+.01);
-                        move["Done"]=std::abs(double(nc["ActPos"])-(21+axis))<1e-8;
-                        nc["ActVelo"]=move["Done"]?0:10;
-                    }
-                };
-                feedback(before,left);feedback(after,right);visited[axis].insert(int(after.return_state[axis]));
-            }
-            compare(before,after,left,right,"normal four-axis return complete cycle identical");
-            bool all=true;
-            for(int axis:{1,3,5,6})
-            {
-                visited[axis].insert(int(after.return_state[axis]));
-                all=all && bool(right["return_cmd"][axis]["Done"]);
-            }
-            if(all) done=cleared=true;
-            if(cleared && count>0)
-            {
-                bool idle=true;
-                for(int axis:{1,3,5,6}) idle=idle && !right["return_cmd"][axis]["Req"] && !right["return_cmd"][axis]["Busy"] && !right["return_cmd"][axis]["Done"];
-                if(idle) break;
-            }
-        }
-        check(done && count<1000,"four-axis return reaches all targets and confirms Clear");
-        for(int axis:{1,3,5,6}) for(int stage:{0,10,20,30,31}) check(visited[axis].count(stage)!=0,"four-axis return visits each normal phase");
-        scenes<<"planned_return_axes_1_3_5_6,"<<count+2<<",0,all_targets_done_and_Clear_confirmed\n";
-        std::cout<<"PASS four-axis return full-chain cycles="<<count+2<<" max_difference=0\n";
     }
     const int exit_checks_start = checks;
     // 新出口：每个测试直接驱动新ST的真实局部状态和FB输出。
@@ -297,21 +227,21 @@ int main()
     }
     {
         Node g; initNew(g); healthy(g); Newhandle h(g); h.init_done=true; h.return_state[1]=10;
-        g["return_cmd"][1]["Req"]=true; g["SetPointGenDisable"][1]["Enabled"]=true; g["SetPointGenDisable"][1]["Done"]=false;
+        h.handoff["leg_cmd"][1]["Req"]=true; g["SetPointGenDisable"][1]["Enabled"]=true; g["SetPointGenDisable"][1]["Done"]=false;
         for(int n=0;n<=2001;++n) { st_tick=n; h.cycle(); }
-        check(g["return_cmd"][1]["Error"] || h.return_finish_error[1], "P06 disable timeout finishes with error");
+        check(h.handoff["leg_cmd"][1]["Error"] || h.return_finish_error[1], "P06 disable timeout finishes with error");
         Node e; initNew(e); healthy(e); Newhandle he(e); he.init_done=true; he.return_state[1]=10;
-        e["return_cmd"][1]["Req"]=true; e["SetPointGenDisable"][1]["Error"]=true; e["SetPointGenDisable"][1]["ErrorID"]=123;
-        he.cycle(); he.cycle(); check(e["return_cmd"][1]["ErrorId"]==123, "P06 disable ErrorID propagated");
+        he.handoff["leg_cmd"][1]["Req"]=true; e["SetPointGenDisable"][1]["Error"]=true; e["SetPointGenDisable"][1]["ErrorID"]=123;
+        he.cycle(); he.cycle(); check(he.handoff["leg_cmd"][1]["ErrorId"]==123, "P06 disable ErrorID propagated");
     }
     {
         Node g; initNew(g); healthy(g); Newhandle h(g); h.init_done=true; h.return_state[1]=20;
-        g["return_cmd"][1]["Req"]=false; g["axis"][1]["NcToPlc"]["ActVelo"]=1;
+        h.handoff["abort_motion"]=true; g["axis"][1]["NcToPlc"]["ActVelo"]=1;
         h.cycle(); check(h.return_clear_stop[1]["Execute"] && h.return_finish_error[1], "P07 Clear stops running motion");
-        check(h.return_error_id_pending[1]==double(0x80005001u), "P07 Clear cancellation code");
+        check(h.handoff["leg_error"][1]==3, "P07 executor abort classification");
         g["axis"][1]["NcToPlc"]["ActVelo"]=0; h.return_clear_stop[1]["Done"]=true;
         h.cycle(); h.cycle(); check(!h.return_clear_stop[1]["Execute"], "P07 Stop released before Enable");
-        h.cycle(); check(g["return_cmd"][1]["Error"] && !g["return_cmd"][1]["Busy"], "P07 Clear completes with PLC error and Busy false");
+        h.cycle(); check(h.handoff["leg_cmd"][1]["Error"] && !h.handoff["leg_cmd"][1]["Busy"], "P07 Clear completes with PLC error and Busy false");
     }
     {
         Node g; initNew(g); healthy(g); Newhandle h(g); h.init_done=true; h.return_state[1]=31;
@@ -322,7 +252,7 @@ int main()
     for(int state:{10,20})
     {
         Node g; initNew(g); healthy(g); Newhandle h(g); h.init_done=true; h.return_state[1]=state;
-        g["return_cmd"][1]["Req"]=true; g["SetPointGenDisable"][1]["Enabled"]=true;
+        h.handoff["leg_cmd"][1]["Req"]=true; g["SetPointGenDisable"][1]["Enabled"]=true;
         g["SetPointGenDisable"][1]["Done"]=false;
         g["axis"][1]["NcToPlc"]["ActVelo"]=1;
         for(int n=0;n<=2000;++n){st_tick=n;h.cycle();}

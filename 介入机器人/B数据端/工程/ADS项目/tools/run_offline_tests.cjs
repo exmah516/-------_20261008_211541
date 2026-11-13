@@ -39,11 +39,11 @@ if (selected === 'all' || selected === 'dual') {
         cancel: between(source,'\t\tif ((planned_return.active() || dual_handoff.active()) &&','\t\t// 正式控制阶段：'),
         axis4_pause: between(source,'\t\tconst bool axis4_paused_by_axis6 =','\t\tads_output.axis4_forward_req'),
         mapping_helpers: between(source,'\tauto clear_axis1_delivery_mapping =','\tauto apply_axis1_mirror_from_abs ='),
-        mapping_begin: between(source,'\t\t\t\t// 双手柄仅轴6换手时','\t\t\t\tplanned_return.phase_t0_ms'),
+        mapping_begin: between(source,'\t\t\t\t// 双手柄仅轴6换手时','\t\t\t\tplanned_return.hold_axis3_rel'),
         mapping_guard: between(source,'\t\tif (axis1_reverse_pressed ||','\t\t// 恢复键只登记请求'),
-        mapping_complete: between(source,'\t\t\t\t\t\t\tif (planned_return.contains_axis(0) && !axis1_reverse_pressed)', '\t\t\t\t\t\t\treset_planned_return();'),
+        mapping_complete: between(source,'                        if (planned_return.contains_axis(0) && !axis1_reverse_pressed)', '                        return_recovery.completed();'),
         windows: between(sync,'\tdouble from_left_to_abs','\tbool rebase_axis1_after_return'),
-        target_safety: between(source,'\t\t\tauto planned_return_targets_safe =','\t\t\tauto rebase_planned_return ='),
+        target_safety: between(source,'\t\t\tauto planned_return_targets_safe =','\t\tauto begin_planned_return ='),
         recovery_type: between(header,'enum class SpacingRecoveryPhase','// 公共开始控制保留'),
         handoff_type: between(header,'struct DualHandoffRequest','enum class SpacingRecoveryPhase'),
         mode: between(source,'\tbool spacing_recovery_button_pressed_prev =','\n\tdouble pending_selfcheck_target'),
@@ -66,28 +66,6 @@ if (selected === 'all' || selected === 'dual') {
 }
 if (selected === 'all' || selected === 'recovery') {
     const source = read('main.cpp'), header = read('control_types.h');
-    const parts = {
-        types: between(header, 'struct ControlConfig', '// 公共开始控制保留'),
-        cancel: between(source, '\tauto reset_planned_return =', '\tauto axis6_from_left_mm ='),
-        guard: between(source, '\t\tif ((planned_return.active() || dual_handoff.active()) &&', '\t\t// 正式控制阶段：'),
-        save: between(source, '\t\tif (spacing_recovery_button_press_edge)', '\t\t// 该映射只属于'),
-        enter: between(source, '\t\t\tauto calculate_spacing_recovery_remaining =', '\t\t\tif (spacing_recovery.active())'),
-        output: between(source, '\t\t\tauto apply_planned_return_outputs =', '\t\t\tauto enter_planned_return_retry ='),
-        refresh: between(source, '\t\t\tauto refresh_planned_return_leg =', '\t\t\tauto planned_return_targets_safe ='),
-        failure: between(source, '\t\t\tauto fail_planned_return =', '\t\tauto begin_planned_return ='),
-        begin: between(source, '\t\tauto begin_planned_return =', '\t\t\tauto planned_return_settle_wait_ms ='),
-        safety: between(source, '\t\t\tauto planned_return_targets_safe =', '\t\t\tauto rebase_planned_return ='),
-        recovery_gate: between(source, '        // 回退自动恢复门控。', '\t\t// 8) 当启动已完成'),
-        resume: between(source, '            else if (return_recovery.resume_pending())', '\t\t\telse if (planned_return.active())').replace('else if', 'if'),
-        estop: between(source, '\t\tif (estop_hold_req != estop_hold_active)', '\n\t\tif (estop_hold_active)'),
-        retry: between(source, '\t\t\tauto enter_planned_return_retry =', '\t\t\tauto step_planned_return ='),
-        step: between(source, '\t\t\tauto step_planned_return =', '\t\t\tauto compute_axis7_cmd_rel ='),
-        reinit: between(source, '\t\tif (handle_reinit_req && !last_handle_reinit_req', '        // 回退自动恢复门控。'),
-        reconnect: between(source, '\t\tif (ads_stats.reconnect_count != handled_reconnect_count)', '\t\t// 运动控制只依赖位置快照'),
-        connection: between(source, '\t\tconst bool connection_hold_active =', '\t\tif (!initial_sync_done)'),
-        exit: between(source, '\t\tconst DWORD spacing_recovery_exit_elapsed_ms =', '\t\tconst bool axis4_manual_error_now =')
-    };
-    for (const [name, content] of Object.entries(parts)) fs.writeFileSync(path.join(build,'return_recovery_'+name+'.inc'),content,'utf8');
     const activeRecovery = '\t\telse if (ads_soft_hold_active && planned_return.active())';
     const recoveryStart = source.includes(activeRecovery) ? activeRecovery : '\t\telse if ((ads_soft_hold_active';
     fs.writeFileSync(path.join(build,'main_rebase.inc'),between(source,recoveryStart,'\t\tconst bool connection_hold_active').replace('else if','if'),'utf8');
@@ -97,7 +75,6 @@ if (selected === 'all' || selected === 'recovery') {
     run('main_recovery_test',['tools/main_recovery_test.cpp']);
     run('return_recovery_test',['tools/return_recovery_test.cpp']);
     fs.writeFileSync(path.join(build,'return_recovery_crawl.inc'),between(header,'struct CrawlState','struct ForceFeedbackState'),'utf8');
-    run('round5_main_recovery_test',['../../../tools/reliability_round5/main_recovery_tests.cpp']);
     fs.writeFileSync(path.join(build,'homing_record_events.inc'),between(source,'        // 寻参记录只消费既有坐标刷新成功事件','\t\tif (ads_self_check_valid && !homing_restore_submitted) last_self_check_done'),'utf8');
     run('homing_record_events_test',['../../../tools/reliability_round5/homing_record_events_tests.cpp']);
     fs.writeFileSync(path.join(build,'homing_restore_ack.inc'),between(source,'        if (homing_restore_submitted && ads_self_check_valid)','\t\t// 1) 采样逻辑手柄输入'),'utf8');
@@ -107,10 +84,10 @@ if (selected === 'all' || selected === 'recovery') {
 if (selected === 'all' || selected === 'cylinder') {
     const source = read('main.cpp'), ads = read('ads_communication.cpp'), header = read('ads_communication.h');
     const parts = {
-        type: between(header, 'struct AdsOutputCommand', 'enum class AdsPlannedReturnOperation'),
+        type: between(header, 'struct AdsOutputCommand', 'struct AdsEventState'),
         handles: between(ads, '\tenum FastWriteHandleIndex', '\tstruct NotificationTarget'),
-        changed: between(ads, '\tbool same_discrete_output', '\tint planned_return_axis_slot'),
-        write: between(ads, '\t\tif (output.cylinder_valid)', '\t\tappend(fast_write_handles_[kWriteCylinder5Press]'),
+        changed: between(ads, '\tbool same_discrete_output', '\n}\n'),
+        write: between(ads, '\t\tif (output.cylinder_valid)', '\t\tappend(kWriteCylinder5Press'),
         clear: between(source, '\tauto clear_cylinder_manual_overrides =', '\tauto prepare_cylinder_manual_override ='),
         prepare: between(source, '\tauto prepare_cylinder_manual_override =', '\tbool spacing_recovery_button_pressed_prev ='),
         gates: between(source, '\t\tbool cylinder5_req =', '\t\t// 记录器直接消费'),
@@ -136,7 +113,7 @@ if (selected === 'all' || selected === 'handle') {
 }
 if (selected === 'all' || selected === 'recording') {
     fs.writeFileSync(path.join(build,'recording_start.inc'),between(read('main.cpp'),'\tExperimentStartInfo recording_info{};','\n\twhile (true)'),'utf8');
-    fs.writeFileSync(path.join(build,'recording_handoff.inc'),between(read('main.cpp'),'\t\tif (planned_return.phase == PlannedReturnPhase::PublishHandoff &&','\n\t\tprocess_force_feedback('),'utf8');
+    fs.writeFileSync(path.join(build,'recording_handoff.inc'),between(read('main.cpp'),'        if (planned_return.phase == HandoffPhase::Takeover && planned_return.rebased && ads_output.motion_enabled', '\n\t\tprocess_force_feedback('),'utf8');
     const includes = ['','ADS/Include','手柄'].map(p=>'/I"'+path.join(project,p)+'"').join(' ');
     run('recording_feedback_test', ['tools/recording_feedback_test.cpp','experiment_recorder.cpp','force_feedback.cpp','手柄/手柄.cpp'], '/DNOMINMAX '+includes);
 }

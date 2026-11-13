@@ -1,0 +1,9 @@
+{
+  "baseline_commit": "d2bb5fc4de8e53aad750b2a048008b52fa488453",
+  "source_manifest": "docs/refactor_stage0/logs/delete8/result.json",
+  "sources": {
+    "handle_velocity_recorder.h": "3858c01b298765f1e40841cfa3f133a26bc6434aa9b98170db9178b6681fd5eb",
+    "homing_record.h": "6317a2ecc61fe1b578938395442b3f70b5fb7f7a568fccbe9c18a6f35eab8336",
+    "return_recovery.h": "7c984bf78172dfe2799a3ed2027c252ee0ce69ae7dce65cb3d38490816e5d161"
+  }
+}

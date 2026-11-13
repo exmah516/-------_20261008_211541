@@ -70,35 +70,26 @@ def verify(directory):
                     state['Axis1LeadArmed'] = int(code == codes['Axis1LeadArmed'])
                 index += 1
             for name, field in [('ControlActiveChanged', 'state0'), ('ConnectionHoldEnter', 'state2'),
-                                ('PlannedReturnPhase', 'state9'), ('SpacingRecoveryPhase', 'state16'),
+                                ('SpacingRecoveryPhase', 'state16'),
                                 ('Axis1LeadArmed', 'state20')]:
                 if state[name] != int(float.fromhex(tick[field])):
                     raise AssertionError(f'{scenario} tick {tick["tick"]}: {name} != {field}')
-        check(True, scenario + ': events reconstruct five per-tick states')
+        check(True, scenario + ': events reconstruct four per-tick states')
 
-    ordered('return_both', ['DualHandoffIntent', 'PlannedReturnEnter', 'PlannedReturnPrepare',
-                            'PlannedReturnCommit', 'PlannedReturnAck', 'PlannedReturnDone',
-                            'PlannedReturnRebase', 'PlannedReturnClear', 'PlannedReturnRebase', 'Axis1LeadArmed'])
-    check([r['value'] for r in events('return_both', 'PlannedReturnPhase')] ==
-          [1, 65537, 2, 3, 4, 6, 7, 8, 9, 65545, 0], 'Dual complete phase/substage sequence')
-    check([r['value'] for r in events('return_both', 'PlannedReturnRebase')] == [65586, 65587],
-          'both successful rebase results')
-    for scenario, axes in [('return_axis1', {1}), ('return_axis6', {6}), ('return_both', {1, 6})]:
-        for name in ('PlannedReturnAck', 'PlannedReturnDone'):
-            check({r['value'] for r in events(scenario, name)} == axes, scenario + ': ' + name + ' legs')
-    for name, context in [('PlannedReturnPrepare', 1), ('PlannedReturnCommit', 2), ('PlannedReturnClear', 6)]:
-        values = [r['value'] for r in events('return_both', name)]
-        check(values == [(context << 16), (context << 16) | 1], name + ': submitted then success')
-    ordered('return_retry', ['PlannedReturnCommit', 'PlannedReturnRetry', 'PlannedReturnClear',
-                            'PlannedReturnPrepare', 'PlannedReturnCommit', 'PlannedReturnDone'])
-    check([r['value'] for r in events('return_retry', 'PlannedReturnRetry')] == [205], 'retry reason code')
-    ordered('return_possible', ['PlannedReturnPossiblyStarted', 'PlannedReturnFailed', 'ReturnFaultEnter',
-                               'ReturnFaultCleared', 'ReturnResume'])
-    ordered('return_fault', ['PlannedReturnFailed', 'ReturnFaultEnter', 'ReturnFaultCleared',
-                            'ReturnResume', 'PlannedReturnDone'])
-    check([r['value'] for r in events('return_fault', 'PlannedReturnPlcError')] == [17510], 'PLC fault ID')
-    check([r['value'] for r in events('return_fault', 'ReturnResume')] == [65537], 'resume result and leg mask')
-    ordered('return_estop', ['EstopEnter', 'ReturnFaultEnter', 'EstopExit', 'ReturnFaultCleared', 'ReturnResume'])
+    ordered('return_both', ['DualHandoffIntent','PlannedReturnEnter','HandoffRequest','HandoffAck','HandoffDone','PlannedReturnRebase','HandoffTakeover','Axis1LeadArmed'])
+    check([r['value'] & 65535 for r in events('return_both','PlannedReturnPhase')]==[10,20,30,40,50,60,0], 'PLC complete phase sequence')
+    check([r['value'] for r in events('return_both','PlannedReturnRebase')]==[50], 'one rebase on a newer snapshot')
+    for scenario,mask in [('return_axis1',1),('return_axis6',2),('return_both',3)]:
+        check(events(scenario,'PlannedReturnEnter')[0]['value']==mask,scenario+': legs')
+        ordered(scenario,['HandoffRequest','HandoffAck','HandoffDone','HandoffTakeover'])
+        for name in ['HandoffPhase10Ms','HandoffPhase20Ms','HandoffPhase30Ms','HandoffPhase40Ms','HandoffPhase50Ms','HandoffAxis1MotionMs','HandoffAxis6MotionMs','HandoffReservedMs']:
+            check(len(events(scenario,name))==1,scenario+': '+name)
+    sends=events('return_retry','HandoffRequest')
+    check(len(sends)==2 and sends[0]['value']==sends[1]['value'] and sends[1]['tick']-sends[0]['tick']==30,'same id resend at 300ms')
+    ordered('return_fault',['HandoffDone','HandoffTakeover','ReturnFaultEnter','ReturnFaultCleared','ReturnResume','HandoffDone','HandoffTakeover'])
+    check([r['value'] for r in events('return_fault','PlannedReturnPlcError')]==[42],'NC error ID')
+    check([r['value'] for r in events('return_fault','ReturnResume')]==[65537],'resume once with original leg mask')
+    ordered('return_estop',['EstopEnter','EstopExit','HandoffDone','HandoffTakeover','ReturnFaultEnter','ReturnFaultCleared','ReturnResume'])
     ordered('spacing', ['SpacingRecoveryButtonRise', 'SpacingRecoveryPhase', 'SpacingRecoveryStart',
                         'SpacingRecoveryPhase', 'SpacingRecoveryButtonFall', 'SpacingRecoveryPhase', 'SpacingRecoveryPhase'])
     check([r['value'] for r in events('spacing', 'SpacingRecoveryPhase')][:4] == [1, 2, 3, 0],
@@ -123,7 +114,7 @@ def verify(directory):
     check([r['value'] & 65535 for r in events('restart_reject', 'HomingReuseResult')] == [64],
           'homing position rejection')
     observed = {r['event_code'] for rows in streams.values() for r in rows}
-    check(set(codes.values()) <= observed, 'every defined event code has a production scenario')
+    check(set(codes.values()) <= observed, 'every defined event code has a production scenario: '+str(set(codes.values())-observed))
     result = dict(status='pass', scenarios=len(streams), checks=len(checks), checks_passed=checks,
                   events=sum(map(len, streams.values())), event_codes=codes)
     (directory / 'event_checks.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')

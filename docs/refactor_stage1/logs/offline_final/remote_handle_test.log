@@ -1,0 +1,146 @@
+remote_handle_test.cpp
+手柄.cpp
+正在生成代码...
+PASS: physical serial numbers map to distinct slots
+PASS: missing samples and unknown serial numbers cannot open a handle
+PASS: an unopened handle cannot send force
+已接入远程手柄（物理 SN 582）。
+已接入远程手柄（物理 SN 587）。
+PASS: fresh samples open both remote handles
+PASS: sampling keeps buttons, encoders, joints and velocities isolated by serial number
+PASS: unknown serial number stays rejected while valid slots exist
+PASS: force and torque are returned through the matching bridge slot
+PASS: second handle force is isolated and its axis is clamped
+PASS: negative force axis is clamped to zero
+PASS: default force uses axis zero
+PASS: a 500 ms network gap does not disconnect the remote handle
+PASS: stale sample velocity is not repeated during the gap
+PASS: 500 ms gap retains the existing baseline
+PASS: a sample older than 5 seconds is still rejected per handle
+PASS: close clears the handle cache and force without touching the other handle
+PASS: an expired sample cannot reopen the handle
+PASS: an explicitly invalid sample cannot reopen the handle
+已接入远程手柄（物理 SN 582）。
+PASS: a fresh sample allows reconnection
+PASS: invalid=false preserves the latest valid sample and its timestamp
+已接入远程手柄（物理 SN 582）。
+PASS: gap fixture is open
+PASS: 1s/1.6s/4s gap remains connected
+PASS: rebase threshold is strictly greater than 1500ms
+已接入远程手柄（物理 SN 582）。
+PASS: gap fixture is open
+PASS: 1s/1.6s/4s gap remains connected
+PASS: rebase threshold is strictly greater than 1500ms
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: gap rebase waits for500ms continuous samples
+已接入远程手柄（物理 SN 582）。
+PASS: gap fixture is open
+PASS: 1s/1.6s/4s gap remains connected
+PASS: rebase threshold is strictly greater than 1500ms
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: settling receives valid samples
+PASS: gap rebase waits for500ms continuous samples
+已接入远程手柄（物理 SN 582）。
+PASS: gap fixture is open
+PASS: 6s gap disconnects
+PASS: 6s gap can reconnect without process restart
+PASS: valid sample is present
+PASS: invalid frame cannot refresh receive time
+PASS: R3 invalid frames for0.3s preserve connection and6s disconnect
+PASS: R3 invalid stream never makes cached sample fresh
+PASS: R3 invalid frames for0.3s preserve connection and6s disconnect
+PASS: R3 invalid stream never makes cached sample fresh
+PASS: repeated close keeps output cleared and closed handles cannot reenable force
+PASS: shutdown clears both output slots

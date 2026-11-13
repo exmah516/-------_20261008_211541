@@ -1,0 +1,17 @@
+handle_velocity_tests.cpp
+PASS: R3 records all four unmodified received velocities
+PASS: R3 receive-interval joint differences have units per second
+PASS: R3 maxima use absolute magnitude per joint
+PASS: R3 repeated cache is not a new joint speed
+PASS: R3 logging does not change received sample or timestamp
+PASS: R3 logger never changes force output
+PASS: R3 missing sample writes invalid/NaN and preserves maxima
+PASS: R3 asynchronous velocity CSV starts
+[HANDLE-SPEED] SN=582 joint=0 max_abs_received_sdk=3 max_abs_joint_per_s=12.5
+[HANDLE-SPEED] SN=582 joint=1 max_abs_received_sdk=4 max_abs_joint_per_s=25
+[HANDLE-SPEED] SN=587 joint=0 max_abs_received_sdk=5 max_abs_joint_per_s=50
+[HANDLE-SPEED] SN=587 joint=1 max_abs_received_sdk=6 max_abs_joint_per_s=100
+[HANDLE-SPEED] dropped=0 writer_error=0
+PASS: R3 velocity CSV declares both raw and joint-rate columns
+PASS: R3 one second writes 100Hz velocity rows independent of ADS/control
+R3 CSV rows=100 span_ms=984

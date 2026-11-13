@@ -1,0 +1,6 @@
+{
+  "exit_code": 0,
+  "build_cmd": "behavior_build/build.cmd",
+  "log": "behavior_probes.log",
+  "extractions": "behavior_extractions.json"
+}

@@ -1,0 +1,428 @@
+{
+  "build": "C:\\Users\\Sui\\AppData\\Local\\Temp\\refactor-baseline-67m6lmvo",
+  "sources": {
+    "ads_communication.h": "fcf3b4b5b6e03416c36c64fe0b3b2e380d48335ded79faab80fe799f6ba95dad",
+    "arm_cartesian_motion.h": "6b20673a198997a14c80e9e5901cfef14be3eb34f9b8e7abae2cc940e6bab103",
+    "arm_manual_ads_service.h": "1e677f04668d33665c0467b27af426f5127e535aa98b62f5518e10a4ce31b472",
+    "async_csv_writer.h": "4ca995c944c5157acbbcd4762480b0de6bfebd7bf36ad329197cb0055da0a1e3",
+    "control_messages.h": "176f066f4705420c17fdac0b1292d3a7f5ca7e9c428d8e2ff6e6845bbe17481e",
+    "control_types.h": "b581e9a9dde9e4fab65d7ed7d231aa16225fa61ccd40f56887ff615fd54c69a7",
+    "experiment_events.h": "054c9e1b468ffea2ffc52629b26785e5fe465d3e6ba2f8550af386817715d63b",
+    "experiment_recorder.h": "e38393645b8f77cce07775c66d1773ab1f90860ffb456faee072699cfed3a1a5",
+    "force_calibration.h": "e34959c244ec8fb5fadb095aa781ee962a1ae81f1c236dfffe6602484387ed2e",
+    "force_feedback.h": "a7c24573f0342c4bf20315a011f641539f0f64ec973bd9a3267afac4dc36f815",
+    "handle_net_distance.h": "39a1f1b5a5a17ed4d0a48a390ebbe603a2cbd8a014279fb0b74c52f594853c6c",
+    "handle_velocity_recorder.h": "3858c01b298765f1e40841cfa3f133a26bc6434aa9b98170db9178b6681fd5eb",
+    "handoff_types.h": "b274eb479c4dc7aa3497c9a0be7bf00357485d5042272fa2299e9db9d0b37eb5",
+    "homing_record.h": "6317a2ecc61fe1b578938395442b3f70b5fb7f7a568fccbe9c18a6f35eab8336",
+    "motion_sync.h": "95db90429c794a213846363d85c41081b4a1fc6f2027b9ac57c74d890d502119",
+    "plc_io.h": "dd0231e99d84c4e8e94851f71266d67ebfbd8aa999d4b263ac0c454ea6bb0e9e",
+    "return_recovery.h": "33f66b6b88e5527cffc0638b021cc55381c9e26e3c6ce3bdabd2eb2400eea131",
+    "zenoh_service.h": "511a74d124f17004c241a769cba18ca16817f635705cc01f9d61d535fe3cefca",
+    "手柄/Handle.h": "9e9db14eee91e4e2437cb2c281db2c1eb2036a8c94876c00cea6502991625597",
+    "手柄/remote_handle_bridge.h": "19f4142beb946efca7a61a29b3910c65be592d414ebf359f6cb3ce795c22547d",
+    "control_types.cpp": "bf00263c9bec43dc5f489a7800df38bce348d9cc4cb4baf595cad719bb3cb092",
+    "motion_sync.cpp": "6d08cf539ce81e8fd04e67cb596e572e09294358f13a96915fb0fbfbc112dd3d",
+    "plc_io.cpp": "f9f53d15cb32e68ef407e2efbe2453eacd95cfd7404edb2614fc8b5681c84888",
+    "force_feedback.cpp": "e2f8704bfc4d3eabda1a8a180d779ac9455c3d6ee153273add51890c1304cc8a",
+    "手柄/手柄.cpp": "d05ab00c32bae1cdbde311fce5614519fd3f13c4aa8ae798673f6b0bc2c5b8ce",
+    "main.cpp": "005a739048e1b9a7f5fc584ba841234bf1816b022327a900d582e5401c1266d1"
+  },
+  "scenarios": [
+    {
+      "scenario": "follow_delivery",
+      "ticks": 800,
+      "sha256": "0245f09acb8d09e9f11c69f8e756bd67c636819ecbc1d54e79fdb1ec63cc3443",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 122,
+        "trigger_tick": 123
+      }
+    },
+    {
+      "scenario": "follow_retraction",
+      "ticks": 800,
+      "sha256": "cc5c2b9f9f7565d1260f19783d36fdbfe71f2e9f81248cd77c89012eb4d3edc4",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 22,
+        "trigger_tick": 23
+      }
+    },
+    {
+      "scenario": "lead_hold",
+      "ticks": 800,
+      "sha256": "bcf0ce898ce85d59462a5207a32ff5397c17edd020dacbaadf36735b45b2c312",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 11,
+        "trigger_tick": 12
+      }
+    },
+    {
+      "scenario": "lead_axis6",
+      "ticks": 800,
+      "sha256": "d488d2e99c08b98f26aaea11f810ed5a1e5a3ed001b25e94f5329504dc2f0ffa",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 11,
+        "trigger_tick": 12
+      }
+    },
+    {
+      "scenario": "axis4",
+      "ticks": 800,
+      "sha256": "669798269b9dcaa6d8638582365643e5a62c2f16ad44c7603bcbc5c81b0659d1",
+      "equal": true,
+      "comparison": {
+        "scope": "full",
+        "equal_ticks": 800,
+        "trigger_tick": null
+      }
+    },
+    {
+      "scenario": "handoff_axis1",
+      "ticks": 800,
+      "sha256": "6e2966985c7e84258d7c03226901487683a45a10f3a741aa39370215976ff389",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 30,
+        "trigger_tick": 31
+      }
+    },
+    {
+      "scenario": "handoff_active",
+      "ticks": 800,
+      "sha256": "33a7b620ceb3a95a811da2c82724946d59a58986af180d048611b5d95a1ebe5e",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 22,
+        "trigger_tick": 23
+      }
+    },
+    {
+      "scenario": "handoff_passive",
+      "ticks": 800,
+      "sha256": "a1b99768f42b3bb1011242a899f3ace462b78ef9fe0e54c7ff27b390424a7464",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 22,
+        "trigger_tick": 23
+      }
+    },
+    {
+      "scenario": "handoff_merge",
+      "ticks": 800,
+      "sha256": "bc20f31793f8f8152dae82a5bab622790b6d3e6612058850a98a0289797db263",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 11,
+        "trigger_tick": 12
+      }
+    },
+    {
+      "scenario": "return_axis1",
+      "ticks": 800,
+      "sha256": "1c67ba3af0cd73f7c092337e60069260565d5f69e0aca4e3cb6c4201c904ea3e",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 11,
+        "trigger_tick": 12
+      }
+    },
+    {
+      "scenario": "return_axis6",
+      "ticks": 800,
+      "sha256": "7cd51fab43bb2a072f05c42362e740583a1b46c301095501e4579176326c1039",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 11,
+        "trigger_tick": 12
+      }
+    },
+    {
+      "scenario": "return_both",
+      "ticks": 800,
+      "sha256": "bc20f31793f8f8152dae82a5bab622790b6d3e6612058850a98a0289797db263",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 11,
+        "trigger_tick": 12
+      }
+    },
+    {
+      "scenario": "return_retry",
+      "ticks": 800,
+      "sha256": "d3e28c1dcefa32a65c548ceb3b3d682e5b03c9ed82899a58f6bc24a3e3f2ff9c",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 11,
+        "trigger_tick": 12
+      }
+    },
+    {
+      "scenario": "return_possible",
+      "ticks": 800,
+      "sha256": "1c67ba3af0cd73f7c092337e60069260565d5f69e0aca4e3cb6c4201c904ea3e",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 11,
+        "trigger_tick": 12
+      }
+    },
+    {
+      "scenario": "return_fault",
+      "ticks": 800,
+      "sha256": "22d8d0421e66476bb3ed1afad4d3c54d3cfd3307cfc654a7e4110b6a8b479bbc",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 11,
+        "trigger_tick": 12
+      }
+    },
+    {
+      "scenario": "return_estop",
+      "ticks": 800,
+      "sha256": "488f2787f259428326c35a8f4cc34dfbb691c5f4736c38b22d657f87baa62f8a",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 11,
+        "trigger_tick": 12
+      }
+    },
+    {
+      "scenario": "spacing",
+      "ticks": 800,
+      "sha256": "dce2299bd87bdd739e1387a18b38a15a8bb7e3e0b236b36aa656880432a92d14",
+      "equal": true,
+      "comparison": {
+        "scope": "full",
+        "equal_ticks": 800,
+        "trigger_tick": null
+      }
+    },
+    {
+      "scenario": "spacing_hold",
+      "ticks": 800,
+      "sha256": "907393d5f346503c08d1a2e80007f70b63103a9cad8c66f1b291fb6b6341ff59",
+      "equal": true,
+      "comparison": {
+        "scope": "full",
+        "equal_ticks": 800,
+        "trigger_tick": null
+      }
+    },
+    {
+      "scenario": "ads_hold",
+      "ticks": 800,
+      "sha256": "8bd1f7919508eb542c783e85280392b3555acb6b0e0a5c80eb4bee3221fc6ef0",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 131,
+        "trigger_tick": 132
+      }
+    },
+    {
+      "scenario": "handle_gap_short",
+      "ticks": 800,
+      "sha256": "7ff2bec9852c44684bddc14bdc895e0037c2c9517ccfb85152bd685222c53de0",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 123,
+        "trigger_tick": 124
+      }
+    },
+    {
+      "scenario": "handle_gap_rebase",
+      "ticks": 800,
+      "sha256": "1cad7bf97ac51a9b736b2b5bc004b0eb5900379605046cd171cd4af9e031a553",
+      "equal": true,
+      "comparison": {
+        "scope": "full",
+        "equal_ticks": 800,
+        "trigger_tick": null
+      }
+    },
+    {
+      "scenario": "handle_disconnect",
+      "ticks": 800,
+      "sha256": "9182d635b6c311f10fd982e3e4e5d056151b0c8b263fc691913508bc9e46b4a5",
+      "equal": true,
+      "comparison": {
+        "scope": "full",
+        "equal_ticks": 800,
+        "trigger_tick": null
+      }
+    },
+    {
+      "scenario": "device_epoch",
+      "ticks": 800,
+      "sha256": "6c3a6453ec31e9f668044027b20203b14bcc1d1f8ec7f857672fc021e86f3b7d",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 176,
+        "trigger_tick": 177
+      }
+    },
+    {
+      "scenario": "restart",
+      "ticks": 800,
+      "sha256": "f78e15bb64d928a4285189906893b6b3ae4f308452bab904edf708f91128c4dd",
+      "equal": true,
+      "comparison": {
+        "scope": "full",
+        "equal_ticks": 800,
+        "trigger_tick": null
+      }
+    },
+    {
+      "scenario": "restart_accept",
+      "ticks": 800,
+      "sha256": "f78e15bb64d928a4285189906893b6b3ae4f308452bab904edf708f91128c4dd",
+      "equal": true,
+      "comparison": {
+        "scope": "full",
+        "equal_ticks": 800,
+        "trigger_tick": null
+      }
+    },
+    {
+      "scenario": "restart_reject",
+      "ticks": 800,
+      "sha256": "1b518aa4620c5c77c64522f8722708c21b50bf35f85d3ac2bd9bfc700bedb700",
+      "equal": true,
+      "comparison": {
+        "scope": "full",
+        "equal_ticks": 800,
+        "trigger_tick": null
+      }
+    },
+    {
+      "scenario": "manual",
+      "ticks": 800,
+      "sha256": "241277d3021782e8902d49e88e6605dbbb2f0f45dfdb53e7d3d3007ca00d1a1c",
+      "equal": true,
+      "comparison": {
+        "scope": "full",
+        "equal_ticks": 800,
+        "trigger_tick": null
+      }
+    },
+    {
+      "scenario": "feedback",
+      "ticks": 797,
+      "sha256": "5fa8c7d47185d447b5dd15d7fac1ec6b2d48daad583a614322b832c1deaa498a",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 119,
+        "trigger_tick": 120
+      }
+    },
+    {
+      "scenario": "return_retry_axis6",
+      "ticks": 800,
+      "sha256": "438db0ad15b305ef20c207910506c1c58e14ea6ba9c8ae5a4469dfe15ed36245",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 11,
+        "trigger_tick": 12
+      }
+    },
+    {
+      "scenario": "return_retry_both",
+      "ticks": 800,
+      "sha256": "b4fe034bb7bc39520069f0233f2eba56219eee78a0f48df9c8cd4f75883035cb",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 11,
+        "trigger_tick": 12
+      }
+    },
+    {
+      "scenario": "return_possible_axis6",
+      "ticks": 800,
+      "sha256": "7cd51fab43bb2a072f05c42362e740583a1b46c301095501e4579176326c1039",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 11,
+        "trigger_tick": 12
+      }
+    },
+    {
+      "scenario": "return_possible_both",
+      "ticks": 800,
+      "sha256": "bc20f31793f8f8152dae82a5bab622790b6d3e6612058850a98a0289797db263",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 11,
+        "trigger_tick": 12
+      }
+    },
+    {
+      "scenario": "return_fault_axis6",
+      "ticks": 800,
+      "sha256": "cdc61cceef24fc0c22d9e628287b0e407164ffbdde643d8801f6e23d429dcd72",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 11,
+        "trigger_tick": 12
+      }
+    },
+    {
+      "scenario": "return_fault_both",
+      "ticks": 800,
+      "sha256": "4477fffa3b94feba28127154dab913d9d9b275e50e9503fb99e628fbdee6c5b5",
+      "equal": false,
+      "comparison": {
+        "scope": "before_first_handoff",
+        "equal_ticks": 11,
+        "trigger_tick": 12
+      }
+    },
+    {
+      "scenario": "event_rejected_hold",
+      "ticks": 800,
+      "sha256": "905c9c2dbbc443dc76d9d7b6670bf02ec80894c90a107ea1b8f15dd91a0c689e",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "event_missing582",
+      "ticks": 800,
+      "sha256": "333896356a494face8825b47a31a8ba3fd1e5a7450e27c0e29e56c1ca8a749d4",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "txn_no_ack",
+      "ticks": 800,
+      "sha256": "833bf6ef71295dc3a75180b836aba1b323f151ec42811041a5769349ee110b2b",
+      "equal": false,
+      "comparison": {}
+    }
+  ]
+}

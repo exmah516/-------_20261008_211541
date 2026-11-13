@@ -1,0 +1,5 @@
+闭环构建: C:\Users\Sui\AppData\Local\Temp\refactor-baseline-v96317ia
+列文本相同（忽略Git行尾）: ['axis4', 'spacing', 'spacing_hold', 'handle_gap_rebase', 'handle_disconnect', 'restart', 'restart_accept', 'restart_reject', 'manual']
+有差异: ['follow_delivery', 'follow_retraction', 'lead_hold', 'lead_axis6', 'handoff_axis1', 'handoff_active', 'handoff_passive', 'handoff_merge', 'return_axis1', 'return_axis6', 'return_both', 'return_retry', 'return_possible', 'return_fault', 'return_estop', 'ads_hold', 'handle_gap_short', 'device_epoch', 'feedback', 'return_retry_axis6', 'return_retry_both', 'return_possible_axis6', 'return_possible_both', 'return_fault_axis6', 'return_fault_both', 'event_rejected_hold', 'event_missing582', 'txn_no_ack']
+PASS behavior coverage checks
+PASS event timeline: 37 scenarios; 316 checks; all 39 codes observed

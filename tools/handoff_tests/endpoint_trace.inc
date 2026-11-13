@@ -1,0 +1,12 @@
+        baseline_endpoint({
+            plc_act_pos[0],plc_act_pos[1],plc_act_pos[2],plc_act_pos[3],plc_act_pos[4],plc_act_pos[5],plc_act_pos[6],
+            pos[0],pos[1],pos[2],pos[3],pos[4],pos[5],pos[6],
+            axis1_crawl.handle_ref,axis1_crawl.rot_ref,axis1_crawl.base_rel,axis1_crawl.rot_base_rel,
+            axis6_crawl.handle_ref,axis6_crawl.rot_ref,axis6_crawl.base_rel,axis6_crawl.rot_base_rel,
+            axis3_base_rel,axis5_base_rel,axis6_crawl.start_abs,axis6_crawl.end_abs,
+            double(axis6_crawl.window_active),double(axis1_delivery_mapping_active),
+            axis1_delivery_mapping_progress_mm,axis1_delivery_mapping_applied_extra_mm,
+            double(ff.hold_587.active),double(ff.hold_587.handoff_complete),double(ff.hold_587.blending),
+            double(ff.hold_582.active),double(ff.hold_582.handoff_complete),double(ff.hold_582.blending),
+            double(cylinder1_cmd),double(cylinder2_cmd),double(cylinder3_cmd),double(cylinder4_cmd)
+        });

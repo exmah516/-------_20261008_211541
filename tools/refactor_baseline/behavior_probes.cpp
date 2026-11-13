@@ -8,6 +8,7 @@
 using DWORD = std::uint32_t;
 using ULONGLONG = std::uint64_t;
 constexpr double Rad = 57.29577951308232;
+#include "handoff_types.h"
 #include "types.inc"
 enum class StartupPhase { Done };
 enum class CylinderManualMode { Automatic };
@@ -26,7 +27,7 @@ static bool equal(double a, double b) { return std::abs(a-b) < 1e-8; }
 struct Fixture {
     ControlConfig cfg;
     CylinderPreset cyl;
-    PlannedReturnCoordinator planned_return;
+    HandoffCoordinator planned_return;
     SpacingRecoveryState spacing_recovery;
     struct { bool completed=true; StartupPhase phase=StartupPhase::Done; } startup;
     struct { void disable_compensation() {} } tracking_controller;

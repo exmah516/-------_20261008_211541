@@ -1,0 +1,14 @@
+[ADS-DIAG] build=Release Nov 13 2026 13:13:15；故障记录位于 ADS.exe 同目录的 ads_fault_diagnostics.log
+手柄接收速度100Hz记录：C:\Users\Sui\AppData\Local\Temp\refactor-baseline-zmgzq2jk\handle_velocity_1000.csv
+手柄来源：主端（远程），等待有效采样。
+已接入远程手柄（物理 SN 587）。
+已接入远程手柄（物理 SN 582）。
+力反馈：关闭，可由主端切换。
+实验记录默认开启：records/日期/时间_auto，退出程序时保存完成。
+ADS 快照恢复：实际位置与手柄基准已重建。
+系统初始同步完成，进入就绪状态。
+ADS 目标 PLC 应用: MemoryPLC
+连接保持结束：实际位置与手柄基准已重建。
+连接保持退出：source=连接保持结束 保持 PLC 当前反馈位置，不恢复历史目标。axis2=12，axis7=34（相对角度）
+已在当前位置开始控制。
+COVERAGE return_retry commits=2 complete=1 starts=1 transactions=1 mapping=1 hold=1 spacing_active=0 fault=0 phases=654,31,113,2,0,0,0,0,0,0, pause=0 restart=0 plc_phase=0 plc_result=1

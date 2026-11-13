@@ -1,0 +1,798 @@
+{
+  "status": "pass",
+  "baseline_commit": "d2bb5fc4de8e53aad750b2a048008b52fa488453",
+  "head_before_section4": "39505841af8c4cf8e343b5101a6d03a3ab22458c",
+  "golden_unchanged": [
+    {
+      "path": "tools/refactor_baseline/golden/ads_hold.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/axis4.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/device_epoch.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/feedback.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/follow_delivery.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/follow_retraction.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/handle_disconnect.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/handle_gap_rebase.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/handle_gap_short.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/handoff_active.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/handoff_axis1.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/handoff_merge.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/handoff_passive.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/lead_axis6.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/lead_hold.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/manifest.json",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/manual.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/restart.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/restart_accept.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/restart_reject.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/return_axis1.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/return_axis6.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/return_both.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/return_estop.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/return_fault.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/return_fault_axis6.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/return_fault_both.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/return_possible.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/return_possible_axis6.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/return_possible_both.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/return_retry.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/return_retry_axis6.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/return_retry_both.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/spacing.csv",
+      "unchanged": true
+    },
+    {
+      "path": "tools/refactor_baseline/golden/spacing_hold.csv",
+      "unchanged": true
+    }
+  ],
+  "compiled_plc_inputs": [
+    {
+      "path": "介入机器人/C从端/250902/Untitled2/DUTs/ST_HandoffCmd.TcDUT",
+      "sha256": "ace685df0ee1963116e79b84974cdf66fb5ea42660e42edee9be486e16037d1d",
+      "current_matches": true,
+      "build_copy_matches": true
+    },
+    {
+      "path": "介入机器人/C从端/250902/Untitled2/DUTs/ST_HandoffStatus.TcDUT",
+      "sha256": "773a871ef746eb013aae9fa3eae9bc163d2c3a9981fe7b8cfcb266f125938210",
+      "current_matches": true,
+      "build_copy_matches": true
+    },
+    {
+      "path": "介入机器人/C从端/250902/Untitled2/POUs/Handoff.TcPOU",
+      "sha256": "c9ecd2b41caa652e9fb93bf452082427e97704ed6acf8bca5c2e4127cd26f8b2",
+      "current_matches": true,
+      "build_copy_matches": true
+    },
+    {
+      "path": "介入机器人/C从端/250902/Untitled2/POUs/handle.TcPOU",
+      "sha256": "ea166341342ba52768ec90cb0d2b3a8726a6425294ab7e0778562699ad1e8e68",
+      "current_matches": true,
+      "build_copy_matches": true
+    },
+    {
+      "path": "介入机器人/C从端/250902/Untitled2/POUs/MAIN.TcPOU",
+      "sha256": "25c548143ae07bdfd93b0effb97dd625ecae1db1a40787beb4f52824f09746a8",
+      "current_matches": true,
+      "build_copy_matches": true
+    },
+    {
+      "path": "介入机器人/C从端/250902/Untitled2/POUs/SelfCheck.TcPOU",
+      "sha256": "f508026940357cd74fa73c4826c74403edd2e79ca02907d16c618eeabb0328d9",
+      "current_matches": true,
+      "build_copy_matches": true
+    },
+    {
+      "path": "介入机器人/C从端/250902/Untitled2/GVLs/G.TcGVL",
+      "sha256": "637eb18b14dba49e1a535191578669b0183969a0120442941e389e7f64818de5",
+      "current_matches": true,
+      "build_copy_matches": true
+    },
+    {
+      "path": "介入机器人/C从端/250902/Untitled2/Untitled2.plcproj",
+      "sha256": "dc33801493f8236e9b29e3ae9128d33db598014370015dbac58fe45648916178",
+      "current_matches": true,
+      "build_copy_matches": true
+    }
+  ],
+  "plc_errors": 0,
+  "plc_warnings": 0,
+  "public_contract_unchanged_count": 69,
+  "tested_sources": [
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/ads_communication.h",
+      "sha256": "fcf3b4b5b6e03416c36c64fe0b3b2e380d48335ded79faab80fe799f6ba95dad"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/arm_cartesian_motion.h",
+      "sha256": "6b20673a198997a14c80e9e5901cfef14be3eb34f9b8e7abae2cc940e6bab103"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/arm_manual_ads_service.h",
+      "sha256": "1e677f04668d33665c0467b27af426f5127e535aa98b62f5518e10a4ce31b472"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/async_csv_writer.h",
+      "sha256": "4ca995c944c5157acbbcd4762480b0de6bfebd7bf36ad329197cb0055da0a1e3"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/control_messages.h",
+      "sha256": "176f066f4705420c17fdac0b1292d3a7f5ca7e9c428d8e2ff6e6845bbe17481e"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/control_types.h",
+      "sha256": "b581e9a9dde9e4fab65d7ed7d231aa16225fa61ccd40f56887ff615fd54c69a7"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/experiment_events.h",
+      "sha256": "054c9e1b468ffea2ffc52629b26785e5fe465d3e6ba2f8550af386817715d63b"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/experiment_recorder.h",
+      "sha256": "e38393645b8f77cce07775c66d1773ab1f90860ffb456faee072699cfed3a1a5"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/force_calibration.h",
+      "sha256": "e34959c244ec8fb5fadb095aa781ee962a1ae81f1c236dfffe6602484387ed2e"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/force_feedback.h",
+      "sha256": "a7c24573f0342c4bf20315a011f641539f0f64ec973bd9a3267afac4dc36f815"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/handle_net_distance.h",
+      "sha256": "39a1f1b5a5a17ed4d0a48a390ebbe603a2cbd8a014279fb0b74c52f594853c6c"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/handle_velocity_recorder.h",
+      "sha256": "3858c01b298765f1e40841cfa3f133a26bc6434aa9b98170db9178b6681fd5eb"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/handoff_types.h",
+      "sha256": "b274eb479c4dc7aa3497c9a0be7bf00357485d5042272fa2299e9db9d0b37eb5"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/homing_record.h",
+      "sha256": "6317a2ecc61fe1b578938395442b3f70b5fb7f7a568fccbe9c18a6f35eab8336"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/motion_sync.h",
+      "sha256": "95db90429c794a213846363d85c41081b4a1fc6f2027b9ac57c74d890d502119"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/plc_io.h",
+      "sha256": "dd0231e99d84c4e8e94851f71266d67ebfbd8aa999d4b263ac0c454ea6bb0e9e"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/return_recovery.h",
+      "sha256": "33f66b6b88e5527cffc0638b021cc55381c9e26e3c6ce3bdabd2eb2400eea131"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/zenoh_service.h",
+      "sha256": "511a74d124f17004c241a769cba18ca16817f635705cc01f9d61d535fe3cefca"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/手柄/Handle.h",
+      "sha256": "9e9db14eee91e4e2437cb2c281db2c1eb2036a8c94876c00cea6502991625597"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/手柄/remote_handle_bridge.h",
+      "sha256": "19f4142beb946efca7a61a29b3910c65be592d414ebf359f6cb3ce795c22547d"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/control_types.cpp",
+      "sha256": "bf00263c9bec43dc5f489a7800df38bce348d9cc4cb4baf595cad719bb3cb092"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/motion_sync.cpp",
+      "sha256": "6d08cf539ce81e8fd04e67cb596e572e09294358f13a96915fb0fbfbc112dd3d"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/plc_io.cpp",
+      "sha256": "f9f53d15cb32e68ef407e2efbe2453eacd95cfd7404edb2614fc8b5681c84888"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/force_feedback.cpp",
+      "sha256": "e2f8704bfc4d3eabda1a8a180d779ac9455c3d6ee153273add51890c1304cc8a"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/手柄/手柄.cpp",
+      "sha256": "d05ab00c32bae1cdbde311fce5614519fd3f13c4aa8ae798673f6b0bc2c5b8ce"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/main.cpp",
+      "sha256": "005a739048e1b9a7f5fc584ba841234bf1816b022327a900d582e5401c1266d1"
+    }
+  ],
+  "recovered_unchanged_headers": [
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/handle_velocity_recorder.h",
+      "stage0_sha256": "3858c01b298765f1e40841cfa3f133a26bc6434aa9b98170db9178b6681fd5eb",
+      "current_sha256": "3858c01b298765f1e40841cfa3f133a26bc6434aa9b98170db9178b6681fd5eb",
+      "same_content_allowing_git_line_endings": true
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/homing_record.h",
+      "stage0_sha256": "6317a2ecc61fe1b578938395442b3f70b5fb7f7a568fccbe9c18a6f35eab8336",
+      "current_sha256": "6317a2ecc61fe1b578938395442b3f70b5fb7f7a568fccbe9c18a6f35eab8336",
+      "same_content_allowing_git_line_endings": true
+    }
+  ],
+  "preexisting_paths_excluded": [
+    "docs/refactor_stage0/00_总览.md",
+    "docs/refactor_stage0/99_未决问题.md",
+    "docs/refactor_stage0/REPORT.md",
+    "docs/refactor_stage0/logs/plc/build.log",
+    "docs/refactor_stage0/logs/plc/environment.txt",
+    "docs/refactor_stage0/logs/plc/result.json",
+    "docs/refactor_stage0/删除落实表.md",
+    "docs/refactor_stage0/验证结果.md",
+    "tools/plc_build.ps1",
+    "介入机器人/C从端/250902.project.~u",
+    "介入机器人/C从端/250902/Untitled2/POUs/handle(备份).TcPOU",
+    "介入机器人/C从端/250902/Untitled2/POUs/move_edge.TcPOU",
+    "介入机器人/C从端/PLC状态机与流程说明.md",
+    "介入机器人/C从端/PLC项目说明.md",
+    "介入机器人/C从端/TwinCAT Measurement Project3/VSSettings/.vsm",
+    "docs/refactor_stage0/PLC编译诊断.md",
+    "docs/refactor_stage0/logs/plc_diagnosis/",
+    "docs/refactor_stage0/logs/twincat_uninstall/",
+    "tools/tests/",
+    "介入机器人/C从端/UpgradeLog6.htm",
+    "介入机器人/C从端/UpgradeLog7.htm"
+  ],
+  "preexisting_conflicts": [],
+  "plc_build_script_matches_initial": true,
+  "production_paths": [
+    "介入机器人/B数据端/工程/ADS项目/ads_communication.cpp",
+    "介入机器人/B数据端/工程/ADS项目/ads_communication.h",
+    "介入机器人/B数据端/工程/ADS项目/control_types.h",
+    "介入机器人/B数据端/工程/ADS项目/experiment_events.h",
+    "介入机器人/B数据端/工程/ADS项目/experiment_recorder.cpp",
+    "介入机器人/B数据端/工程/ADS项目/handle_velocity_recorder.h",
+    "介入机器人/B数据端/工程/ADS项目/handoff_types.h",
+    "介入机器人/B数据端/工程/ADS项目/homing_record.h",
+    "介入机器人/B数据端/工程/ADS项目/main.cpp",
+    "介入机器人/B数据端/工程/ADS项目/motion_sync.cpp",
+    "介入机器人/B数据端/工程/ADS项目/plc_io.cpp",
+    "介入机器人/B数据端/工程/ADS项目/plc_io.h",
+    "介入机器人/B数据端/工程/ADS项目/return_recovery.h",
+    "介入机器人/C从端/250902/Untitled2/DUTs/ST_HandoffCmd.TcDUT",
+    "介入机器人/C从端/250902/Untitled2/DUTs/ST_HandoffStatus.TcDUT",
+    "介入机器人/C从端/250902/Untitled2/GVLs/G.TcGVL",
+    "介入机器人/C从端/250902/Untitled2/POUs/Handoff.TcPOU",
+    "介入机器人/C从端/250902/Untitled2/POUs/MAIN.TcPOU",
+    "介入机器人/C从端/250902/Untitled2/POUs/SelfCheck.TcPOU",
+    "介入机器人/C从端/250902/Untitled2/POUs/handle.TcPOU",
+    "介入机器人/C从端/250902/Untitled2/Untitled2.plcproj"
+  ],
+  "section4_staged_paths": [
+    "docs/refactor_stage1/00_总览.md",
+    "docs/refactor_stage1/04_验证与交付.md",
+    "docs/refactor_stage1/05_main精简地图.md",
+    "docs/refactor_stage1/handoff_size_comparison.json",
+    "docs/refactor_stage1/logs/baseline/ads_hold.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/ads_hold.log",
+    "docs/refactor_stage1/logs/baseline/axis4.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/axis4.log",
+    "docs/refactor_stage1/logs/baseline/build.log",
+    "docs/refactor_stage1/logs/baseline/device_epoch.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/device_epoch.log",
+    "docs/refactor_stage1/logs/baseline/event_checks.json",
+    "docs/refactor_stage1/logs/baseline/event_missing582.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/event_missing582.log",
+    "docs/refactor_stage1/logs/baseline/event_rejected_hold.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/event_rejected_hold.log",
+    "docs/refactor_stage1/logs/baseline/feedback.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/feedback.log",
+    "docs/refactor_stage1/logs/baseline/follow_delivery.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/follow_delivery.log",
+    "docs/refactor_stage1/logs/baseline/follow_retraction.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/follow_retraction.log",
+    "docs/refactor_stage1/logs/baseline/handle_disconnect.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/handle_disconnect.log",
+    "docs/refactor_stage1/logs/baseline/handle_gap_rebase.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/handle_gap_rebase.log",
+    "docs/refactor_stage1/logs/baseline/handle_gap_short.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/handle_gap_short.log",
+    "docs/refactor_stage1/logs/baseline/handoff_active.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/handoff_active.log",
+    "docs/refactor_stage1/logs/baseline/handoff_axis1.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/handoff_axis1.log",
+    "docs/refactor_stage1/logs/baseline/handoff_merge.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/handoff_merge.log",
+    "docs/refactor_stage1/logs/baseline/handoff_passive.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/handoff_passive.log",
+    "docs/refactor_stage1/logs/baseline/lead_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/lead_axis6.log",
+    "docs/refactor_stage1/logs/baseline/lead_hold.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/lead_hold.log",
+    "docs/refactor_stage1/logs/baseline/manual.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/manual.log",
+    "docs/refactor_stage1/logs/baseline/restart.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/restart.log",
+    "docs/refactor_stage1/logs/baseline/restart_accept.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/restart_accept.log",
+    "docs/refactor_stage1/logs/baseline/restart_reject.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/restart_reject.log",
+    "docs/refactor_stage1/logs/baseline/result.json",
+    "docs/refactor_stage1/logs/baseline/return_axis1.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/return_axis1.log",
+    "docs/refactor_stage1/logs/baseline/return_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/return_axis6.log",
+    "docs/refactor_stage1/logs/baseline/return_both.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/return_both.log",
+    "docs/refactor_stage1/logs/baseline/return_estop.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/return_estop.log",
+    "docs/refactor_stage1/logs/baseline/return_fault.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/return_fault.log",
+    "docs/refactor_stage1/logs/baseline/return_fault_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/return_fault_axis6.log",
+    "docs/refactor_stage1/logs/baseline/return_fault_both.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/return_fault_both.log",
+    "docs/refactor_stage1/logs/baseline/return_possible.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/return_possible.log",
+    "docs/refactor_stage1/logs/baseline/return_possible_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/return_possible_axis6.log",
+    "docs/refactor_stage1/logs/baseline/return_possible_both.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/return_possible_both.log",
+    "docs/refactor_stage1/logs/baseline/return_retry.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/return_retry.log",
+    "docs/refactor_stage1/logs/baseline/return_retry_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/return_retry_axis6.log",
+    "docs/refactor_stage1/logs/baseline/return_retry_both.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/return_retry_both.log",
+    "docs/refactor_stage1/logs/baseline/spacing.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/spacing.log",
+    "docs/refactor_stage1/logs/baseline/spacing_hold.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/spacing_hold.log",
+    "docs/refactor_stage1/logs/baseline/txn_no_ack.csv.events.csv",
+    "docs/refactor_stage1/logs/baseline/txn_no_ack.log",
+    "docs/refactor_stage1/logs/behavior_probes/behavior_extractions.json",
+    "docs/refactor_stage1/logs/behavior_probes/behavior_probes.log",
+    "docs/refactor_stage1/logs/behavior_probes/behavior_result.json",
+    "docs/refactor_stage1/logs/build/data_build.log",
+    "docs/refactor_stage1/logs/build/data_result.json",
+    "docs/refactor_stage1/logs/build_final/handlehost.log",
+    "docs/refactor_stage1/logs/build_final/managed_result.json",
+    "docs/refactor_stage1/logs/build_final/managed_tests_result.json",
+    "docs/refactor_stage1/logs/build_final/master.log",
+    "docs/refactor_stage1/logs/build_final/protocol_managed_tests.log",
+    "docs/refactor_stage1/logs/build_final/protocol_tests_build.log",
+    "docs/refactor_stage1/logs/build_final/wpf_tests.log",
+    "docs/refactor_stage1/logs/build_final/wpf_tests_build.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/ads_hold.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/ads_hold.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/axis4.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/axis4.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/build.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/device_epoch.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/device_epoch.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/event_checks.json",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/event_missing582.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/event_missing582.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/event_rejected_hold.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/event_rejected_hold.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/feedback.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/feedback.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/follow_delivery.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/follow_delivery.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/follow_retraction.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/follow_retraction.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/handle_disconnect.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/handle_disconnect.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/handle_gap_rebase.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/handle_gap_rebase.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/handle_gap_short.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/handle_gap_short.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/handoff_active.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/handoff_active.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/handoff_axis1.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/handoff_axis1.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/handoff_merge.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/handoff_merge.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/handoff_passive.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/handoff_passive.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/lead_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/lead_axis6.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/lead_hold.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/lead_hold.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/manual.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/manual.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/restart.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/restart.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/restart_accept.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/restart_accept.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/restart_reject.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/restart_reject.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/result.json",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_axis1.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_axis1.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_axis6.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_both.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_both.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_estop.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_estop.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_fault.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_fault.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_fault_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_fault_axis6.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_fault_both.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_fault_both.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_possible.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_possible.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_possible_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_possible_axis6.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_possible_both.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_possible_both.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_retry.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_retry.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_retry_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_retry_axis6.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_retry_both.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/return_retry_both.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/spacing.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/spacing.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/spacing_hold.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/spacing_hold.log",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/txn_no_ack.csv.events.csv",
+    "docs/refactor_stage1/logs/clean_checkout/baseline/txn_no_ack.log",
+    "docs/refactor_stage1/logs/clean_checkout/result.json",
+    "docs/refactor_stage1/logs/clean_checkout/terminal.log",
+    "docs/refactor_stage1/logs/clean_checkout/terminal_result.json",
+    "docs/refactor_stage1/logs/final_scope.json",
+    "docs/refactor_stage1/logs/offline_final/ads_diagnostics_test.log",
+    "docs/refactor_stage1/logs/offline_final/cylinder_manual_test.log",
+    "docs/refactor_stage1/logs/offline_final/dual_control_test.log",
+    "docs/refactor_stage1/logs/offline_final/handle_velocity_test.log",
+    "docs/refactor_stage1/logs/offline_final/homing_record_events_test.log",
+    "docs/refactor_stage1/logs/offline_final/homing_restore_ack_test.log",
+    "docs/refactor_stage1/logs/offline_final/main_recovery_test.log",
+    "docs/refactor_stage1/logs/offline_final/recording_feedback_test.log",
+    "docs/refactor_stage1/logs/offline_final/remote_handle_test.log",
+    "docs/refactor_stage1/logs/offline_final/return_recovery_test.log",
+    "docs/refactor_stage1/logs/protocol_final/home_chain.log",
+    "docs/refactor_stage1/logs/protocol_final/home_chain_simulator_build.log",
+    "docs/refactor_stage1/logs/protocol_final/protocol_tests_build.log",
+    "docs/refactor_stage1/logs/protocol_final/results.json",
+    "docs/refactor_stage1/logs/protocol_final/service_tests_build.log",
+    "docs/refactor_stage1/logs/protocol_final/simulated_ads_build.log",
+    "docs/refactor_stage1/logs/protocol_final/zenoh_cpp_protocol.log",
+    "docs/refactor_stage1/logs/protocol_final/zenoh_cpp_service.log",
+    "docs/refactor_stage1/logs/protocol_final/zenoh_cross_language.log",
+    "docs/refactor_stage1/logs/recovery_regression/homing_test_config.json",
+    "docs/refactor_stage1/logs/recovery_regression/homing_test_record.json",
+    "docs/refactor_stage1/logs/recovery_regression/results.log",
+    "docs/refactor_stage1/logs/regression/arm.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/arm_ads_tests.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/arm_ads_tests_build.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/arm_cart_jog_equivalence.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/arm_cart_jog_equivalence_build.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/arm_cart_jog_regression.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/arm_cart_jog_regression_build.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/arm_cart_jog_round4_diagnostics.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/arm_cart_jog_round4_diagnostics_build.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/arm_cart_jog_round4_regression.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/arm_cart_jog_round4_regression_build.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/arm_cart_jog_stage_tests.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/arm_cart_jog_stage_tests_build.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/arm_cart_jog_tests.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/arm_cart_jog_tests_build.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/home_regression.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/home_regression_build.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/kinematics_tests.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/kinematics_tests_build.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/results.json",
+    "docs/refactor_stage1/logs/regression/arm/round4/st_static_audit_round4.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/st_translation.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/stage_translation.log",
+    "docs/refactor_stage1/logs/regression/arm/round4/stage_translation_before.log",
+    "docs/refactor_stage1/logs/regression/net_distance.log",
+    "docs/refactor_stage1/logs/regression/results.json",
+    "docs/refactor_stage1/logs/replay_final/handle.log",
+    "docs/refactor_stage1/logs/replay_final/handle/build.log",
+    "docs/refactor_stage1/logs/replay_final/handle/results.log",
+    "docs/refactor_stage1/logs/replay_final/network.log",
+    "docs/refactor_stage1/logs/replay_final/network/fixed/ads_10.log",
+    "docs/refactor_stage1/logs/replay_final/network/fixed/ads_30.log",
+    "docs/refactor_stage1/logs/replay_final/network/fixed/both_10.log",
+    "docs/refactor_stage1/logs/replay_final/network/fixed/both_30.log",
+    "docs/refactor_stage1/logs/replay_final/network/fixed/build.log",
+    "docs/refactor_stage1/logs/replay_final/network/fixed/zenoh_10.log",
+    "docs/refactor_stage1/logs/replay_final/network/fixed/zenoh_30.log",
+    "docs/refactor_stage1/logs/replay_final/results.json",
+    "docs/refactor_stage1/logs/robust_final/build.log",
+    "docs/refactor_stage1/logs/robust_final/result.json",
+    "docs/refactor_stage1/logs/robust_final/return_estop.csv.events.csv",
+    "docs/refactor_stage1/logs/robust_final/return_estop.log",
+    "docs/refactor_stage1/logs/robust_final/return_retry.csv.events.csv",
+    "docs/refactor_stage1/logs/robust_final/return_retry.log",
+    "docs/refactor_stage1/logs/robust_final/robust_checks.json",
+    "docs/refactor_stage1/logs/robust_final/txn_ads_hold.csv.events.csv",
+    "docs/refactor_stage1/logs/robust_final/txn_ads_hold.log",
+    "docs/refactor_stage1/logs/robust_final/txn_always_fail.csv.events.csv",
+    "docs/refactor_stage1/logs/robust_final/txn_always_fail.log",
+    "docs/refactor_stage1/logs/robust_final/txn_handle_hold.csv.events.csv",
+    "docs/refactor_stage1/logs/robust_final/txn_handle_hold.log",
+    "docs/refactor_stage1/logs/robust_final/txn_no_ack.csv.events.csv",
+    "docs/refactor_stage1/logs/robust_final/txn_no_ack.log",
+    "docs/refactor_stage1/logs/robust_final/txn_pause.csv.events.csv",
+    "docs/refactor_stage1/logs/robust_final/txn_pause.log",
+    "docs/refactor_stage1/logs/robust_final/txn_restart.csv.events.csv",
+    "docs/refactor_stage1/logs/robust_final/txn_restart.log",
+    "docs/refactor_stage1/logs/robust_final/txn_start_wait.csv.events.csv",
+    "docs/refactor_stage1/logs/robust_final/txn_start_wait.log",
+    "docs/refactor_stage1/logs/robust_final/txn_version.csv.events.csv",
+    "docs/refactor_stage1/logs/robust_final/txn_version.log",
+    "docs/refactor_stage1/logs/st/result.log",
+    "docs/refactor_stage1/logs/st_regression/catchup.csv",
+    "docs/refactor_stage1/logs/st_regression/normal_scenarios.csv",
+    "docs/refactor_stage1/logs/st_regression/results.log",
+    "docs/refactor_stage1/logs/st_regression/selfcheck_full_trace.csv",
+    "docs/refactor_stage1/logs/terminal/new.log",
+    "docs/refactor_stage1/logs/terminal/new/ads_hold.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/ads_hold.log",
+    "docs/refactor_stage1/logs/terminal/new/build.log",
+    "docs/refactor_stage1/logs/terminal/new/device_epoch.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/device_epoch.log",
+    "docs/refactor_stage1/logs/terminal/new/feedback.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/feedback.log",
+    "docs/refactor_stage1/logs/terminal/new/follow_delivery.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/follow_delivery.log",
+    "docs/refactor_stage1/logs/terminal/new/follow_retraction.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/follow_retraction.log",
+    "docs/refactor_stage1/logs/terminal/new/handle_gap_short.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/handle_gap_short.log",
+    "docs/refactor_stage1/logs/terminal/new/handoff_active.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/handoff_active.log",
+    "docs/refactor_stage1/logs/terminal/new/handoff_axis1.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/handoff_axis1.log",
+    "docs/refactor_stage1/logs/terminal/new/handoff_merge.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/handoff_merge.log",
+    "docs/refactor_stage1/logs/terminal/new/handoff_passive.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/handoff_passive.log",
+    "docs/refactor_stage1/logs/terminal/new/lead_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/lead_axis6.log",
+    "docs/refactor_stage1/logs/terminal/new/lead_hold.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/lead_hold.log",
+    "docs/refactor_stage1/logs/terminal/new/result.json",
+    "docs/refactor_stage1/logs/terminal/new/return_axis1.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/return_axis1.log",
+    "docs/refactor_stage1/logs/terminal/new/return_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/return_axis6.log",
+    "docs/refactor_stage1/logs/terminal/new/return_both.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/return_both.log",
+    "docs/refactor_stage1/logs/terminal/new/return_estop.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/return_estop.log",
+    "docs/refactor_stage1/logs/terminal/new/return_fault.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/return_fault.log",
+    "docs/refactor_stage1/logs/terminal/new/return_fault_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/return_fault_axis6.log",
+    "docs/refactor_stage1/logs/terminal/new/return_fault_both.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/return_fault_both.log",
+    "docs/refactor_stage1/logs/terminal/new/return_possible.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/return_possible.log",
+    "docs/refactor_stage1/logs/terminal/new/return_possible_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/return_possible_axis6.log",
+    "docs/refactor_stage1/logs/terminal/new/return_possible_both.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/return_possible_both.log",
+    "docs/refactor_stage1/logs/terminal/new/return_retry.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/return_retry.log",
+    "docs/refactor_stage1/logs/terminal/new/return_retry_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/return_retry_axis6.log",
+    "docs/refactor_stage1/logs/terminal/new/return_retry_both.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/new/return_retry_both.log",
+    "docs/refactor_stage1/logs/terminal/old.log",
+    "docs/refactor_stage1/logs/terminal/old/ads_hold.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/ads_hold.log",
+    "docs/refactor_stage1/logs/terminal/old/build.log",
+    "docs/refactor_stage1/logs/terminal/old/device_epoch.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/device_epoch.log",
+    "docs/refactor_stage1/logs/terminal/old/feedback.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/feedback.log",
+    "docs/refactor_stage1/logs/terminal/old/follow_delivery.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/follow_delivery.log",
+    "docs/refactor_stage1/logs/terminal/old/follow_retraction.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/follow_retraction.log",
+    "docs/refactor_stage1/logs/terminal/old/handle_gap_short.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/handle_gap_short.log",
+    "docs/refactor_stage1/logs/terminal/old/handoff_active.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/handoff_active.log",
+    "docs/refactor_stage1/logs/terminal/old/handoff_axis1.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/handoff_axis1.log",
+    "docs/refactor_stage1/logs/terminal/old/handoff_merge.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/handoff_merge.log",
+    "docs/refactor_stage1/logs/terminal/old/handoff_passive.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/handoff_passive.log",
+    "docs/refactor_stage1/logs/terminal/old/lead_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/lead_axis6.log",
+    "docs/refactor_stage1/logs/terminal/old/lead_hold.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/lead_hold.log",
+    "docs/refactor_stage1/logs/terminal/old/result.json",
+    "docs/refactor_stage1/logs/terminal/old/return_axis1.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/return_axis1.log",
+    "docs/refactor_stage1/logs/terminal/old/return_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/return_axis6.log",
+    "docs/refactor_stage1/logs/terminal/old/return_both.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/return_both.log",
+    "docs/refactor_stage1/logs/terminal/old/return_estop.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/return_estop.log",
+    "docs/refactor_stage1/logs/terminal/old/return_fault.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/return_fault.log",
+    "docs/refactor_stage1/logs/terminal/old/return_fault_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/return_fault_axis6.log",
+    "docs/refactor_stage1/logs/terminal/old/return_fault_both.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/return_fault_both.log",
+    "docs/refactor_stage1/logs/terminal/old/return_possible.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/return_possible.log",
+    "docs/refactor_stage1/logs/terminal/old/return_possible_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/return_possible_axis6.log",
+    "docs/refactor_stage1/logs/terminal/old/return_possible_both.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/return_possible_both.log",
+    "docs/refactor_stage1/logs/terminal/old/return_retry.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/return_retry.log",
+    "docs/refactor_stage1/logs/terminal/old/return_retry_axis6.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/return_retry_axis6.log",
+    "docs/refactor_stage1/logs/terminal/old/return_retry_both.csv.events.csv",
+    "docs/refactor_stage1/logs/terminal/old/return_retry_both.log",
+    "docs/refactor_stage1/logs/terminal/result.json",
+    "docs/refactor_stage1/main_state_inventory.csv",
+    "docs/refactor_stage1/scratch/baseline.json",
+    "docs/refactor_stage1/scratch/build_data.py",
+    "docs/refactor_stage1/scratch/build_managed.py",
+    "docs/refactor_stage1/scratch/clean_check.py",
+    "docs/refactor_stage1/scratch/final_scope.py",
+    "docs/refactor_stage1/scratch/inventory.py",
+    "docs/refactor_stage1/scratch/main_state_table.md",
+    "docs/refactor_stage1/scratch/measure_handoff.py",
+    "docs/refactor_stage1/scratch/run_protocol_checks.py",
+    "docs/refactor_stage1/scratch/run_regression_checks.py",
+    "docs/refactor_stage1/scratch/run_replay_checks.py",
+    "docs/refactor_stage1/scratch/test_managed.py",
+    "docs/refactor_stage1/size_comparison.json",
+    "tools/handoff_tests/compare_terminal.py",
+    "tools/handoff_tests/endpoint_support.cpp",
+    "tools/handoff_tests/endpoint_trace.inc",
+    "tools/handoff_tests/run_robust.py",
+    "tools/handoff_tests/run_st.py",
+    "tools/handoff_tests/st_plc_fixture.h",
+    "tools/handoff_tests/st_tests.cpp",
+    "tools/handoff_tests/stage0_support/handle_velocity_recorder.h",
+    "tools/handoff_tests/stage0_support/homing_record.h",
+    "tools/handoff_tests/stage0_support/manifest.json",
+    "tools/handoff_tests/stage0_support/return_recovery.h",
+    "tools/handoff_tests/verify_baseline.py",
+    "tools/handoff_tests/verify_robust.py",
+    "tools/refactor_baseline/README.md",
+    "tools/refactor_baseline/baseline_support.h",
+    "tools/refactor_baseline/behavior_probes.cpp",
+    "tools/refactor_baseline/memory_io.cpp",
+    "tools/refactor_baseline/mock_ads.h",
+    "tools/refactor_baseline/run.py",
+    "tools/refactor_baseline/run_behavior_probes.py",
+    "tools/refactor_baseline/verify_coverage.py",
+    "tools/refactor_baseline/verify_events.py",
+    "介入机器人/A主端/工程/docs/guides/实验记录说明.md",
+    "介入机器人/B数据端/工程/ADS项目/handle_velocity_recorder.h",
+    "介入机器人/B数据端/工程/ADS项目/homing_record.h",
+    "介入机器人/B数据端/工程/ADS项目/tools/ads_diagnostics_test.cpp",
+    "介入机器人/B数据端/工程/ADS项目/tools/ads_symbol_sizes.tsv",
+    "介入机器人/B数据端/工程/ADS项目/tools/check_axis4_window.py",
+    "介入机器人/B数据端/工程/ADS项目/tools/cylinder_manual_test.cpp",
+    "介入机器人/B数据端/工程/ADS项目/tools/dual_control_test.cpp",
+    "介入机器人/B数据端/工程/ADS项目/tools/main_recovery_test.cpp",
+    "介入机器人/B数据端/工程/ADS项目/tools/recording_feedback_test.cpp",
+    "介入机器人/B数据端/工程/ADS项目/tools/return_recovery_test.cpp",
+    "介入机器人/B数据端/工程/ADS项目/tools/run_ads_diagnostics_test.py",
+    "介入机器人/B数据端/工程/ADS项目/tools/run_dual_control_test.py",
+    "介入机器人/B数据端/工程/ADS项目/tools/run_offline_tests.cjs",
+    "介入机器人/B数据端/工程/docs/guides/实验记录说明.md",
+    "介入机器人/tools/reliability_round5/main_recovery_tests.cpp",
+    "介入机器人/tools/reliability_round5/recovery_tests.cpp",
+    "介入机器人/tools/reliability_round5/run_recovery.py",
+    "介入机器人/tools/reliability_round5/run_st.py",
+    "介入机器人/tools/reliability_round5/st_tests.cpp",
+    "介入机器人/tools/revision_uhn/handle_tests.cpp"
+  ]
+}

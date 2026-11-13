@@ -1,0 +1,208 @@
+{
+  "build": "C:\\Users\\Sui\\AppData\\Local\\Temp\\refactor-baseline-zmgzq2jk",
+  "sources": {
+    "ads_communication.h": "fcf3b4b5b6e03416c36c64fe0b3b2e380d48335ded79faab80fe799f6ba95dad",
+    "arm_cartesian_motion.h": "6b20673a198997a14c80e9e5901cfef14be3eb34f9b8e7abae2cc940e6bab103",
+    "arm_manual_ads_service.h": "1e677f04668d33665c0467b27af426f5127e535aa98b62f5518e10a4ce31b472",
+    "async_csv_writer.h": "4ca995c944c5157acbbcd4762480b0de6bfebd7bf36ad329197cb0055da0a1e3",
+    "control_messages.h": "176f066f4705420c17fdac0b1292d3a7f5ca7e9c428d8e2ff6e6845bbe17481e",
+    "control_types.h": "b581e9a9dde9e4fab65d7ed7d231aa16225fa61ccd40f56887ff615fd54c69a7",
+    "experiment_events.h": "054c9e1b468ffea2ffc52629b26785e5fe465d3e6ba2f8550af386817715d63b",
+    "experiment_recorder.h": "e38393645b8f77cce07775c66d1773ab1f90860ffb456faee072699cfed3a1a5",
+    "force_calibration.h": "e34959c244ec8fb5fadb095aa781ee962a1ae81f1c236dfffe6602484387ed2e",
+    "force_feedback.h": "a7c24573f0342c4bf20315a011f641539f0f64ec973bd9a3267afac4dc36f815",
+    "handle_net_distance.h": "39a1f1b5a5a17ed4d0a48a390ebbe603a2cbd8a014279fb0b74c52f594853c6c",
+    "handle_velocity_recorder.h": "3858c01b298765f1e40841cfa3f133a26bc6434aa9b98170db9178b6681fd5eb",
+    "handoff_types.h": "b274eb479c4dc7aa3497c9a0be7bf00357485d5042272fa2299e9db9d0b37eb5",
+    "homing_record.h": "6317a2ecc61fe1b578938395442b3f70b5fb7f7a568fccbe9c18a6f35eab8336",
+    "motion_sync.h": "95db90429c794a213846363d85c41081b4a1fc6f2027b9ac57c74d890d502119",
+    "plc_io.h": "dd0231e99d84c4e8e94851f71266d67ebfbd8aa999d4b263ac0c454ea6bb0e9e",
+    "return_recovery.h": "33f66b6b88e5527cffc0638b021cc55381c9e26e3c6ce3bdabd2eb2400eea131",
+    "zenoh_service.h": "511a74d124f17004c241a769cba18ca16817f635705cc01f9d61d535fe3cefca",
+    "手柄/Handle.h": "9e9db14eee91e4e2437cb2c281db2c1eb2036a8c94876c00cea6502991625597",
+    "手柄/remote_handle_bridge.h": "19f4142beb946efca7a61a29b3910c65be592d414ebf359f6cb3ce795c22547d",
+    "control_types.cpp": "bf00263c9bec43dc5f489a7800df38bce348d9cc4cb4baf595cad719bb3cb092",
+    "motion_sync.cpp": "6d08cf539ce81e8fd04e67cb596e572e09294358f13a96915fb0fbfbc112dd3d",
+    "plc_io.cpp": "f9f53d15cb32e68ef407e2efbe2453eacd95cfd7404edb2614fc8b5681c84888",
+    "force_feedback.cpp": "e2f8704bfc4d3eabda1a8a180d779ac9455c3d6ee153273add51890c1304cc8a",
+    "手柄/手柄.cpp": "d05ab00c32bae1cdbde311fce5614519fd3f13c4aa8ae798673f6b0bc2c5b8ce",
+    "main.cpp": "005a739048e1b9a7f5fc584ba841234bf1816b022327a900d582e5401c1266d1"
+  },
+  "scenarios": [
+    {
+      "scenario": "follow_delivery",
+      "ticks": 800,
+      "sha256": "76ea490c09b95f9b5b1f366cc4cc09e9daf3b2d8d15cc1a9ef05213ce70a02e0",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "follow_retraction",
+      "ticks": 800,
+      "sha256": "ad0210c5a7a90cdd5fb6e9170ba625a34bccbc6c1d12cc5d3074dc98e57d3f37",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "handoff_axis1",
+      "ticks": 800,
+      "sha256": "368e0c524f74cea2d5fea91149ad114b8b44f096caef9e21eebbfe9024da1737",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "handoff_active",
+      "ticks": 800,
+      "sha256": "4e84d825a8cc38ab660a2242300cd934a89e0676ed87950ec17ffc8e1faf8cd9",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "handoff_passive",
+      "ticks": 800,
+      "sha256": "7741216eee9097e6606381bc28e36e02fac8e2a9b50a4ae2b6ff065d345f4139",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "handoff_merge",
+      "ticks": 800,
+      "sha256": "746b4e99768a9ab3c341c3145bcb73740443ebf66405ab2cb8434138eb902da9",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "return_axis1",
+      "ticks": 800,
+      "sha256": "107f58b5c13d5f93e3f713aa6a02fdd74b8d7dad1983230a59f2dc35ee6c71fb",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "return_axis6",
+      "ticks": 800,
+      "sha256": "0c620361be779f8ed12babffb2fbea035aef2cb2cf95378c15c4a9cddbaa76c5",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "return_both",
+      "ticks": 800,
+      "sha256": "746b4e99768a9ab3c341c3145bcb73740443ebf66405ab2cb8434138eb902da9",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "return_retry",
+      "ticks": 800,
+      "sha256": "498f0e40c4ec7b2abf11ffcd956290a29adb1cb6af422ce63d1ca1f9b4a76ab3",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "return_retry_axis6",
+      "ticks": 800,
+      "sha256": "3ea1662559438fd45a0dbd8d39f00b4316d7563933db8dd6d8e30c15c44eed22",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "return_retry_both",
+      "ticks": 800,
+      "sha256": "a4947639eb6c98a72e074fad407348a40e55af7be8038e977c925435e741fc57",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "return_possible",
+      "ticks": 800,
+      "sha256": "107f58b5c13d5f93e3f713aa6a02fdd74b8d7dad1983230a59f2dc35ee6c71fb",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "return_possible_axis6",
+      "ticks": 800,
+      "sha256": "0c620361be779f8ed12babffb2fbea035aef2cb2cf95378c15c4a9cddbaa76c5",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "return_possible_both",
+      "ticks": 800,
+      "sha256": "746b4e99768a9ab3c341c3145bcb73740443ebf66405ab2cb8434138eb902da9",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "return_fault",
+      "ticks": 800,
+      "sha256": "5e7dc4e3736266787c932d23fa5b778ec3b95e9919c3eb21d5e75bd49b1d60a0",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "return_fault_axis6",
+      "ticks": 800,
+      "sha256": "0c73bfcdd5b75e3469f559f114c61a9157ed2ee7200033a95ca56c22d85d9c48",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "return_fault_both",
+      "ticks": 800,
+      "sha256": "ba87c6b1709f98151ae51029395ed48786af4104f4c225c5ae4b5d223ad00d6c",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "return_estop",
+      "ticks": 800,
+      "sha256": "a26cd3a5140a24d0d70571baf9e2328931167725536794457e83249dc841f988",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "lead_hold",
+      "ticks": 800,
+      "sha256": "107f58b5c13d5f93e3f713aa6a02fdd74b8d7dad1983230a59f2dc35ee6c71fb",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "lead_axis6",
+      "ticks": 800,
+      "sha256": "107f58b5c13d5f93e3f713aa6a02fdd74b8d7dad1983230a59f2dc35ee6c71fb",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "ads_hold",
+      "ticks": 800,
+      "sha256": "0a3178c9bf8670a1032a1538134614e6949fe7a40d3b23cf43f1b1ecc814178a",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "handle_gap_short",
+      "ticks": 800,
+      "sha256": "15e61f6f17e2724fce85986f43e3ab3636a7bf40d43803d10a881f6396a1668d",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "device_epoch",
+      "ticks": 800,
+      "sha256": "90a8d364aea8612616c4b69190f89d1416b0be9a62a145cb7bc6e8b0e5df0cf9",
+      "equal": false,
+      "comparison": {}
+    },
+    {
+      "scenario": "feedback",
+      "ticks": 797,
+      "sha256": "24b760c27d2f6599fc777ea68d50cb95692888c27d730edccbc754f19d636b6e",
+      "equal": false,
+      "comparison": {}
+    }
+  ]
+}

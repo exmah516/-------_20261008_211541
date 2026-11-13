@@ -1,0 +1,63 @@
+PASS XML C从端\250902\Untitled2\GVLs\G.TcGVL
+PASS XML C从端\250902\Untitled2\Untitled2.plcproj
+PASS XML C从端\250902\Untitled2\PlcTask.TcTTO
+PASS XML C从端\250902\Untitled2\POUs\ArmCartJogGen.TcPOU
+PASS ST block nesting ArmCartJogGen
+PASS XML C从端\250902\Untitled2\POUs\ArmCartJog.TcPOU
+PASS ST block nesting ArmCartJog
+PASS XML C从端\250902\Untitled2\POUs\ArmCartesian.TcPOU
+PASS ST block nesting ArmCartesian
+PASS XML C从端\250902\Untitled2\POUs\ArmManual.TcPOU
+PASS ST block nesting ArmManual
+PASS XML C从端\250902\Untitled2\POUs\MAIN.TcPOU
+PASS ST block nesting MAIN
+PASS MAIN call order unchanged
+PASS PLC registers ArmCartJogGen
+PASS PLC registers ArmCartJog
+PASS PLC task 1000 us
+PASS Gen has no global or axis I/O
+PASS nominal-speed trapezoidal path increment
+PASS single-axis increment cap
+PASS full-step trial, otherwise exactly 12 bisections
+PASS exact reachable annulus
+PASS axis 2 trial increment cap
+PASS axis 3 trial increment cap
+PASS axis 4 trial increment cap
+PASS ACOS cosine has only prescribed [-1,1] clamp
+PASS no accepted step preserves position
+PASS ambiguous folded/straight elbow retains prior branch; initial +1
+PASS feed velocity/acceleration are finite differences
+PASS executed path speed and limited flag
+PASS joint caps 24 mm/s, 30/30/30/30 deg/s
+PASS TCP tool offsets match kinematics.h in millimetres
+PASS yaw trial recomputes wrist from anchored TCP and cumulative yaw
+PASS yaw anchor uses the q5-dependent horizontal tool offset
+PASS yaw inverse compensates axis 4 to track requested yaw
+PASS mode 5 is no longer a single-axis jog
+PASS old margin/Jacobian/k removed; no internal finite checks
+PASS mode/direction changes stay in wrapper stage 25
+PASS drive_ready identical to home
+PASS existing Tc2_MC2 API MC_ExtSetPointGenEnable
+PASS existing Tc2_MC2 API MC_ExtSetPointGenDisable
+PASS existing Tc2_MC2 API MC_Stop
+PASS existing Tc2_MC2 API MC_ExtSetPointGenFeed
+PASS Feed only owned stages 10/25
+PASS ArmCartJog skips MC_Stop on NC error axis
+PASS ArmCartJog Disable Done/Error/axis error completes stage 40
+PASS ArmCartJog Stop Done/Error/axis error completes stage 50
+PASS ArmCartJog stage 60 waits only for Stop Busy to clear
+PASS ArmCartJog FB errors preserve first cause
+PASS ArmCartesian skips MC_Stop on NC error axis
+PASS ArmCartesian Disable Done/Error/axis error completes stage 40
+PASS ArmCartesian Stop Done/Error/axis error completes stage 50
+PASS ArmCartesian stage 60 waits only for Stop Busy to clear
+PASS ArmCartesian FB errors preserve first cause
+PASS ArmCartJogGen.TcPOU matches pre-round4 after the accepted zero/cap changes (line endings normalized)
+PASS ArmManual.TcPOU matches pre-round4 after the accepted zero/cap changes (line endings normalized)
+PASS manual reset request resumes after ownership release; MC_Reset call retained
+PASS home/manual exclude jog ownership
+PASS kinematics z=+q1 retained
+PASS base offset default zero retained
+PASS no TcUnit in PLC project; no framework added
+REVIEW target TwinCAT 3.1.4024: BOOL/INT/LREAL/fixed ARRAY, IF/FOR/WHILE/EXIT, array assignment, SIN/COS/ACOS/ATAN/SQRT/ABS/MIN
+NOT BUILT 未构建: no TwinCAT XAE/PLC compiler; static checks and ST translation do not compile or run Tc2_MC2

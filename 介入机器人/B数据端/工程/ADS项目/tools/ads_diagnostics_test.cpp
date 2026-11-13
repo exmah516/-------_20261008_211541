@@ -26,6 +26,7 @@ namespace {
     std::atomic<unsigned int> closes{0}, heartbeats{0};
     std::atomic<bool> low_started{false};
     std::atomic<std::uint32_t> cycle{10};
+    std::atomic<std::uint32_t> handoff_version{kHandoffInterfaceVersion};
     std::atomic<bool> fail_read{false}, fail_transport{false}, stall{false}, nonfinite{false};
     std::atomic<bool> fail_read_once{false};
     std::atomic<bool> network_down{false};
@@ -45,6 +46,7 @@ namespace {
     std::string fail_item;
     thread_local std::string error;
     std::vector<double> targets;
+    std::vector<std::string> writes;
     std::atomic<unsigned int> committed{0};
     const std::unordered_map<std::string, unsigned long> plc_sizes = {
 #include "ads_symbol_sizes.inc"
@@ -84,6 +86,7 @@ bool CADSComm::ADSRead(const char* name, unsigned long size, void* out) {
     validate_size(name, size);
     std::memset(out, 0, size);
     fill_velocity(name, out);
+    if (std::string(name)=="G.handoff_if_version") *static_cast<std::uint32_t*>(out)=handoff_version.load();
     if (std::string(name) == "G.self_check_done" || std::string(name) == "G.handle_reinit_done") *static_cast<bool*>(out) = true;
     return true;
 }
@@ -105,6 +108,7 @@ bool CADSComm::ADSReadSumByHandle(const unsigned long* handles, const unsigned l
         std::string s; { std::lock_guard<std::mutex> lock(symbols_mutex); s = symbols.at(handles[i]); }
         validate_size(s, sizes[i]);
         fill_velocity(s, out[i]);
+        if (s=="G.handoff_if_version") *static_cast<std::uint32_t*>(out[i])=handoff_version.load();
         if (s == "G.self_check_done" || s == "G.handle_reinit_done") *static_cast<bool*>(out[i]) = true;
         if (s.find("CycleCount") != std::string::npos) *static_cast<std::uint32_t*>(out[i]) = cycle.load();
         if (s.find("DcTaskTime") != std::string::npos) *static_cast<std::int64_t*>(out[i]) = static_cast<std::int64_t>(cycle.load()) * 10000000;
@@ -113,17 +117,20 @@ bool CADSComm::ADSReadSumByHandle(const unsigned long* handles, const unsigned l
     error.clear(); return true;
 }
 bool CADSComm::ADSWriteSumByHandle(const unsigned long* handles, const unsigned long* sizes, const void* const* in, unsigned long count, unsigned long* results, bool* transport) {
-    *transport = !fail_transport && !network_down;
-    if (!*transport) { error = "injected write timeout code=1861"; return false; }
+    const bool transport_ok = !fail_transport && !network_down;
+    if (transport) *transport = transport_ok;
+    if (!transport_ok) { error = "injected write timeout code=1861"; return false; }
     bool ok = true;
     for (unsigned long i = 0; i < count; ++i) {
         std::string s; { std::lock_guard<std::mutex> lock(symbols_mutex); s = symbols.at(handles[i]); }
         validate_size(s, sizes[i]);
-        results[i] = s == fail_item ? 1797 : 0;
-        if (results[i]) { ok = false; error = "injected item code=1797 symbol=" + s; }
-        if (s.find("TargetAbs") != std::string::npos) { assert(sizes[i] == sizeof(double)); targets.push_back(*static_cast<const double*>(in[i])); }
+        const unsigned long result = s == fail_item ? 1797 : 0;
+        if (results) results[i] = result;
+        writes.push_back(s);
+        if (result) { ok = false; error = "injected item code=1797 symbol=" + s; }
+        if (s == "G.handoff_cmd.target_abs") { assert(sizes[i] == 2*sizeof(double)); const auto v=static_cast<const double*>(in[i]); targets.assign(v,v+2); }
         if (s == "G.host_heartbeat_sequence") ++heartbeats;
-        if (s.find(".Req") != std::string::npos && *static_cast<const bool*>(in[i])) ++committed;
+        if (s == "G.handoff_cmd.request_id" && !result && *static_cast<const std::uint32_t*>(in[i])) ++committed;
     }
     if (ok) error.clear();
     return ok;
@@ -138,39 +145,37 @@ int main() {
     output.motion_enabled = true; output.cylinder_valid = true;
     output.cylinder[1] = output.cylinder[3] = 1000;
     service.publish_output(output);
-    bool processed = false;
-    check(service.write_output_cycle(processed), "normal 1000/1000 output succeeds");
-    AdsPlannedReturnCommand command{};
-    command.operation = AdsPlannedReturnOperation::Prepare; command.leg_count = 2;
-    command.legs[0] = {0, 100, 20, 4800, 4800, 70000};
-    command.legs[1] = {5, 200, 20, 4800, 4800, 70000};
-    check(service.submit_planned_return_command(command) != 0, "enqueue two-leg prepare");
-    check(service.write_output_cycle(processed) && processed && targets.size() == 2 && targets[0] == 100 && targets[1] == 200, "production prepare writes both targets");
-    command.operation = AdsPlannedReturnOperation::Commit;
-    service.submit_planned_return_command(command);
-    check(service.write_output_cycle(processed) && committed == 2, "production commit writes both requests");
-
-    command.operation = AdsPlannedReturnOperation::Prepare;
-    fail_item = "G.return_cmd[6].TargetAbs";
-    auto seq = service.submit_planned_return_command(command);
-    check(service.write_output_cycle(processed), "queue-only item failure preserves core communication");
-    bool completed = false, success = true; std::uint8_t mask = 0;
-    check(service.planned_return_command_result(seq, completed, success, mask) && completed && !success, "failed prepare cannot become successful");
-    check(std::string(service.stats().diagnostic).find(fail_item) != std::string::npos, "item error and symbol preserved");
-    fail_item = "G.host_heartbeat_sequence";
-    check(!service.write_output_cycle(processed), "heartbeat write failure invalidates core cycle");
-    check(std::string(service.stats().diagnostic).find("SUM_WRITE") == 0, "heartbeat failure classified as SUM_WRITE");
-    fail_item.clear(); fail_transport = true;
-    command.operation = AdsPlannedReturnOperation::Commit;
-    seq = service.submit_planned_return_command(command);
-    check(!service.write_output_cycle(processed), "transport timeout invalidates core cycle");
-    check(service.planned_return_command_result(seq, completed, success, mask) && completed && !success && mask == 3, "uncertain commit retains both possibly-started bits");
-    check(std::string(service.stats().diagnostic).find("planned_operation=1") != std::string::npos, "commit context retained with timeout");
-    fail_transport = false;
-    const auto failure = service.stats().diagnostic_sequence;
-    const std::string captured = service.stats().diagnostic;
-    service.write_output_cycle(processed);
-    check(error.empty() && captured == service.stats().diagnostic && service.stats().diagnostic_sequence == failure, "success cannot erase captured failure");
+    check(service.write_output_cycle(true), "normal output succeeds");
+    output.handoff.leg_mask=3; output.handoff.request_id=1; output.handoff_send_token=1;
+    output.handoff.target_abs[0]=100; output.handoff.target_abs[1]=200;
+    service.publish_output(output); writes.clear();
+    check(service.write_output_cycle(true) && targets.size()==2 && targets[0]==100 && targets[1]==200, "latched two-leg parameters written");
+    check(writes.back()=="G.handoff_cmd.request_id" && committed==1, "request id is last after all nine parameters");
+    service.write_output_cycle(true); check(committed==1, "same send token is attempted only once");
+    output.handoff_send_token=2; service.publish_output(output);
+    fail_item="G.handoff_cmd.target_abs"; writes.clear();
+    check(!service.write_output_cycle(true) && committed==1, "partial parameter failure cannot publish request id");
+    check(writes.back()!="G.handoff_cmd.request_id", "failed parameter batch stops id commit");
+    fail_item.clear(); output.handoff_send_token=3; service.publish_output(output);
+    check(service.write_output_cycle(true) && committed==2, "explicit resend writes same request again");
+    output.handoff_send_token=0; output.handoff_takeover_id=1;
+    const auto takeover_generation=service.publish_output(output);
+    fail_item="G.cyl_cmd[2]"; writes.clear();
+    check(!service.write_output_cycle(true) && std::find(writes.begin(),writes.end(),"G.handoff_takeover_id")==writes.end(), "partial cylinder failure cannot release PLC freeze");
+    check(service.applied_motion_output_generation()<takeover_generation, "failed takeover does not confirm motion generation");
+    fail_item="G.handoff_takeover_id";
+    check(!service.write_output_cycle(true) && service.applied_motion_output_generation()<takeover_generation, "failed takeover id cannot confirm output");
+    fail_item.clear(); writes.clear();
+    check(service.write_output_cycle(true) && writes.back()=="G.handoff_takeover_id" && service.applied_motion_output_generation()==takeover_generation, "takeover id last and confirmed only after full output");
+    fail_item="G.host_heartbeat_sequence";
+    check(!service.write_output_cycle(true), "heartbeat failure invalidates core cycle");
+    check(std::string(service.stats().diagnostic).find("SUM_WRITE")==0, "heartbeat failure classified as SUM_WRITE");
+    fail_item.clear(); fail_transport=true;
+    check(!service.write_output_cycle(true), "transport timeout invalidates core cycle");
+    fail_transport=false;
+    const auto failure=service.stats().diagnostic_sequence; const std::string captured=service.stats().diagnostic;
+    service.write_output_cycle(true);
+    check(error.empty() && captured==service.stats().diagnostic && service.stats().diagnostic_sequence==failure, "success cannot erase captured failure");
 
     AdsFastSnapshot snapshot{};
     service.event_state_.self_check_done = true;
@@ -233,7 +238,11 @@ int main() {
           connection_error.find("REMOTE_READ_STATE 29") != std::string::npos,
           "fallback failure cannot erase primary connection error");
     fail_local = fail_remote = false;
-    missing_symbol = "G.return_cmd[1].TargetAbs";
+    handoff_version = 2;
+    check(!service.ensure_connection(true) && service.stats().handoff_if_version == 2 && !service.fast_handles_valid_,
+          "mismatched PLC interface version prevents initialization and remains visible");
+    handoff_version = kHandoffInterfaceVersion;
+    missing_symbol = "G.handoff_cmd.target_abs";
     check(!service.ensure_connection(true) && !service.fast_handles_valid_,
           "missing return symbol prevents readiness before first return");
     check(std::string(service.stats().diagnostic).find(missing_symbol) != std::string::npos,
@@ -258,35 +267,34 @@ int main() {
         };
         check(threaded.start(nullptr,nullptr), "V3 start production fast and slow threads");
         check(wait([&]{return threaded.stats().state==AdsConnectionState::Running;},3000), "V3 first full cycle Running");
-        AdsPlannedReturnCommand queued{}; queued.operation=AdsPlannedReturnOperation::Prepare; queued.leg_count=1;
-        queued.legs[0]={0,20,5,50,50,100};
+        AdsOutputCommand queued{}; queued.handoff.leg_mask=1; queued.handoff.request_id=20;
+        std::uint64_t token=20; queued.handoff_send_token=token;
         const unsigned int single_close_before=closes.load();
         fail_read_once=true;
         check(wait([&]{return threaded.stats().state==AdsConnectionState::SoftHold;},500), "V3 exactly one failed snapshot enters SoftHold");
-        const auto single_sequence=threaded.submit_planned_return_command(queued);
+        const auto single_committed=committed.load(); threaded.publish_output(queued);
         auto single_low=std::async(std::launch::async,[&]{int value=0;return threaded.read("Test.SinglePending",sizeof(value),&value,50);});
-        bool single_done=false,single_ok=false; std::uint8_t single_mask=0;
-        check(wait([&]{threaded.planned_return_command_result(single_sequence,single_done,single_ok,single_mask);return single_done;},1000) && single_ok, "V3 single failed cycle preserves queued return");
-        check(single_low.get() && single_read_failures==1 && closes==single_close_before, "V3 one failed cycle preserves low-frequency request without CloseComm");
-        for(bool write_failure:{false,true}) for(int duration : {20,500,1200}) {
-            const unsigned int close_before=closes.load();
+        check(wait([&]{return committed>single_committed;},1000), "V3 failed cycle preserves latest handoff request");
+        check(single_low.get() && single_read_failures==1 && closes==single_close_before, "V3 one failed cycle preserves low frequency request without CloseComm");
+        for(bool write_failure:{false,true}) for(int duration:{20,500,1200}) {
+            const auto close_before=closes.load();
             if(write_failure) fail_transport=true; else fail_read=true;
             check(wait([&]{return threaded.stats().state==AdsConnectionState::SoftHold;},500), "V3 failure enters SoftHold");
-            const auto sequence=threaded.submit_planned_return_command(queued);
-            auto low=std::async(std::launch::async,[&]{ int value=0; return threaded.read("Test.Pending",sizeof(value),&value,50); });
+            const auto before_committed=committed.load();
+            queued.handoff_send_token=++token; ++queued.handoff.request_id; threaded.publish_output(queued);
+            auto low=std::async(std::launch::async,[&]{int value=0;return threaded.read("Test.Pending",sizeof(value),&value,50);});
             Sleep(duration);
-            bool done=false, ok=false; std::uint8_t started_mask=0;
-            threaded.planned_return_command_result(sequence,done,ok,started_mask);
+            check(committed==before_committed, "V3 unready communication cannot submit handoff");
             if(duration<1000) {
-                check(!done && closes==close_before, "V3 short failure preserves return queue and connection");
-                check(low.wait_for(std::chrono::milliseconds(0))==std::future_status::timeout, "V3 SoftHold preserves low-frequency queue beyond API timeout");
-            } else check(done && !ok && closes>close_before, "V3 1.2s failure closes communication and fails queue");
+                check(closes==close_before, "V3 short failure preserves connection");
+                check(low.wait_for(std::chrono::milliseconds(0))==std::future_status::timeout, "V3 SoftHold preserves low frequency queue beyond API timeout");
+            } else check(closes>close_before, "V3 1.2s failure closes communication");
             fail_read=false; fail_transport=false;
             check(wait([&]{return threaded.stats().state==AdsConnectionState::Running;},3000), "V3 complete successful cycle restores Running");
-            if(duration<1000) {
-                check(wait([&]{threaded.planned_return_command_result(sequence,done,ok,started_mask);return done;},1000) && ok, "V3 queued return succeeds after short failure");
-                check(low.get(), "V3 queued low-frequency request succeeds after short failure");
-            } else check(!low.get(), "V3 disconnected low-frequency request fails");
+            if(duration>=1000) { queued.handoff_send_token=++token; threaded.publish_output(queued); }
+            check(wait([&]{return committed>before_committed;},1000), "V3 latest handoff submitted after recovery");
+            if(duration<1000) check(low.get(), "V3 low frequency request succeeds after short failure");
+            else check(!low.get(), "V3 disconnected low frequency request fails");
         }
         low_started=false;
         auto blocking=std::async(std::launch::async,[&]{int value=0;return threaded.read("Test.Block",sizeof(value),&value);});

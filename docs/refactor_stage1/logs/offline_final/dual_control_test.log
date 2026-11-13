@@ -1,0 +1,17 @@
+dual_control_test.cpp
+PASS axis4 independent direction, merged targets, lag/speed gates, repeated handoffs and soft limits
+PASS dual-handle 2mm lead, mirror continuity, gap limits and handoff speed gate
+PASS lag, stop-input, mirror lag, passive handoff, reversal and 0.5mm/s cases
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+587 屈曲恢复按键：按下，准备进入恢复模式。
+587 屈曲恢复按键：松开，准备退出恢复模式。
+全局方向：撤出。
+PASS 13500 boundary/input combinations
+PASS 122270 assertions; production motion/windows/B6/recovery branches

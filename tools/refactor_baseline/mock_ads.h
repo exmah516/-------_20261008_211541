@@ -9,8 +9,6 @@ public:
     std::uint64_t publish_output(const AdsOutputCommand&);
     std::uint64_t applied_output_generation() const;
     std::uint64_t applied_motion_output_generation() const;
-    std::uint64_t submit_planned_return_command(const AdsPlannedReturnCommand&);
-    bool planned_return_command_result(std::uint64_t,bool&,bool&,std::uint8_t&) const;
     void request_coordinate_refresh() {}
     bool refresh_coordinates(DWORD=250) { return true; }
     std::uint64_t coordinate_refresh_generation() const { return 1; }

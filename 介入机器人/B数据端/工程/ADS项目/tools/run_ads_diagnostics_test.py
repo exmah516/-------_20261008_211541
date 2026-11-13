@@ -21,7 +21,7 @@ if test == 'handle_net_distance_test':
     source = (project / 'main.cpp').read_text(encoding='utf-8-sig')
     for name, start, end in (
         ('distance_sample', '\t\tauto handle_distance_follow_allowed', '\t\t// 9) 根据当前顶层模式'),
-        ('distance_output', '\t\tconst bool distance_follow_output', '\t\tconst std::uint64_t output_generation')):
+        ('distance_output', '\t\tconst bool distance_follow_output', '        if (planned_return.phase == HandoffPhase::Requested')):
         lo = source.index(start)
         (build / (name + '.inc')).write_text(source[lo:source.index(end, lo)], encoding='utf-8')
 if test == 'ads_diagnostics_test':

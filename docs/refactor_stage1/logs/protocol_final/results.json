@@ -1,0 +1,96 @@
+{
+  "protocol_tests_build": {
+    "exit": 0,
+    "started": "2026-11-13T13:06:59.829182",
+    "finished": "2026-11-13T13:07:03.879845",
+    "command": [
+      "cmd.exe",
+      "/d",
+      "/c",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\protocol_final\\zenoh\\protocol_tests_build.cmd"
+    ],
+    "cwd": "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\protocol_final\\zenoh"
+  },
+  "zenoh_cpp_protocol": {
+    "exit": 0,
+    "started": "2026-11-13T13:07:03.880873",
+    "finished": "2026-11-13T13:07:04.020880",
+    "command": [
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\protocol_final\\zenoh\\protocol_tests.exe",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\protocol\\fixtures\\zenoh-v1"
+    ],
+    "cwd": "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\protocol_final\\zenoh"
+  },
+  "service_tests_build": {
+    "exit": 0,
+    "started": "2026-11-13T13:07:04.022079",
+    "finished": "2026-11-13T13:07:09.937242",
+    "command": [
+      "cmd.exe",
+      "/d",
+      "/c",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\protocol_final\\zenoh\\service_tests_build.cmd"
+    ],
+    "cwd": "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\protocol_final\\zenoh"
+  },
+  "zenoh_cpp_service": {
+    "exit": 0,
+    "started": "2026-11-13T13:07:09.937924",
+    "finished": "2026-11-13T13:07:10.803086",
+    "command": [
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\protocol_final\\zenoh\\service_tests.exe"
+    ],
+    "cwd": "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\protocol_final\\zenoh"
+  },
+  "simulated_ads_build": {
+    "exit": 0,
+    "started": "2026-11-13T13:07:10.804288",
+    "finished": "2026-11-13T13:07:16.938434",
+    "command": [
+      "cmd.exe",
+      "/d",
+      "/c",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\protocol_final\\zenoh\\simulated_ads_build.cmd"
+    ],
+    "cwd": "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\protocol_final\\zenoh"
+  },
+  "zenoh_cross_language": {
+    "exit": 0,
+    "started": "2026-11-13T13:07:16.939002",
+    "finished": "2026-11-13T13:07:52.398534",
+    "command": [
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\介入机器人\\A主端\\工程\\build\\Stage1Release\\bin\\MasterConsole.Protocol.Tests\\MasterConsole.Protocol.Tests.exe",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\protocol\\fixtures\\zenoh-v1",
+      "--network",
+      "--simulator",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\protocol_final\\zenoh\\simulated_ads.exe",
+      "--router",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\zenoh\\zenohd.exe"
+    ],
+    "cwd": "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\protocol_final\\zenoh"
+  },
+  "home_chain_simulator_build": {
+    "exit": 0,
+    "started": "2026-11-13T13:07:52.399921",
+    "finished": "2026-11-13T13:08:08.286099",
+    "command": [
+      "cmd.exe",
+      "/d",
+      "/c",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\protocol_final\\zenoh\\home_chain_simulator_build.cmd"
+    ],
+    "cwd": "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\protocol_final\\zenoh"
+  },
+  "home_chain": {
+    "exit": 0,
+    "started": "2026-11-13T13:08:08.287003",
+    "finished": "2026-11-13T13:08:11.826287",
+    "command": [
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\介入机器人\\A主端\\工程\\build\\Stage1Release\\bin\\VI.Control.Tests\\VI.Control.Tests.exe",
+      "--home-chain",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\protocol_final\\zenoh\\home_chain_simulator.exe",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\zenoh\\zenohd.exe"
+    ],
+    "cwd": "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\protocol_final\\zenoh"
+  }
+}

@@ -1,0 +1,8 @@
+定位臂末端点动接口版本: 1
+E10 already_home status=3 error=0 requests=0
+ADS lease observed_ms=526
+E10 occupied status=5 error=1008 requests=0 (request and PLC ownership)
+E10 normal status=1 -> 2 error=0 curve_mode=0 requests=1
+E10 planning_failure status=5 error=1002 requests=1
+E10 plc_rejection status=5 error=2003 requests=2
+PASS ADS: single-axis tiers/deadman, atomic jog forwarding/alive despite snapshot read failure, speed and mode changes, release/lease, unhealthy gate, home mutual exclusion/regression, reset/disable/shutdown; no hardware.

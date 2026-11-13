@@ -1,0 +1,146 @@
+T1 wrist_mm=1.22932107379e-12 inverse_rad=4.61852778244e-14
+PASS T1 
+T2 line_mm=6.66133814775e-13 invariant_max=5.08888749034e-14
+PASS T2 
+T3 acc_s=1.001 stop_s=0.501 peak_mm_s2=7.49999 stop_mm=1.25
+PASS T3 
+T4 mode=1 tier=0 stop_distance=7.5 expected=7.5 limited=0
+T4 mode=1 tier=1 stop_distance=3.75 expected=3.75 limited=0
+T4 mode=1 tier=2 stop_distance=1.25 expected=1.25 limited=0
+T4 mode=2 tier=0 stop_distance=7.5 expected=7.5 limited=0
+T4 mode=2 tier=1 stop_distance=3.75 expected=3.75 limited=0
+T4 mode=2 tier=2 stop_distance=1.25 expected=1.25 limited=0
+T4 mode=3 tier=0 stop_distance=0.75 expected=0.75 limited=0
+T4 mode=3 tier=1 stop_distance=0.625 expected=0.625 limited=0
+T4 mode=3 tier=2 stop_distance=0.3125 expected=0.3125 limited=0
+T4 mode=4 tier=0 stop_distance=0.3 expected=0.3 limited=0
+T4 mode=4 tier=1 stop_distance=0.2 expected=0.2 limited=0
+T4 mode=4 tier=2 stop_distance=0.1 expected=0.1 limited=0
+T4 mode=5 tier=0 stop_distance=0.6 expected=0.6 limited=0
+T4 mode=5 tier=1 stop_distance=0.4 expected=0.4 limited=0
+T4 mode=5 tier=2 stop_distance=0.2 expected=0.2 limited=0
+PASS T4 
+T5 up_s=1.001 down_s=0.501
+PASS T5 
+T6 switch_after_s=0.5 path_speed=15
+PASS T6 Gen only; stage 25 ownership checked in ST static audit
+T11 T7 boundary_cycle=2201 B_k_minus_2=15 B_k_minus_1=15 B_k=2.64 max_B=15 previous_path_speed=3.24719396 path_speed=3.24000263824 acceleration=7.19132176 allowed=15.15 ratio=0.479421450667
+T7 minimum=3.24000263824 repressed=3.24719396 final=5
+PASS T7 
+T8 age_cycles=500 stop_mm=1.25
+PASS T8 alive-age predicate matches ArmCartJog; no error path
+T9 max_joint_deg_s=29.9999914915 radius_min_mm=369.99999997 radius_max_mm=380 outward_final_speed=0 outward_effective_elbow_deg=0.00596968894436 reverse_full_speed_s=1.501 reverse_final_speed=5
+PASS T9 
+T10 mode=3 distance=4.5 analytic_integral_error=8.52651282912e-14
+T10 mode=4 distance=1.8 analytic_integral_error=5.41788836017e-14
+PASS T10 trapezoidal step versus continuous cubic integral, tolerance 1e-4
+PASS T12 UI speed table checked separately
+Y1 config elbow=30 q5=0 dir=1 yaw_change=1.03023981801 limited=1 sigma=1.03023981801 integral_error=1.00000000058e-07
+Y1 config elbow=30 q5=0 dir=-1 yaw_change=-2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=30 q5=30 dir=1 yaw_change=1.11684527416 limited=1 sigma=1.11684527416 integral_error=1.00000000058e-07
+Y1 config elbow=30 q5=30 dir=-1 yaw_change=-2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=30 q5=-30 dir=1 yaw_change=1.11684527416 limited=1 sigma=1.11684527416 integral_error=1.00000000058e-07
+Y1 config elbow=30 q5=-30 dir=-1 yaw_change=-2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=90 q5=0 dir=1 yaw_change=2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=90 q5=0 dir=-1 yaw_change=-2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=90 q5=30 dir=1 yaw_change=2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=90 q5=30 dir=-1 yaw_change=-2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=90 q5=-30 dir=1 yaw_change=2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=90 q5=-30 dir=-1 yaw_change=-2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=150 q5=0 dir=1 yaw_change=2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=150 q5=0 dir=-1 yaw_change=-2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=150 q5=30 dir=1 yaw_change=2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=150 q5=30 dir=-1 yaw_change=-2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=150 q5=-30 dir=1 yaw_change=2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 config elbow=150 q5=-30 dir=-1 yaw_change=-2.2 limited=0 sigma=2.2 integral_error=1.99999921513e-07
+Y1 cases=18 cycles=63000 tcp_max_mm=1.3922125901e-12 z_max_mm=1.66533453694e-13 pitch_max_deg=1.27222187259e-14 psi_sigma_error_deg=3.19744231092e-14 integral_error_deg=1.99999921513e-07
+FAIL Y1 
+Y2 acc_s=1.001 stop_s=0.501 stop_deg=0.2 peak_deg_s2=1.1999984
+PASS Y2 
+Y3 elbow=30 q5=0 requested_deg_s=2.4 required_wrist_mm_s=30.0800620726 required_q2_deg_s=16.5924754406 required_q3_deg_s=35.1680388159 required_q4_deg_s=20.9755633753 limited=1 actual_yaw_speed_deg_s=0 tcp_max_mm=1.35064460289e-12
+Y3 elbow=30 q5=0 requested_deg_s=1.6 required_wrist_mm_s=20.053374715 required_q2_deg_s=11.0594975407 required_q3_deg_s=23.4408809698 required_q4_deg_s=13.9813834292 limited=1 actual_yaw_speed_deg_s=0 tcp_max_mm=1.35064460289e-12
+Y3 elbow=30 q5=0 requested_deg_s=0.8 required_wrist_mm_s=10.0266873575 required_q2_deg_s=5.52867322317 required_q3_deg_s=11.718203115 required_q4_deg_s=6.98952989185 limited=1 actual_yaw_speed_deg_s=0 tcp_max_mm=1.3922125901e-12
+Y3 elbow=30 q5=30 requested_deg_s=2.4 required_wrist_mm_s=27.7477673087 required_q2_deg_s=15.3052713068 required_q3_deg_s=32.439799692 required_q4_deg_s=19.5345283852 limited=1 actual_yaw_speed_deg_s=0 tcp_max_mm=1.3922125901e-12
+Y3 elbow=30 q5=30 requested_deg_s=1.6 required_wrist_mm_s=18.4985115391 required_q2_deg_s=10.2016810534 required_q3_deg_s=21.6227229948 required_q4_deg_s=13.0210419414 limited=1 actual_yaw_speed_deg_s=0 tcp_max_mm=1.3922125901e-12
+Y3 elbow=30 q5=30 requested_deg_s=0.8 required_wrist_mm_s=9.24925576957 required_q2_deg_s=5.09992460205 required_q3_deg_s=10.8094578046 required_q4_deg_s=6.5095332026 limited=1 actual_yaw_speed_deg_s=0 tcp_max_mm=1.3922125901e-12
+Y3 elbow=30 q5=-30 requested_deg_s=2.4 required_wrist_mm_s=27.7477673087 required_q2_deg_s=15.3052713068 required_q3_deg_s=32.439799692 required_q4_deg_s=19.5345283852 limited=1 actual_yaw_speed_deg_s=0 tcp_max_mm=1.3922125901e-12
+Y3 elbow=30 q5=-30 requested_deg_s=1.6 required_wrist_mm_s=18.4985115391 required_q2_deg_s=10.2016810534 required_q3_deg_s=21.6227229948 required_q4_deg_s=13.0210419414 limited=1 actual_yaw_speed_deg_s=0 tcp_max_mm=1.3922125901e-12
+Y3 elbow=30 q5=-30 requested_deg_s=0.8 required_wrist_mm_s=9.24925576957 required_q2_deg_s=5.09992460205 required_q3_deg_s=10.8094578046 required_q4_deg_s=6.5095332026 limited=1 actual_yaw_speed_deg_s=0 tcp_max_mm=1.3922125901e-12
+Y3 elbow=90 q5=0 requested_deg_s=2.4 required_wrist_mm_s=30.0800620726 required_q2_deg_s=5.76520378587 required_q3_deg_s=12.8822707018 required_q4_deg_s=9.51706691586 limited=0 actual_yaw_speed_deg_s=2.4 tcp_max_mm=1.3922125901e-12
+Y3 elbow=90 q5=0 requested_deg_s=1.6 required_wrist_mm_s=20.053374715 required_q2_deg_s=3.84335096784 required_q3_deg_s=8.58802042347 required_q4_deg_s=6.34466945561 limited=0 actual_yaw_speed_deg_s=1.6 tcp_max_mm=1.3922125901e-12
+Y3 elbow=90 q5=0 requested_deg_s=0.8 required_wrist_mm_s=10.0266873575 required_q2_deg_s=1.92161637467 required_q3_deg_s=4.29393019729 required_q4_deg_s=3.1723138226 limited=0 actual_yaw_speed_deg_s=0.8 tcp_max_mm=1.3922125901e-12
+Y3 elbow=90 q5=30 requested_deg_s=2.4 required_wrist_mm_s=27.7477673087 required_q2_deg_s=5.31816313201 required_q3_deg_s=11.8833764181 required_q4_deg_s=8.96521328607 limited=0 actual_yaw_speed_deg_s=2.4 tcp_max_mm=1.3922125901e-12
+Y3 elbow=90 q5=30 requested_deg_s=1.6 required_wrist_mm_s=18.4985115391 required_q2_deg_s=3.54533935656 required_q3_deg_s=7.92211476012 required_q4_deg_s=5.97677540355 limited=0 actual_yaw_speed_deg_s=1.6 tcp_max_mm=1.3922125901e-12
+Y3 elbow=90 q5=30 requested_deg_s=0.8 required_wrist_mm_s=9.24925576957 required_q2_deg_s=1.77261831414 required_q3_deg_s=3.96098929343 required_q4_deg_s=2.9883709793 limited=0 actual_yaw_speed_deg_s=0.8 tcp_max_mm=1.3922125901e-12
+Y3 elbow=90 q5=-30 requested_deg_s=2.4 required_wrist_mm_s=27.7477673087 required_q2_deg_s=5.31816313201 required_q3_deg_s=11.8833764181 required_q4_deg_s=8.96521328607 limited=0 actual_yaw_speed_deg_s=2.4 tcp_max_mm=1.3922125901e-12
+Y3 elbow=90 q5=-30 requested_deg_s=1.6 required_wrist_mm_s=18.4985115391 required_q2_deg_s=3.54533935656 required_q3_deg_s=7.92211476012 required_q4_deg_s=5.97677540355 limited=0 actual_yaw_speed_deg_s=1.6 tcp_max_mm=1.3922125901e-12
+Y3 elbow=90 q5=-30 requested_deg_s=0.8 required_wrist_mm_s=9.24925576957 required_q2_deg_s=1.77261831414 required_q3_deg_s=3.96098929343 required_q4_deg_s=2.9883709793 limited=0 actual_yaw_speed_deg_s=0.8 tcp_max_mm=1.3922125901e-12
+Y3 elbow=150 q5=0 requested_deg_s=2.4 required_wrist_mm_s=30.0800620726 required_q2_deg_s=1.16983835508 required_q3_deg_s=9.59690749744 required_q4_deg_s=10.8270691424 limited=0 actual_yaw_speed_deg_s=2.4 tcp_max_mm=1.3922125901e-12
+Y3 elbow=150 q5=0 requested_deg_s=1.6 required_wrist_mm_s=20.053374715 required_q2_deg_s=0.779568976519 required_q3_deg_s=6.39792766271 required_q4_deg_s=7.21835868617 limited=0 actual_yaw_speed_deg_s=1.6 tcp_max_mm=1.3922125901e-12
+Y3 elbow=150 q5=0 requested_deg_s=0.8 required_wrist_mm_s=10.0266873575 required_q2_deg_s=0.389622826766 required_q3_deg_s=3.19895849892 required_q4_deg_s=3.60933567217 limited=0 actual_yaw_speed_deg_s=0.8 tcp_max_mm=1.3922125901e-12
+Y3 elbow=150 q5=30 requested_deg_s=2.4 required_wrist_mm_s=27.7477673087 required_q2_deg_s=1.07905520765 required_q3_deg_s=8.85279598697 required_q4_deg_s=10.1737407793 limited=0 actual_yaw_speed_deg_s=2.4 tcp_max_mm=1.3922125901e-12
+Y3 elbow=150 q5=30 requested_deg_s=1.6 required_wrist_mm_s=18.4985115391 required_q2_deg_s=0.719089331881 required_q3_deg_s=5.90185491352 required_q4_deg_s=6.78276558165 limited=0 actual_yaw_speed_deg_s=1.6 tcp_max_mm=1.3922125901e-12
+Y3 elbow=150 q5=30 requested_deg_s=0.8 required_wrist_mm_s=9.24925576957 required_q2_deg_s=0.359404237457 required_q3_deg_s=2.95092291944 required_q4_deg_s=3.39151868201 limited=0 actual_yaw_speed_deg_s=0.8 tcp_max_mm=1.3922125901e-12
+Y3 elbow=150 q5=-30 requested_deg_s=2.4 required_wrist_mm_s=27.7477673087 required_q2_deg_s=1.07905520765 required_q3_deg_s=8.85279598697 required_q4_deg_s=10.1737407793 limited=0 actual_yaw_speed_deg_s=2.4 tcp_max_mm=1.3922125901e-12
+Y3 elbow=150 q5=-30 requested_deg_s=1.6 required_wrist_mm_s=18.4985115391 required_q2_deg_s=0.719089331881 required_q3_deg_s=5.90185491352 required_q4_deg_s=6.78276558165 limited=0 actual_yaw_speed_deg_s=1.6 tcp_max_mm=1.3922125901e-12
+Y3 elbow=150 q5=-30 requested_deg_s=0.8 required_wrist_mm_s=9.24925576957 required_q2_deg_s=0.359404237457 required_q3_deg_s=2.95092291944 required_q4_deg_s=3.39151868201 limited=0 actual_yaw_speed_deg_s=0.8 tcp_max_mm=1.3922125901e-12
+PASS Y3 cases=9x3 cycles=81000 max_joint_deg_s=29.999997
+Y4 radius_min=378.557998485 radius_max=380 boundary_limited=1 stop_cycle=5311 reverse_reach_s=1.501 reverse_peak_speed=0.8 reverse_final_speed=0.8 reverse_limited=1 max_joint_deg_s=5.2461301282 start_q=-4.73617390803,-170,315.285089431 end_wrist_r=379.049097541
+PASS Y4 boundary stop and reversal verified; JOINT_VCAP limits recovery rate when 0.8 deg/s is infeasible
+Y5 dir=1 yaw_deg=0.680371599421 final_path_speed=0.6609375 tcp_error_mm=4.57756679852e-13 limited=1 no_motion=0
+Y5 dir=-1 yaw_deg=-0 final_path_speed=0 tcp_error_mm=0 limited=1 no_motion=1
+PASS Y5 from zero q=(100,0,0,0,0)
+Y6 yaw_reanchor_cycle=2500 y_reanchor_cycle=6000 yaw_tcp_error_mm=1.05471187339e-12 stage25_model=true
+PASS Y6 
+PASS BRANCH folded/straight and multi-turn equivalents retain both previous branches
+T13 mode=1 dir=1 displacement_mm=7.5 final_path_speed=5 line_mm=3.33066907388e-13 max_joint_deg_s=1.51017115045 q3_deg=-2.26496201949 limited=0
+T13 mode=1 dir=-1 displacement_mm=7.5 final_path_speed=5 line_mm=3.33066907388e-13 max_joint_deg_s=28.9905067634 q3_deg=-2.26496201949 limited=0
+T13 mode=2 dir=1 displacement_mm=0 final_path_speed=0 line_mm=0 max_joint_deg_s=0 q3_deg=0 limited=1
+T13 mode=2 dir=-1 displacement_mm=7.2347061624 final_path_speed=5 line_mm=1.11022302463e-13 max_joint_deg_s=29.9999851624 q3_deg=-5.58450084906 limited=0
+PASS T13 program zero wrist=(0,-20 mm); Y+ is toward axis2 pivot; Gen has no error output
+T11 case=T1 path_acceleration_ratio=0.000999333333333
+T11 case=T10 path_acceleration_ratio=0.999998666667
+T11 case=T13 path_acceleration_ratio=0.999998666667
+T11 case=T2 path_acceleration_ratio=0.999998666667
+T11 case=T3 path_acceleration_ratio=0.999998666667
+T11 case=T4 path_acceleration_ratio=0.999998666667
+T11 case=T5 path_acceleration_ratio=0.999998666667
+T11 case=T6 path_acceleration_ratio=0.999998666667
+T11 case=T7 path_acceleration_ratio=0.999998666667
+T11 case=T8 path_acceleration_ratio=0.999998666667
+T11 case=T9 path_acceleration_ratio=0.999998666667
+T11 case=T9 reverse path_acceleration_ratio=0.999998666667
+T11 case=Y1 path_acceleration_ratio=0.999998666667
+T11 case=Y2 path_acceleration_ratio=0.999998666667
+T11 case=Y3 path_acceleration_ratio=0.999998666667
+T11 case=Y4 path_acceleration_ratio=0.999998666667
+T11 case=Y4 reverse path_acceleration_ratio=0.999998666667
+T11 case=Y5 path_acceleration_ratio=0.580094666667
+T11 case=Y6 path_acceleration_ratio=0.999998666667
+T11 velocity_difference=0 acceleration_difference=0 maximum_path_acceleration_ratio=0.999998666667
+T11 peak_case=T7 cycle=2701 v0=3.24 v1=5 T=1 tau=0.501 previous_nominal=4.12 nominal=4.12263999648 previous_path_speed=4.11868000176 path_speed=4.12131999824 acceleration=2.63999648 B_k_minus_2=2.64 B_k_minus_1=2.64 B_k=2.64 allowed=2.6664
+PASS T11 
+S4 case=T1 max_joint_acceleration=0.209892306202 cycle=573 axis=3 previous_velocity=0 velocity=-0.000209892306202 q3=178.940937739 limited=0
+S4 case=T13 max_joint_acceleration=1653.43577437 cycle=6001 axis=4 previous_velocity=0 velocity=1.65343577437 q3=-0.000165343577477 limited=0
+S4 case=T2 max_joint_acceleration=37.6608299177 cycle=3290 axis=3 previous_velocity=-5.26843388087 velocity=-5.23077305095 q3=-163.44675601 limited=0
+S4 case=T3 max_joint_acceleration=3.27772733044 cycle=2252 axis=2 previous_velocity=0.545338404578 velocity=0.542060677247 q3=-90.0577736662 limited=0
+S4 case=T4 max_joint_acceleration=49.6755434227 cycle=32273 axis=3 previous_velocity=-7.95327365485 velocity=-7.90359811143 q3=-114.862235916 limited=0
+S4 case=T5 max_joint_acceleration=18.9346639026 cycle=4253 axis=2 previous_velocity=4.4140676997 velocity=4.3951330358 q3=-95.2776772913 limited=0
+S4 case=T6 max_joint_acceleration=10.2848330599 cycle=2253 axis=2 previous_velocity=1.70395587125 velocity=1.69367103819 q3=-90.5202706458 limited=0
+S4 case=T7 max_joint_acceleration=3.13684279263 cycle=2200 axis=2 previous_velocity=0.713280690043 velocity=0.71014384725 q3=-90.0557761482 limited=0
+S4 case=T8 max_joint_acceleration=3.30233967816 cycle=2751 axis=2 previous_velocity=0.549413522833 velocity=0.546111183155 q3=-90.0965619803 limited=0
+S4 case=T9 max_joint_acceleration=25583.4499529 cycle=860 axis=3 previous_velocity=-25.5834499529 velocity=0 q3=-179.994030311 limited=1
+S4 case=T9 reverse max_joint_acceleration=5774.77595496 cycle=277 axis=3 previous_velocity=0 velocity=-5.77477595496 q3=-179.999805087 limited=1
+S4 case=Y1 max_joint_acceleration=24397.1238814 cycle=1982 axis=3 previous_velocity=-24.3971238814 velocity=0 q3=-179.987864453 limited=1
+S4 case=Y2 max_joint_acceleration=13.7642801832 cycle=2253 axis=3 previous_velocity=-2.28196255017 velocity=-2.26819826999 q3=-97.573139284 limited=0
+S4 case=Y3 max_joint_acceleration=24397.1238814 cycle=7982 axis=3 previous_velocity=-24.3971238814 velocity=0 q3=-179.987864453 limited=1
+S4 case=Y4 max_joint_acceleration=20070.1970806 cycle=5310 axis=3 previous_velocity=-29.5410380555 velocity=-9.4708409749 q3=-179.998306713 limited=1
+S4 case=Y4 reverse max_joint_acceleration=1545.01250529 cycle=326 axis=3 previous_velocity=0 velocity=-1.54501250529 q3=-179.999851726 limited=1
+S4 case=Y5 max_joint_acceleration=1866.46252943 cycle=1 axis=4 previous_velocity=0 velocity=1.86646252943 q3=-0.000186642808291 limited=0
+S4 case=Y6 max_joint_acceleration=14.4595871205 cycle=5753 axis=3 previous_velocity=-2.39857343988 velocity=-2.38411385276 q3=-102.35926141 limited=0
+FAIL S4 all planar/yaw cycles included; B stopped on nonmonotone specification
+PASS OFFSET 
+PASS FINITE 
+ST_EQ exact_T_and_Y_cycles=305946 max_difference=0 discrete_equal=1
+PASS ST_EQ 
+TOTAL failures=2

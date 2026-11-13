@@ -1,0 +1,207 @@
+{
+  "baseline_commit": "d2bb5fc4de8e53aad750b2a048008b52fa488453",
+  "legacy_workspace": "C:\\Users\\Sui\\AppData\\Local\\Temp\\handoff-stage0-qye_rvgt",
+  "input_change": "首次事务触发后保持手柄关节量不变，其他输入规则不变；原34场景黄金未修改",
+  "scenarios": [
+    {
+      "scenario": "follow_delivery",
+      "old_tick": 246,
+      "new_tick": 239,
+      "max_delta": 9.540979117872439e-15,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "follow_retraction",
+      "old_tick": 146,
+      "new_tick": 139,
+      "max_delta": 8.886988367429183e-15,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "handoff_axis1",
+      "old_tick": 154,
+      "new_tick": 147,
+      "max_delta": 9.4316915388859e-15,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "handoff_active",
+      "old_tick": 148,
+      "new_tick": 141,
+      "max_delta": 5.6881582777279505e-15,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "handoff_passive",
+      "old_tick": 137,
+      "new_tick": 130,
+      "max_delta": 6.621959924846266e-14,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "handoff_merge",
+      "old_tick": 135,
+      "new_tick": 128,
+      "max_delta": 1.9087379246607306e-15,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "return_axis1",
+      "old_tick": 135,
+      "new_tick": 128,
+      "max_delta": 1.9087379246607306e-15,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "return_axis6",
+      "old_tick": 137,
+      "new_tick": 130,
+      "max_delta": 1.2216247978480421e-15,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "return_both",
+      "old_tick": 135,
+      "new_tick": 128,
+      "max_delta": 1.9087379246607306e-15,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "return_retry",
+      "old_tick": 142,
+      "new_tick": 158,
+      "max_delta": 7.784571598445922e-17,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "return_retry_axis6",
+      "old_tick": 144,
+      "new_tick": 160,
+      "max_delta": 4.981908982570893e-17,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "return_retry_both",
+      "old_tick": 142,
+      "new_tick": 158,
+      "max_delta": 7.784571598445922e-17,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "return_possible",
+      "old_tick": 209,
+      "new_tick": 128,
+      "max_delta": 2.293521275675836e-15,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "return_possible_axis6",
+      "old_tick": 211,
+      "new_tick": 130,
+      "max_delta": 1.4678471112195002e-15,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "return_possible_both",
+      "old_tick": 209,
+      "new_tick": 128,
+      "max_delta": 2.293521275675836e-15,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "return_fault",
+      "old_tick": 211,
+      "new_tick": 222,
+      "max_delta": 0.0,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "return_fault_axis6",
+      "old_tick": 213,
+      "new_tick": 224,
+      "max_delta": 0.0,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "return_fault_both",
+      "old_tick": 211,
+      "new_tick": 222,
+      "max_delta": 0.0,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "return_estop",
+      "old_tick": 217,
+      "new_tick": 232,
+      "max_delta": 0.0,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "lead_hold",
+      "old_tick": 135,
+      "new_tick": 128,
+      "max_delta": 1.9087379246607306e-15,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "lead_axis6",
+      "old_tick": 135,
+      "new_tick": 128,
+      "max_delta": 1.9087379246607306e-15,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "ads_hold",
+      "old_tick": 255,
+      "new_tick": 248,
+      "max_delta": 9.540979117872439e-15,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "handle_gap_short",
+      "old_tick": 247,
+      "new_tick": 240,
+      "max_delta": 9.540979117872439e-15,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "device_epoch",
+      "old_tick": 300,
+      "new_tick": 293,
+      "max_delta": 9.547918011776346e-15,
+      "fields": 40,
+      "equal_within_tolerance": true
+    },
+    {
+      "scenario": "feedback",
+      "old_tick": 246,
+      "new_tick": 239,
+      "max_delta": 9.540979117872439e-15,
+      "fields": 40,
+      "equal_within_tolerance": true
+    }
+  ]
+}

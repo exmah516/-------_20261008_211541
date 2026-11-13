@@ -1,0 +1,32 @@
+[home mock] Zenoh: authentication token loaded.
+[home mock] 定位臂末端点动接口版本: 1
+[home mock] Zenoh: session ready at tcp/127.0.0.1:17448.
+[home mock] HOME_SIM_READY
+PASS: home chain simulator starts on loopback without hardware
+[home mock] Zenoh: authenticated client session.
+[home mock] Zenoh: remote control lease acquired.
+PASS: home chain authenticates and acquires control
+[home mock] CASE_READY 0
+PASS: home chain case 0: button enabled by real telemetry
+[home mock] HOME_DISPATCH case=0
+[home mock] HOME_COMMIT case=0 format=0 target=100,0,0,0,0
+PASS: E10 chain case 0: 归零已完成
+PASS: normal home exposes running then completion through the entire chain
+[home mock] CASE_READY 1
+PASS: home chain case 1: button enabled by real telemetry
+[home mock] HOME_DISPATCH case=1
+PASS: E10 chain case 1: 已在零位
+[home mock] CASE_READY 2
+PASS: home chain case 2: button enabled by real telemetry
+[home mock] HOME_DISPATCH case=2
+PASS: E10 chain case 2: 归零失败：1002（当前关节位置超出允许范围）
+[home mock] CASE_READY 3
+PASS: home chain case 3: button enabled by real telemetry
+[home mock] HOME_DISPATCH case=3
+[home mock] HOME_COMMIT case=3 format=0 target=100,0,0,0,0
+PASS: E10 chain case 3: 归零失败：2003（PLC 驱动、使能、心跳或急停条件未满足）
+[home mock] CASE_READY 4
+PASS: home chain case 4: button enabled by real telemetry
+[home mock] HOME_DISPATCH case=4
+PASS: E10 chain case 4: 归零失败：1008（末端点动占用，请松开点动并等待停稳）
+PASS E10: WPF click -> MainViewModel -> RemoteRobotLink -> Zenoh -> request_program_zero -> update_cartesian -> plan_arm_curve(mode0) -> mock PLC -> StateFrame -> WPF; five scenarios.

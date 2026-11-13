@@ -1,0 +1,9 @@
+S5.3 compare=pre-round4 bytes=2387200 other_bytes=2387200 first_difference=2387200
+S5.3 compare=reference bytes=2387200 other_bytes=2387200 first_difference=2387200
+PASS S5.3 normal release: 3200 cycles identical to pre-round4 ST and handwritten reference
+S5.1 release_cycle=7 cycles_after_other_axes_done=2 error=3002 error_axis_stop_execute=0
+PASS S5.1 axis 2 error, Stop error and Busy release
+S5.2 release_cycle=7 cycles_after_other_axes_done=2 error=4660 error_axis_stop_execute=0
+PASS S5.2 Disable error releases and preserves first error
+PASS first error clears on successful start
+S5 ST versus reference cycles=3232 bitwise_exact=1 max_numerical_difference=0 failures=0

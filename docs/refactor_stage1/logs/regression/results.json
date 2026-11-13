@@ -1,0 +1,13 @@
+{
+  "net_distance": {
+    "exit": 0,
+    "started": "2026-11-13T13:15:08.849639",
+    "finished": "2026-11-13T13:15:10.820886",
+    "command": [
+      "D:\\Study_software\\Anaconda\\python.exe",
+      "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\介入机器人\\B数据端\\工程\\ADS项目\\tools\\run_ads_diagnostics_test.py",
+      "handle_net_distance_test"
+    ],
+    "cwd": "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541"
+  }
+}

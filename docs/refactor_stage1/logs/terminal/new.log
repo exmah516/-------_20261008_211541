@@ -1,0 +1,3 @@
+闭环构建: C:\Users\Sui\AppData\Local\Temp\refactor-baseline-zmgzq2jk
+逐字节相等: []
+有差异: ['follow_delivery', 'follow_retraction', 'handoff_axis1', 'handoff_active', 'handoff_passive', 'handoff_merge', 'return_axis1', 'return_axis6', 'return_both', 'return_retry', 'return_retry_axis6', 'return_retry_both', 'return_possible', 'return_possible_axis6', 'return_possible_both', 'return_fault', 'return_fault_axis6', 'return_fault_both', 'return_estop', 'lead_hold', 'lead_axis6', 'ads_hold', 'handle_gap_short', 'device_epoch', 'feedback']

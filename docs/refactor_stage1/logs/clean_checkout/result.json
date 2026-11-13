@@ -1,0 +1,17 @@
+{
+  "status": "pass",
+  "workspace": "C:\\Users\\Sui\\AppData\\Local\\Temp\\handoff-clean-h7o1k5pr",
+  "exported_from_index": 146,
+  "commands": [
+    {
+      "name": "baseline",
+      "exit": 0
+    },
+    {
+      "name": "terminal",
+      "exit": 0
+    }
+  ],
+  "complete_equal_scenarios_ignoring_git_line_endings": 9,
+  "equal_ticks": 8143
+}

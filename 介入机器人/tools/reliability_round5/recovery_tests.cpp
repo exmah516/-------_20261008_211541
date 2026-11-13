@@ -9,21 +9,12 @@ static void check(bool value, const char* label)
 int main()
 {
     ReturnRecoveryConditions c;
-    c.ads_running=c.snapshot_valid=c.handle_reinit_done=c.handles_valid=true;
+    c.ads_running=c.snapshot_valid=c.handle_reinit_done=c.handles_valid=c.handoff_idle=true;
     c.snapshot_sequence=10;
     for(const char* reason : {"ACK timeout","execution timeout","PLC error","Clear queue full","estop"})
     {
         ReturnRecovery recovery; recovery.original_trigger(3); recovery.interrupted(reason);
-        check(!recovery.can_restore(c), "V1/V2 no recovery without confirmed Clear");
-        c.req[0]=true;
-        check(recovery.clear_due(0,c.req) && !recovery.clear_due(249,c.req) && recovery.clear_due(250,c.req), "V1 Clear every250ms");
-        recovery.clear_submitted(0);
-        check(recovery.clear_due(500,c.req), "V1 failed Clear enqueue is retried");
-        recovery.clear_submitted(1); recovery.clear_result(true,10);
-        c.req[0]=false; c.snapshot_sequence=10;
-        check(!recovery.can_restore(c), "V1 old snapshot cannot confirm Clear");
-        c.snapshot_sequence=11;
-        for(int gate=0;gate<10;++gate)
+        for(int gate=0;gate<9;++gate)
         {
             auto blocked=c;
             switch(gate) {
@@ -31,25 +22,24 @@ int main()
             case 2: blocked.estop=true; break; case 3: blocked.host_timeout=true; break;
             case 4: blocked.handle_reinit_done=false; break; case 5: blocked.handles_valid=false; break;
             case 6: blocked.startup_active=true; break; case 7: blocked.exclusive_task=true; break;
-            case 8: blocked.req[1]=true; break; case 9: blocked.busy[0]=true; break;
+            case 8: blocked.handoff_idle=false; break;
             }
             check(!recovery.can_restore(blocked), "V1 each required recovery gate");
         }
         check(recovery.can_restore(c), "V1/V2 recovery allowed at current position");
         recovery.restored(); check(recovery.resume_pending(), "V1/V2 resume first interruption");
         recovery.consume_resume(); check(recovery.resumes()==1 && !recovery.resume_pending(), "V1 resume exactly once");
-        recovery.interrupted("second failure"); recovery.clear_submitted(2); recovery.clear_result(true,11); c.snapshot_sequence=12;
+        recovery.interrupted("second failure");
         check(recovery.can_restore(c), "V1 second failure still restores control");
         recovery.restored(); check(!recovery.resume_pending(), "V1 second failure never auto-resumes");
         recovery.completed(); recovery.original_trigger(1); recovery.interrupted("new trigger");
-        recovery.clear_submitted(3); recovery.clear_result(true,12); c.snapshot_sequence=13;
         check(recovery.can_restore(c), "V1 next original trigger can recover");
         recovery.restored(); check(recovery.resume_pending() && recovery.resumes()==0, "V1 normal completion clears resume counter");
     }
     const auto directory=std::filesystem::current_path();
     ReturnRecovery finished;
     finished.original_trigger(1); finished.interrupted("handoff interrupted",false);
-    finished.clear_submitted(1); finished.clear_result(true,1); finished.restored();
+    finished.restored();
     check(!finished.resume_pending(), "V2 completed motion is not repeated when handoff interrupted");
     const auto path=directory/L"homing_test_record.json";
     homing::Record record; record.complete=true; record.application="RobotPLC";

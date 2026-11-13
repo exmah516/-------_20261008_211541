@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 #include "../experiment_events.h"
+#include "../handoff_types.h"
 static void record_experiment_event(ExperimentEventCode, int) {}
 enum class SpacingRecoveryPhase { Idle };
 enum class AdsConnectionState { Running = 2, Reconnecting = 4 };
@@ -23,15 +24,15 @@ static void check(bool ok, const char* label) {
 struct Fixture {
     bool self_check_done = true, last_self_check_done = true;
     bool has_new_ads_snapshot = true, ads_motion_cycle_valid = true;
-    struct { bool position_valid = true, self_check_done = true; } ads_snapshot;
-    struct { AdsConnectionState state = AdsConnectionState::Running; } ads_stats;
+    struct { bool position_valid = true, self_check_done = true; HandoffStatus handoff; } ads_snapshot;
+    struct { AdsConnectionState state = AdsConnectionState::Running; std::uint32_t handoff_if_version=kHandoffInterfaceVersion; } ads_stats;
     struct { bool self_check_done = true; } ads_events;
     bool initial_sync_done = true, control_active = true;
     bool connection_hold_active = false, connection_hold_active_prev = true, single_handle_mode = false;
     bool handle_rebase_requested = false, handle1_rebase_requested = false, handle6_rebase_requested = false;
     std::string recovery_event_text;
     struct GapHandle { int sample_gap_ms() const { return 1600; } } handle_axis1, handle_axis6;
-    bool axis1_fast_return = false, axis6_fast_retract = false;
+    bool pending_start_control = false;
     int ctx = 0;
     struct Filter {
         double axis0_filtered=0, axis1_filtered=0;

@@ -242,8 +242,8 @@ static void test_target_safety() {
     AppContext ctx{&cfg,&reverse,&mode,left,init,actual};
     const double axis5_abs=400;
     Crawl axis1_crawl{0,105,130}, axis6_crawl{0,601,633};
-    struct PlannedReturnLeg { int axis_index; double target_abs; };
-    struct { int leg_count=2; PlannedReturnLeg legs[2]={{0,105},{5,606}};
+    struct HandoffLeg { int axis_index; double target_abs; };
+    struct { int leg_count=2; HandoffLeg legs[2]={{0,105},{5,606}};
              PlannedReturnMode mode=PlannedReturnMode::Dual; } planned_return;
     auto is_within_range=[](double x,double lo,double hi,double tol) { return x>=lo-tol && x<=hi+tol; };
     auto axis6_target_exceeds_soft_limit=[&](double x) { return x>left[5]+cfg.axis6_soft_limit_from_left_mm; };
@@ -325,6 +325,7 @@ static void test_direction_and_recovery() {
     GuidewireMode guidewire_mode=GuidewireMode::None, single_handle_requested_mode=GuidewireMode::None;
     SpacingRecoveryState spacing_recovery;
     Transaction planned_return;
+    DualHandoffRequest dual_handoff;
     Config cfg;
     Crawl axis1_crawl{};
     double zeros[7]={};
@@ -623,7 +624,7 @@ static void test_pending_guards() {
         dual_handoff.axis6=true; *flag=true;
         const int before=cancel_calls;
         cancel_if_needed();
-        require(cancel_calls==before+1 && !dual_handoff.active(),"takeover clears pending handoff");
+        require(cancel_calls==before && !dual_handoff.active(),"takeover clears pending handoff");
         *flag=false;
     }
     planned_return.running=true;

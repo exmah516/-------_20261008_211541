@@ -1,0 +1,187 @@
+[通过] handle 编码与固定 Hex 逐字节一致
+[通过] handle 解码后重新编码一致
+[通过] handle 认证黄金值
+[通过] handle 认证不改变对象
+[通过] handle 篡改认证拒绝
+[通过] 设备会话号篡改使认证失效
+[通过] command 编码与固定 Hex 逐字节一致
+[通过] command 解码后重新编码一致
+[通过] command 认证黄金值
+[通过] command 认证不改变对象
+[通过] command 篡改认证拒绝
+[通过] state 编码与固定 Hex 逐字节一致
+[通过] state 解码后重新编码一致
+[通过] state 认证黄金值
+[通过] state 认证不改变对象
+[通过] state 篡改认证拒绝
+[通过] force 编码与固定 Hex 逐字节一致
+[通过] force 解码后重新编码一致
+[通过] force 认证黄金值
+[通过] force 认证不改变对象
+[通过] force 篡改认证拒绝
+[通过] command_force_zero 编码与固定 Hex 逐字节一致
+[通过] command_force_zero 解码后重新编码一致
+[通过] command_force_zero 认证黄金值
+[通过] command_force_zero 认证不改变对象
+[通过] command_force_zero 篡改认证拒绝
+[通过] command_force_hold 编码与固定 Hex 逐字节一致
+[通过] command_force_hold 解码后重新编码一致
+[通过] command_force_hold 认证黄金值
+[通过] command_force_hold 认证不改变对象
+[通过] command_force_hold 篡改认证拒绝
+[通过] command_force_catheter 编码与固定 Hex 逐字节一致
+[通过] command_force_catheter 解码后重新编码一致
+[通过] command_force_catheter 认证黄金值
+[通过] command_force_catheter 认证不改变对象
+[通过] command_force_catheter 篡改认证拒绝
+[通过] command_force_guidewire 编码与固定 Hex 逐字节一致
+[通过] command_force_guidewire 解码后重新编码一致
+[通过] command_force_guidewire 认证黄金值
+[通过] command_force_guidewire 认证不改变对象
+[通过] command_force_guidewire 篡改认证拒绝
+[通过] state_force_controls 编码与固定 Hex 逐字节一致
+[通过] state_force_controls 解码后重新编码一致
+[通过] state_force_controls 认证黄金值
+[通过] state_force_controls 认证不改变对象
+[通过] state_force_controls 篡改认证拒绝
+[通过] Hello 固定挑战字段
+[通过] Hello 字节一致
+[通过] 挑战 HMAC 黄金值
+[通过] 会话密钥黄金值
+[通过] 认证帧字节一致
+[通过] 挑战状态字节一致
+[通过] invalid_command_auth
+[通过] invalid_command_float32
+[通过] invalid_command_inf
+[通过] invalid_command_kind
+[通过] invalid_command_length
+[通过] invalid_command_nonce
+[通过] invalid_command_sequence
+[通过] invalid_command_session
+[通过] invalid_force_auth
+[通过] invalid_force_boolean
+[通过] invalid_force_inf
+[通过] invalid_force_length
+[通过] invalid_handle_auth
+[通过] invalid_handle_direction
+[通过] invalid_handle_epoch_negative
+[通过] invalid_handle_epoch_string
+[通过] invalid_handle_float64
+[通过] invalid_handle_integer_range
+[通过] invalid_handle_length
+[通过] invalid_handle_map
+[通过] invalid_handle_nan
+[通过] invalid_handle_string_tag
+[通过] invalid_handle_trailing
+[通过] invalid_state_auth
+[通过] invalid_state_length
+[通过] invalid_state_result_id
+[通过] invalid_state_results
+[通过] invalid_state_task
+[通过] invalid_state_window_float64
+[通过] invalid_state_window_nan
+[通过] 截断二进制
+[通过] 发送端拒绝非有限值
+[通过] 错误密钥拒绝
+[通过] 空密钥拒绝
+[通过] 状态超时 2s 与触觉超时 3s 独立
+[通过] 手柄触觉独立在 3000ms 过期
+[通过] 手柄构造不启动设备
+[通过] 未启动手柄可幂等停止
+[通过] 窗口边界只读映射到主端状态
+[通过] 末端点动四个字段映射到主端状态
+[通过] 归零状态与错误码映射到主端状态
+[通过] 认证有效状态建立连接并可写力
+[通过] 1999ms 状态仍新鲜
+[通过] 错误认证、重复、错误会话与版本不刷新状态
+[通过] 2000ms 立即断联锁定并清本地力
+[通过] 状态过期拒绝新申请和定位臂点动
+[通过] 状态过期时迟到力帧不输出
+[通过] 新认证状态恢复连接
+[通过] 恢复不重放连续输入
+[通过] 恢复不重放过期力帧
+[通过] 恢复后新序号力帧正常输出
+[通过] 界面按链路单调接收时间判断新鲜度
+[通过] 界面释放退订并丢弃已排队回调，不销毁共享链路
+[通过] 会话失效立即清力
+[通过] 并发测试进入力回调
+[通过] 力回调与断开并发无死锁
+[通过] 主动断开立即清力且不销毁注入手柄
+[通过] 断开后的迟到回调不复活连接或力
+[通过] 链路释放不拥有共享手柄生命周期
+[通过] 接收时刻测试进入并发回调
+[通过] 状态回调先记录单调接收时刻
+[通过] 并发状态回调完成
+[通过] 锁等待不会把 2s 前接收的状态变为新鲜
+[通过] 过期力帧先到达但等待状态恢复
+[通过] 等待的过期力帧回调结束
+[通过] 恢复状态之前到达的力帧不会越过恢复门
+[通过] 恢复状态后到达的新力帧可写
+[通过] 静止15分钟但状态持续接收不会断联或丢控制权
+[通过] 本地正速度减力
+[通过] 本地负速度增力
+[通过] 阻尼限幅及标记 50
+[通过] 阻尼限幅及标记 -50
+[通过] 阻尼限幅及标记 80
+[通过] 阻尼限幅及标记 -80
+[通过] 打印正速度和截断标记
+[通过] 打印负速度和未截断标记
+[通过] 变化率按实际间隔限于8N每秒
+[通过] 0到1.2N约150ms且不越过目标
+[通过] 最终输出限幅 10
+[通过] 最终输出限幅 -10
+[通过] 无效输出复位环境力且打印未生效
+[通过] 无效输出复位环境力且打印未生效
+[通过] 无效输出复位环境力且打印未生效
+[通过] 无效输出复位环境力且打印未生效
+[通过] 无效输出复位环境力且打印未生效
+[通过] 3秒内重新有效从零起坡
+[通过] 宿主替身启动采样 crash
+[通过] 宿主自动重启并恢复采样 crash
+[通过] 宿主重启递增设备会话 crash
+[通过] 宿主重启间隔至少1s crash
+V5替身 crash launch到双柄有效=47ms
+[通过] 网络/UI缓存操作不等待宿主 crash
+[通过] 宿主替身启动采样 stall
+[通过] 宿主自动重启并恢复采样 stall
+[通过] 宿主重启递增设备会话 stall
+[通过] 宿主重启间隔至少1s stall
+V5替身 stall launch到双柄有效=46ms
+[通过] 网络/UI缓存操作不等待宿主 stall
+[通过] 宿主替身启动采样 usb
+[通过] 拔插通知立即使两柄invalid usb
+[通过] 宿主自动重启并恢复采样 usb
+[通过] 宿主重启递增设备会话 usb
+[通过] 宿主重启间隔至少1s usb
+V5替身 usb launch到双柄有效=47ms
+[通过] 网络/UI缓存操作不等待宿主 usb
+[通过] 宿主替身启动采样 remove
+[通过] 拔插通知立即使两柄invalid remove
+[通过] 宿主自动重启并恢复采样 remove
+[通过] 宿主重启递增设备会话 remove
+[通过] 宿主重启间隔至少1s remove
+V5替身 remove launch到双柄有效=46ms
+[通过] 网络/UI缓存操作不等待宿主 remove
+[通过] V5真实宿主连接模拟SDK
+V5真实宿主采样频率=200.0Hz
+[通过] V5真实宿主200Hz采样
+[通过] V5力目标到达模拟SDK
+[通过] V5单柄SDK离线立即invalid并清力
+[通过] V5SDK状态恢复采样
+[通过] V5力新鲜时输出
+[通过] V5超过3s力目标自动清零
+[通过] V5拔出前双路非零力
+[通过] V5拔出通知同步撤销两柄采样
+[通过] V5拔出后两路力和扭矩清零
+V5拔出通知到双路清力=11.8ms
+[通过] V5真实宿主拔出通知重启恢复双柄
+V5真实宿主 remove launch到双柄有效=50.2ms
+[通过] H真实宿主重开两柄递增各自设备会话
+[通过] V5重启不补发拔出前或重启期间力
+[通过] V5真实宿主插入后重启恢复
+V5真实宿主 arrival launch到双柄有效=55.6ms
+[通过] V5 missing 只退出宿主并提示
+[通过] V5 missing 主端监管继续运行
+[通过] V5 entry 只退出宿主并提示
+[通过] V5 entry 主端监管继续运行
+C# 协议测试：通过 178，失败 0

@@ -3,7 +3,7 @@ import os
 import subprocess
 
 repo=Path(__file__).resolve().parents[2]
-out=repo/'docs/reliability_round5/recovery'
+out=repo.parent/'docs/refactor_stage1/logs/recovery_regression'
 out.mkdir(parents=True,exist_ok=True)
 vswhere=Path(os.environ['ProgramFiles(x86)'])/'Microsoft Visual Studio/Installer/vswhere.exe'
 vs=subprocess.check_output([str(vswhere),'-latest','-products','*','-requires','Microsoft.VisualStudio.Component.VC.Tools.x86.x64','-property','installationPath'],text=True).strip()

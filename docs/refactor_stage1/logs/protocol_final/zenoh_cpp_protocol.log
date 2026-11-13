@@ -1,0 +1,85 @@
+[PASS] handle serialize fixed Hex
+[PASS] handle strict decode
+[PASS] handle reserialize fixed Hex
+[PASS] handle HMAC fixed value
+[PASS] handle tampered HMAC rejected
+[PASS] Device epoch participates in authentication
+[PASS] command serialize fixed Hex
+[PASS] command strict decode
+[PASS] command reserialize fixed Hex
+[PASS] command HMAC fixed value
+[PASS] command tampered HMAC rejected
+[PASS] state serialize fixed Hex
+[PASS] state strict decode
+[PASS] state reserialize fixed Hex
+[PASS] state HMAC fixed value
+[PASS] state tampered HMAC rejected
+[PASS] force serialize fixed Hex
+[PASS] force strict decode
+[PASS] force reserialize fixed Hex
+[PASS] force HMAC fixed value
+[PASS] force tampered HMAC rejected
+[PASS] command_force_zero serialize fixed Hex
+[PASS] command_force_zero strict decode
+[PASS] command_force_zero reserialize fixed Hex
+[PASS] command_force_zero HMAC fixed value
+[PASS] command_force_zero tampered HMAC rejected
+[PASS] command_force_hold serialize fixed Hex
+[PASS] command_force_hold strict decode
+[PASS] command_force_hold reserialize fixed Hex
+[PASS] command_force_hold HMAC fixed value
+[PASS] command_force_hold tampered HMAC rejected
+[PASS] command_force_catheter serialize fixed Hex
+[PASS] command_force_catheter strict decode
+[PASS] command_force_catheter reserialize fixed Hex
+[PASS] command_force_catheter HMAC fixed value
+[PASS] command_force_catheter tampered HMAC rejected
+[PASS] command_force_guidewire serialize fixed Hex
+[PASS] command_force_guidewire strict decode
+[PASS] command_force_guidewire reserialize fixed Hex
+[PASS] command_force_guidewire HMAC fixed value
+[PASS] command_force_guidewire tampered HMAC rejected
+[PASS] state_force_controls serialize fixed Hex
+[PASS] state_force_controls strict decode
+[PASS] state_force_controls reserialize fixed Hex
+[PASS] state_force_controls HMAC fixed value
+[PASS] state_force_controls tampered HMAC rejected
+[PASS] Hello strict decode
+[PASS] Hello reserialize
+[PASS] Authenticate strict decode
+[PASS] Authenticate proof matches independent Hex
+[PASS] Authenticate reserialize
+[PASS] Challenge decode and reserialize
+[PASS] invalid_command_auth
+[PASS] invalid_command_float32
+[PASS] invalid_command_inf
+[PASS] invalid_command_kind
+[PASS] invalid_command_length
+[PASS] invalid_command_nonce
+[PASS] invalid_command_sequence
+[PASS] invalid_command_session
+[PASS] invalid_force_auth
+[PASS] invalid_force_boolean
+[PASS] invalid_force_inf
+[PASS] invalid_force_length
+[PASS] invalid_handle_auth
+[PASS] invalid_handle_direction
+[PASS] invalid_handle_epoch_negative
+[PASS] invalid_handle_epoch_string
+[PASS] invalid_handle_float64
+[PASS] invalid_handle_integer_range
+[PASS] invalid_handle_length
+[PASS] invalid_handle_map
+[PASS] invalid_handle_nan
+[PASS] invalid_handle_string_tag
+[PASS] invalid_handle_trailing
+[PASS] invalid_state_auth
+[PASS] invalid_state_length
+[PASS] invalid_state_results
+[PASS] invalid_state_result_id
+[PASS] invalid_state_task
+[PASS] invalid_state_window_float64
+[PASS] invalid_state_window_nan
+[PASS] Truncated data rejected
+[PASS] 100Hz monotonic samples preserve fields and authentication
+C++ protocol tests: passed 84, failed 0

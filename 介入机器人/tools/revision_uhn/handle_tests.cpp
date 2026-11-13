@@ -42,8 +42,7 @@ struct Replay
     CrawlState axis1_crawl, axis6_crawl;
     bool ads_soft_hold_active = false, handle_soft_hold_active = false;
     bool initial_sync_done = true, connection_hold_active_prev = false;
-    bool axis1_fast_return = false, axis6_fast_retract = false;
-    PlannedReturnCoordinator planned_return;
+    HandoffCoordinator planned_return;
     bool control_active = true, return_ads_fault_hold = false, estop_hold_active = false;
     struct { bool active() const { return false; } } spacing_recovery;
     bool ads_motion_cycle_valid = true;

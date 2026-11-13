@@ -1,0 +1,242 @@
+[通过] handle 编码与固定 Hex 逐字节一致
+[通过] handle 解码后重新编码一致
+[通过] handle 认证黄金值
+[通过] handle 认证不改变对象
+[通过] handle 篡改认证拒绝
+[通过] 设备会话号篡改使认证失效
+[通过] command 编码与固定 Hex 逐字节一致
+[通过] command 解码后重新编码一致
+[通过] command 认证黄金值
+[通过] command 认证不改变对象
+[通过] command 篡改认证拒绝
+[通过] state 编码与固定 Hex 逐字节一致
+[通过] state 解码后重新编码一致
+[通过] state 认证黄金值
+[通过] state 认证不改变对象
+[通过] state 篡改认证拒绝
+[通过] force 编码与固定 Hex 逐字节一致
+[通过] force 解码后重新编码一致
+[通过] force 认证黄金值
+[通过] force 认证不改变对象
+[通过] force 篡改认证拒绝
+[通过] command_force_zero 编码与固定 Hex 逐字节一致
+[通过] command_force_zero 解码后重新编码一致
+[通过] command_force_zero 认证黄金值
+[通过] command_force_zero 认证不改变对象
+[通过] command_force_zero 篡改认证拒绝
+[通过] command_force_hold 编码与固定 Hex 逐字节一致
+[通过] command_force_hold 解码后重新编码一致
+[通过] command_force_hold 认证黄金值
+[通过] command_force_hold 认证不改变对象
+[通过] command_force_hold 篡改认证拒绝
+[通过] command_force_catheter 编码与固定 Hex 逐字节一致
+[通过] command_force_catheter 解码后重新编码一致
+[通过] command_force_catheter 认证黄金值
+[通过] command_force_catheter 认证不改变对象
+[通过] command_force_catheter 篡改认证拒绝
+[通过] command_force_guidewire 编码与固定 Hex 逐字节一致
+[通过] command_force_guidewire 解码后重新编码一致
+[通过] command_force_guidewire 认证黄金值
+[通过] command_force_guidewire 认证不改变对象
+[通过] command_force_guidewire 篡改认证拒绝
+[通过] state_force_controls 编码与固定 Hex 逐字节一致
+[通过] state_force_controls 解码后重新编码一致
+[通过] state_force_controls 认证黄金值
+[通过] state_force_controls 认证不改变对象
+[通过] state_force_controls 篡改认证拒绝
+[通过] Hello 固定挑战字段
+[通过] Hello 字节一致
+[通过] 挑战 HMAC 黄金值
+[通过] 会话密钥黄金值
+[通过] 认证帧字节一致
+[通过] 挑战状态字节一致
+[通过] invalid_command_auth
+[通过] invalid_command_float32
+[通过] invalid_command_inf
+[通过] invalid_command_kind
+[通过] invalid_command_length
+[通过] invalid_command_nonce
+[通过] invalid_command_sequence
+[通过] invalid_command_session
+[通过] invalid_force_auth
+[通过] invalid_force_boolean
+[通过] invalid_force_inf
+[通过] invalid_force_length
+[通过] invalid_handle_auth
+[通过] invalid_handle_direction
+[通过] invalid_handle_epoch_negative
+[通过] invalid_handle_epoch_string
+[通过] invalid_handle_float64
+[通过] invalid_handle_integer_range
+[通过] invalid_handle_length
+[通过] invalid_handle_map
+[通过] invalid_handle_nan
+[通过] invalid_handle_string_tag
+[通过] invalid_handle_trailing
+[通过] invalid_state_auth
+[通过] invalid_state_length
+[通过] invalid_state_result_id
+[通过] invalid_state_results
+[通过] invalid_state_task
+[通过] invalid_state_window_float64
+[通过] invalid_state_window_nan
+[通过] 截断二进制
+[通过] 发送端拒绝非有限值
+[通过] 错误密钥拒绝
+[通过] 空密钥拒绝
+[通过] 状态超时 2s 与触觉超时 3s 独立
+[通过] 手柄触觉独立在 3000ms 过期
+[通过] 手柄构造不启动设备
+[通过] 未启动手柄可幂等停止
+[通过] 窗口边界只读映射到主端状态
+[通过] 末端点动四个字段映射到主端状态
+[通过] 归零状态与错误码映射到主端状态
+[通过] 认证有效状态建立连接并可写力
+[通过] 1999ms 状态仍新鲜
+[通过] 错误认证、重复、错误会话与版本不刷新状态
+[通过] 2000ms 立即断联锁定并清本地力
+[通过] 状态过期拒绝新申请和定位臂点动
+[通过] 状态过期时迟到力帧不输出
+[通过] 新认证状态恢复连接
+[通过] 恢复不重放连续输入
+[通过] 恢复不重放过期力帧
+[通过] 恢复后新序号力帧正常输出
+[通过] 界面按链路单调接收时间判断新鲜度
+[通过] 界面释放退订并丢弃已排队回调，不销毁共享链路
+[通过] 会话失效立即清力
+[通过] 并发测试进入力回调
+[通过] 力回调与断开并发无死锁
+[通过] 主动断开立即清力且不销毁注入手柄
+[通过] 断开后的迟到回调不复活连接或力
+[通过] 链路释放不拥有共享手柄生命周期
+[通过] 接收时刻测试进入并发回调
+[通过] 状态回调先记录单调接收时刻
+[通过] 并发状态回调完成
+[通过] 锁等待不会把 2s 前接收的状态变为新鲜
+[通过] 过期力帧先到达但等待状态恢复
+[通过] 等待的过期力帧回调结束
+[通过] 恢复状态之前到达的力帧不会越过恢复门
+[通过] 恢复状态后到达的新力帧可写
+[通过] 静止15分钟但状态持续接收不会断联或丢控制权
+[通过] 本地正速度减力
+[通过] 本地负速度增力
+[通过] 阻尼限幅及标记 50
+[通过] 阻尼限幅及标记 -50
+[通过] 阻尼限幅及标记 80
+[通过] 阻尼限幅及标记 -80
+[通过] 打印正速度和截断标记
+[通过] 打印负速度和未截断标记
+[通过] 变化率按实际间隔限于8N每秒
+[通过] 0到1.2N约150ms且不越过目标
+[通过] 最终输出限幅 10
+[通过] 最终输出限幅 -10
+[通过] 无效输出复位环境力且打印未生效
+[通过] 无效输出复位环境力且打印未生效
+[通过] 无效输出复位环境力且打印未生效
+[通过] 无效输出复位环境力且打印未生效
+[通过] 无效输出复位环境力且打印未生效
+[通过] 3秒内重新有效从零起坡
+[通过] 宿主替身启动采样 crash
+[通过] 宿主自动重启并恢复采样 crash
+[通过] 宿主重启递增设备会话 crash
+[通过] 宿主重启间隔至少1s crash
+V5替身 crash launch到双柄有效=47ms
+[通过] 网络/UI缓存操作不等待宿主 crash
+[通过] 宿主替身启动采样 stall
+[通过] 宿主自动重启并恢复采样 stall
+[通过] 宿主重启递增设备会话 stall
+[通过] 宿主重启间隔至少1s stall
+V5替身 stall launch到双柄有效=47ms
+[通过] 网络/UI缓存操作不等待宿主 stall
+[通过] 宿主替身启动采样 usb
+[通过] 拔插通知立即使两柄invalid usb
+[通过] 宿主自动重启并恢复采样 usb
+[通过] 宿主重启递增设备会话 usb
+[通过] 宿主重启间隔至少1s usb
+V5替身 usb launch到双柄有效=47ms
+[通过] 网络/UI缓存操作不等待宿主 usb
+[通过] 宿主替身启动采样 remove
+[通过] 拔插通知立即使两柄invalid remove
+[通过] 宿主自动重启并恢复采样 remove
+[通过] 宿主重启递增设备会话 remove
+[通过] 宿主重启间隔至少1s remove
+V5替身 remove launch到双柄有效=47ms
+[通过] 网络/UI缓存操作不等待宿主 remove
+[模拟] Zenoh: authentication token loaded.
+[模拟] Zenoh: session ready at tcp/127.0.0.1:17447.
+[模拟] SIM_READY
+[通过] 相同 Topic 复用与 Publisher 幂等释放
+[模拟] SIM_PAUSED
+[链路] 已打开 Zenoh 会话，等待 ADS 状态帧。
+[模拟] SIM_RESUMED
+[模拟] Zenoh: authenticated client session.
+[模拟] Zenoh: remote control lease acquired.
+[通过] 连接后立即申请控制权会等待首个有效状态帧
+[通过] 原生 Zenoh-C 与真实主端认证
+[通过] 有控制权
+[通过] 轴6位置与窗口边界通过原生数据端映射到主端
+[通过] 准备位置专用状态
+[通过] 开始控制专用状态
+[通过] 显式取零通过真实Zenoh命令/状态回执
+[通过] 单独开启导管反馈
+[通过] 单独开启导丝反馈
+[通过] 单独关闭导管反馈
+[通过] 开启与关闭保持
+[通过] 点动直接返回发送结果
+[通过] 并发发送命令的序号按发送顺序递增
+[通过] 三档点动倍率通过 MessagePack 和 Zenoh 发送，非法倍率不发送
+频率：handle=100.0Hz state=30.3Hz force=100.0Hz
+[通过] 手柄与力反馈接近 100Hz，状态接近 30Hz
+[通过] 四个 Topic 均有流量
+[通过] 单调 Echo RTT 与有效触觉帧
+[通过] 单向手柄断流不撤销已认证控制权
+[模拟] SIM_PAUSED
+[通过] 有效状态超过 2s 断联
+[模拟] SIM_RESUMED
+[通过] 短暂中断自动恢复
+[模拟] SIM_PAUSED
+[通过] 状态停止后无假在线
+[模拟] SIM_RESUMED
+[模拟] Zenoh: authenticated client session.
+[通过] 长中断后重新认证恢复
+[模拟] Zenoh: remote control lease acquired.
+[通过] 重新认证后自动恢复此前已申请的控制权
+[链路] 已打开 Zenoh 会话，等待 ADS 状态帧。
+[模拟] Zenoh: authenticated client session.
+[通过] V7关闭会话后自动重建并重新认证
+[模拟] Zenoh: remote control lease acquired.
+[通过] V7重新认证后恢复控制权申请
+[通过] 释放控制权
+[通过] 主动释放后保持无控制权
+[模拟] SIM_PAUSED
+[模拟] SIM_RESUMED
+[模拟] Zenoh: authenticated client session.
+[通过] 主动释放后重连不自动取得控制权
+[链路] 链路已断开。
+[通过] 主动断开
+[链路] 已打开 Zenoh 会话，等待 ADS 状态帧。
+[模拟] Zenoh: authenticated client session.
+[通过] 同一对象重新连接
+[链路] 链路已断开。
+[模拟] Zenoh: authenticated client session.
+[模拟] Zenoh: remote control lease acquired.
+[通过] V6新主端对象重新Hello/认证/Acquire
+[通过] V6数据端保持先前控制状态
+[通过] V6 valid=false持续6s进入断柄保持
+[通过] V6六秒断流后无需重启数据端恢复控制
+[通过] V6恢复过程中模拟器进程保持运行
+[模拟] 已接入远程手柄（物理 SN 582）。
+[模拟] 已接入远程手柄（物理 SN 587）。
+[模拟] 已接入远程手柄（物理 SN 582）。
+[模拟] 已接入远程手柄（物理 SN 587）。
+[模拟] SIM_STOPPED
+[通过] 自启路由器随数据端关闭
+[通过] 无路由器时连接有界返回
+[模拟] Zenoh: authentication token loaded.
+[模拟] Zenoh: reusing existing router at tcp/127.0.0.1:17447.
+[模拟] Zenoh: session ready at tcp/127.0.0.1:17447.
+[模拟] SIM_READY
+[通过] 数据端复用已有路由器
+[模拟] SIM_STOPPED
+[通过] 退出数据端保留外部路由器
+C# 协议测试：通过 200，失败 0

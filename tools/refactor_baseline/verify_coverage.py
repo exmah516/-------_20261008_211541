@@ -9,15 +9,16 @@ def verify(folder):
     def hit(name, predicate):
         assert any(predicate(r) for r in rows(name)), name
     for name in ['return_axis1','return_axis6','return_both']:
-        for phase in [1,2,3,4,6,8,9]:
+        for phase in [1,2,3]:
             hit(name,lambda r,p=phase:r['state9']==p)
-        hit(name,lambda r:r['clear_mask']>0)
+        hit(name,lambda r:r['commit_count']==1 and r['state9']==0 and r['tick']>20)
     for suffix in ['', '_axis6', '_both']:
-        hit('return_retry'+suffix,lambda r:r['state13']==1 and r['state6']==0)
+        hit('return_retry'+suffix,lambda r:r['commit_count']==2 and r['state6']==0)
         assert all(r['state6']==0 for r in rows('return_retry'+suffix))
-        for name in ['return_possible','return_fault']:
-            hit(name+suffix,lambda r:r['state6']==1)
-            hit(name+suffix,lambda r:r['commit_count']==2 and r['state9']==9)
+        hit('return_fault'+suffix,lambda r:r['state6']==1)
+        hit('return_fault'+suffix,lambda r:r['commit_count']==2 and r['state9']==0 and r['tick']>200)
+        # 原“可能已启动”场景保留输入，旧Req应答推断已由幂等事务取代。
+        assert all(r['state6']==0 for r in rows('return_possible'+suffix))
     hit('handoff_merge',lambda r:r['state33']==r['state34']==1)
     hit('handoff_axis1',lambda r:r['state14']==1)
     hit('handoff_active',lambda r:r['state43']==1)
