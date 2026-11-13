@@ -62,7 +62,7 @@ def summarize(lines):
 
 
 results = {}
-for revision in ('c986d50', '8f39072', 'worktree'):
+for revision in ('810bafc', '964115a', 'worktree'):
     text = source(revision, MAIN)
     rows, code, loop = declarations(text)
     command_source = source(revision, COMMANDS)

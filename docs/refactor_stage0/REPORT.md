@@ -2,7 +2,7 @@
 
 ## 0. 基线与范围
 
-- 主仓库开始前快照：6b5ac267199508ab951d5b8f8bdb8d34933d0447；嵌套仓库已有修改：77ac7ff5ba6aa9d5f688447c1878c7b3597a05ec。均为本地提交。
+- 主仓库开始前快照：b3090075e6a396b3da7531bcd05d35dcf6e48d4e；嵌套仓库已有修改：77ac7ff5ba6aa9d5f688447c1878c7b3597a05ec。均为本地提交。
 - 以当前磁盘源码为准。第一、二轮报告作为调查证据保留，不回写历史行号。
 - 未连接设备、未下载或激活 PLC、未启动生产控制程序、未推送。
 
@@ -28,7 +28,7 @@ R2-8 的51条原断言已复制到 tools/refactor_baseline/behavior_probes.cpp�
 
 运行：python tools/refactor_baseline/run.py；python tools/refactor_baseline/run_behavior_probes.py；node 介入机器人/B数据端/工程/ADS项目/tools/run_offline_tests.cjs all <日志目录>。
 
-早期 c986d50 只保存现有套件清单；本节的完整黄金提交才完成逐拍基线。早期草稿黄金已从scratch清理，未作为正式预期值提交。
+早期 810bafc 只保存现有套件清单；本节的完整黄金提交才完成逐拍基线。早期草稿黄金已从scratch清理，未作为正式预期值提交。
 
 ## 3. 逐组删除记录
 
@@ -69,16 +69,16 @@ R2-8 的51条原断言已复制到 tools/refactor_baseline/behavior_probes.cpp�
 
 ## 4. 事件记录
 
-已确认：提交45929f2使events.csv增加ads_snapshot_sequence列，session schema由8升到9；事件/原因集中在experiment_events.h。新增32个事件码，共34个；仅观察原有状态/通信结果，不改控制量。取消Clear的结果用一个仅记录序号继续观察；新增三项长驻记录状态。完整码表见事件码表.md，主端/数据端实验记录说明同步更新。
+已确认：提交fa79580使events.csv增加ads_snapshot_sequence列，session schema由8升到9；事件/原因集中在experiment_events.h。新增32个事件码，共34个；仅观察原有状态/通信结果，不改控制量。取消Clear的结果用一个仅记录序号继续观察；新增三项长驻记录状态。完整码表见事件码表.md，主端/数据端实验记录说明同步更新。
 
 最终真实主循环事件检查：36场景、293项检查、1,155条事件，全部34个码出现；从事件重建五项逐拍状态与黄金逐拍一致。34个旧黄金场景仍27,197拍逐字节相等，未改输入或黄金。真实CSV序列化/schema9/新序号列也由recording_feedback_test通过。证据：logs/timeline_final_check/event_checks.json、result.json和logs/all_final_check/recording_feedback_test.log。
 
-历史手柄/网络回放起初因旧标记和新增事件fixture字段缺失而失败。最终8717e42仅适配抽取/声明，控制断言未变，两类回放已通过；12e75c7的中间恢复操作未改生产源码。日志分别保留在logs/regression和logs/replay_final。
+历史手柄/网络回放起初因旧标记和新增事件fixture字段缺失而失败。最终66dbcf2仅适配抽取/声明，控制断言未变，两类回放已通过；ef86365的中间恢复操作未改生产源码。日志分别保留在logs/regression和logs/replay_final。
 
 ## 5. 最终验收与规模
 
 主端、宿主、数据端构建均0警告0错误；标准11测试、R2保留47断言、WPF 11621、managed协议178、C++协议84、跨语言回环200、归零链路5场景、网络6场景及第五轮恢复/ST均通过。定位臂仍有R1已列明的5项旧黄金/算法失败，不能声明全部既有测试全绿。完整表和日志见验证结果.md。
 
-同一脚本统计：main删除前5424行、删除后8f39072为3429行、加事件后3597行；main长驻可变声明165→117→120（对象/数组各计1）；内部命令含None为39→20。来源size_comparison.json及scratch/inventory.py。当前地图和声明表见B_main解剖_精简.md。
+同一脚本统计：main删除前5424行、删除后964115a为3429行、加事件后3597行；main长驻可变声明165→117→120（对象/数组各计1）；内部命令含None为39→20。来源size_comparison.json及scratch/inventory.py。当前地图和声明表见B_main解剖_精简.md。
 
 PLC编译仍未开始，两个PLC删除项暂停；状态30不可达块与旧接口保留。未下载/激活/连接设备或推送。未决事项见99_未决问题.md。本报告没有提出后续设计。
