@@ -165,18 +165,6 @@ int main()
 
 	auto read_plc_state = [&]() -> bool { return plc_io::read_plc_state(ctx); };
 	auto load_pos_from_actual = [&]() { plc_io::load_pos_from_actual(ctx); };
-	auto clear_axis_return_request = [&](const AxisReturnAdsSymbols& symbols) -> bool
-	{
-		return plc_io::clear_axis_return_request(ctx, symbols);
-	};
-	auto clear_axis_return_requests = [&](const AxisReturnAdsSymbols* const* symbols, int count) -> bool
-	{
-		return plc_io::clear_axis_return_requests(ctx, symbols, count);
-	};
-	auto clear_axis1_group_return_requests = [&]() -> bool
-	{
-		return plc_io::clear_axis1_group_return_requests(ctx);
-	};
 	// 常规导管模式的跟随基准。
 	double axis3_base_rel = 0.0;
 	double axis5_base_rel = 0.0;
@@ -205,7 +193,10 @@ int main()
 	ForceCalibrationState cal_state;
 	CrawlState axis1_crawl;
 	CrawlState axis6_crawl;
-	PlannedReturnCoordinator planned_return;
+	HandoffCoordinator planned_return;
+	std::uint32_t next_handoff_id = 0;
+	std::uint64_t next_handoff_send_token = 0;
+	bool pending_start_control = false;
 	DualHandoffRequest dual_handoff;
 	SpacingRecoveryState spacing_recovery;
 	axis1_crawl.enabled = true;
@@ -303,19 +294,13 @@ int main()
 	// 超过租约未续期即自动归零，避免通信中断后动作被锁存。
 	ULONGLONG axis4_ui_jog_deadline_ms = 0;
 	constexpr ULONGLONG manual_jog_lease_ms = 500;
-	bool axis1_fast_return = false; // 轴1快退旁路标志（写入 G.axis1_fast_return）
-	bool axis6_fast_retract = false; // 轴6快退旁路标志（写入 G.axis6_fast_retract）
-	bool return_ads_fault_hold = false; // 回退故障恢复中，PLC确认Clear并就绪后自动解除
+	bool return_ads_fault_hold = false; // PLC安全收尾并接管后，在当前位置恢复
     ReturnRecovery return_recovery;
     PlannedReturnMode interrupted_return_mode = PlannedReturnMode::None;
     PlannedReturnRebaseScope interrupted_return_scope = PlannedReturnRebaseScope::Both;
     DualHandoffRequest original_return_intent;
     bool resuming_return = false;
     std::string recovery_event_text;
-	// PLC ErrorId 可能比 Error 边沿晚一个 Notification 到达；短暂保留本次错误上下文用于补报。
-	int pending_return_error_axis = -1;
-	std::uint64_t pending_return_error_event_sequence = 0;
-	ULONGLONG pending_return_error_deadline_ms = 0;
 	ForceSampleFrame force_sample;
 	int loop_count = 0;
 	std::string force_feedback_diag_reason;
@@ -323,177 +308,7 @@ int main()
 	// 统一回退的完成、重试和取消均以同一份100 Hz快照序号判定“之后的新鲜帧”。
 	auto planned_return_phase_for_axis = [&](int axis_index) -> int
 	{
-		return planned_return.compatibility_phase_for_axis(axis_index);
-	};
-
-	auto record_return_command = [&](PlannedReturnAdsCommandPurpose purpose, ExperimentCommandResult result)
-	{
-		const auto code = purpose == PlannedReturnAdsCommandPurpose::Prepare ? ExperimentEventCode::PlannedReturnPrepare :
-			purpose == PlannedReturnAdsCommandPurpose::Commit ? ExperimentEventCode::PlannedReturnCommit : ExperimentEventCode::PlannedReturnClear;
-		record_experiment_event(code, experiment_event_value(static_cast<int>(result), static_cast<int>(purpose)));
-	};
-	auto clear_planned_return_ads_command_tracking = [&]()
-	{
-		planned_return.ads_command_purpose = PlannedReturnAdsCommandPurpose::None;
-		planned_return.ads_command_sequence = 0;
-		planned_return.ads_command_submit_ms = 0;
-	};
-	auto planned_return_active_axis_mask = [&]() -> std::uint8_t
-	{
-		std::uint8_t mask = 0;
-		for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
-		{
-			const PlannedReturnLeg& leg = planned_return.legs[leg_index];
-			if (!leg.active) continue;
-			if (leg.axis_index == 0) mask |= 0x01u;
-			else if (leg.axis_index == 5) mask |= 0x02u;
-		}
-		return mask;
-	};
-	auto latch_planned_return_possibly_started = [&](std::uint8_t mask)
-	{
-		for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
-		{
-			PlannedReturnLeg& leg = planned_return.legs[leg_index];
-			const std::uint8_t axis_mask = leg.axis_index == 0 ? 0x01u :
-				(leg.axis_index == 5 ? 0x02u : 0x00u);
-			if ((mask & axis_mask) != 0)
-			{
-				if (!leg.possibly_started) record_experiment_event(ExperimentEventCode::PlannedReturnPossiblyStarted, leg.axis_index + 1);
-				leg.possibly_started = true;
-			}
-		}
-	};
-	auto submit_planned_return_ads_command = [&](AdsPlannedReturnOperation operation,
-		PlannedReturnAdsCommandPurpose purpose,
-		bool replace_pending) -> bool
-	{
-		if (planned_return.leg_count <= 0) return false;
-		if (!replace_pending && planned_return.ads_command_sequence != 0) return false;
-
-		AdsPlannedReturnCommand command{};
-		command.operation = operation;
-		for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
-		{
-			const PlannedReturnLeg& leg = planned_return.legs[leg_index];
-			if (!leg.active || (leg.axis_index != 0 && leg.axis_index != 5)) return false;
-			AdsPlannedReturnLegCommand& command_leg = command.legs[command.leg_count++];
-			command_leg.axis_index = leg.axis_index;
-			command_leg.target_abs = leg.target_abs;
-			const bool is_axis1 = leg.axis_index == 0;
-			command_leg.velocity = is_axis1
-				? cfg.axis1_return_velocity_mm_s : cfg.axis6_return_velocity_mm_s;
-			command_leg.acc = is_axis1
-				? cfg.axis1_return_acc_mm_s2 : cfg.axis6_return_acc_mm_s2;
-			command_leg.dec = is_axis1
-				? cfg.axis1_return_dec_mm_s2 : cfg.axis6_return_dec_mm_s2;
-			command_leg.jerk = is_axis1
-				? cfg.axis1_return_jerk_mm_s3 : cfg.axis6_return_jerk_mm_s3;
-		}
-
-		const std::uint64_t sequence = ads_communication.submit_planned_return_command(command);
-		record_return_command(purpose, sequence == 0 ? ExperimentCommandResult::QueueRejected : ExperimentCommandResult::Submitted);
-		if (sequence == 0) return false;
-		planned_return.ads_command_purpose = purpose;
-		planned_return.ads_command_sequence = sequence;
-		planned_return.ads_command_submit_ms = GetTickCount64();
-		return true;
-	};
-	enum class PlannedReturnAdsPoll : unsigned char
-	{
-		Pending,
-		Success,
-		Failure
-	};
-	auto poll_planned_return_ads_command = [&]() -> PlannedReturnAdsPoll
-	{
-		if (planned_return.ads_command_sequence == 0) return PlannedReturnAdsPoll::Failure;
-		bool completed = false;
-		bool success = false;
-		std::uint8_t possibly_started_mask = 0;
-		if (!ads_communication.planned_return_command_result(
-			planned_return.ads_command_sequence,
-			completed,
-			success,
-			possibly_started_mask))
-		{
-			if (planned_return.ads_command_purpose == PlannedReturnAdsCommandPurpose::Commit)
-			{
-				// 结果槽不可判定时，不能证明Req没有到达PLC；按全部任务腿保守锁存。
-				latch_planned_return_possibly_started(planned_return_active_axis_mask());
-			}
-			record_return_command(planned_return.ads_command_purpose, ExperimentCommandResult::Unknown);
-			return PlannedReturnAdsPoll::Failure;
-		}
-		if (!completed) return PlannedReturnAdsPoll::Pending;
-		if (!success &&
-			planned_return.ads_command_purpose == PlannedReturnAdsCommandPurpose::Commit)
-		{
-			latch_planned_return_possibly_started(possibly_started_mask);
-		}
-		record_return_command(planned_return.ads_command_purpose, success ? ExperimentCommandResult::Succeeded : ExperimentCommandResult::Failed);
-		return success ? PlannedReturnAdsPoll::Success : PlannedReturnAdsPoll::Failure;
-	};
-	auto planned_return_ads_command_timed_out = [&](ULONGLONG now_ms) -> bool
-	{
-		const bool expired = planned_return.ads_command_sequence != 0 &&
-			planned_return.ads_command_submit_ms != 0 &&
-			(now_ms - planned_return.ads_command_submit_ms) >=
-			cfg.planned_return_ack_timeout_ms;
-		if (expired) record_return_command(planned_return.ads_command_purpose, ExperimentCommandResult::TimedOut);
-		return expired;
-	};
-	auto reset_planned_return = [&]()
-	{
-		if (planned_return.active()) record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::Idle));
-		planned_return.reset();
-		dual_handoff.reset();
-		axis1_fast_return = false;
-		axis6_fast_retract = false;
-	};
-	// 仅在明确接管或 PLC 故障时取消；短暂通信保持由原回退协调器继续确认和交接。
-	std::uint64_t event_cancel_clear_sequence = 0;
-	auto cancel_active_return_motion = [&](bool clear_plc_requests) -> bool
-	{
-		dual_handoff.reset();
-		const bool had_active_return = planned_return.active();
-		if (!had_active_return) return true;
-		clear_axis1_delivery_mapping(static_cast<int>(ExperimentEventReason::LeadReturn));
-
-		const PlannedReturnPhase interrupted_phase = planned_return.phase;
-		const bool handoff_clear_already_applied =
-			(interrupted_phase == PlannedReturnPhase::AwaitHandoffApplied ||
-				interrupted_phase == PlannedReturnPhase::PostHandoffClampSettle) &&
-			planned_return.handoff_generation != 0 &&
-			ads_communication.applied_motion_output_generation() >=
-			planned_return.handoff_generation;
-		if (handoff_clear_already_applied)
-		{
-			// 交接代次成功意味着本任务Req=FALSE、实际位置保持和夹爪恢复
-			// 已在同一次Sum Write中写入；取消链不得再等待一个不会发生的重复通知。
-			planned_return.completion_clear_confirmed = true;
-		}
-		const bool plc_request_can_be_active = clear_plc_requests &&
-			interrupted_phase != PlannedReturnPhase::ClampSettle &&
-			interrupted_phase != PlannedReturnPhase::PostHandoffClampSettle &&
-			!planned_return.completion_clear_confirmed;
-
-		axis1_fast_return = false;
-		axis6_fast_retract = false;
-		load_pos_from_actual();
-		clear_planned_return_ads_command_tracking();
-		bool clear_submitted = true;
-		if (plc_request_can_be_active)
-		{
-			clear_submitted = submit_planned_return_ads_command(
-				AdsPlannedReturnOperation::Clear,
-				PlannedReturnAdsCommandPurpose::CancelClear,
-				true);
-		}
-		if (planned_return.active()) record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::Idle));
-		if (clear_submitted && plc_request_can_be_active) event_cancel_clear_sequence = planned_return.ads_command_sequence;
-		planned_return.reset();
-		return clear_submitted;
+		return planned_return.public_phase_for_axis(axis_index);
 	};
 
 	auto axis6_from_left_mm = [&](double axis6_abs) -> double
@@ -654,48 +469,33 @@ int main()
 		ads_communication.drain_snapshots(drained_ads_snapshots);
 		const AdsCommunicationStats ads_stats = ads_communication.stats();
 		const AdsEventState ads_events = ads_communication.event_state();
-		if (event_cancel_clear_sequence != 0)
-		{
-			bool completed = false, success = false;
-			std::uint8_t mask = 0;
-			const bool known = ads_communication.planned_return_command_result(event_cancel_clear_sequence, completed, success, mask);
-			if (!known || completed)
-			{
-				record_return_command(PlannedReturnAdsCommandPurpose::CancelClear,
-					!known ? ExperimentCommandResult::Unknown : success ? ExperimentCommandResult::Succeeded : ExperimentCommandResult::Failed);
-				event_cancel_clear_sequence = 0;
-			}
-		}
-		if (pending_return_error_axis >= 0)
-		{
-			std::uint64_t error_id_sequence = 0;
-			std::uint32_t error_id = 0;
-			if (pending_return_error_axis == 0)
-			{
-				error_id_sequence = ads_events.axis1_return_last_nonzero_error_id_sequence;
-				error_id = ads_events.axis1_return_last_nonzero_error_id;
-			}
-			else if (pending_return_error_axis == 5)
-			{
-				error_id_sequence = ads_events.axis6_return_last_nonzero_error_id_sequence;
-				error_id = ads_events.axis6_return_last_nonzero_error_id;
-			}
-			if (error_id != 0 && error_id_sequence >= pending_return_error_event_sequence)
-			{
-				std::cout << "axis" << (pending_return_error_axis + 1)
-					<< " 计划回退最终错误码: " << error_id << std::endl;
-				pending_return_error_axis = -1;
-				pending_return_error_event_sequence = 0;
-				pending_return_error_deadline_ms = 0;
-			}
-			else if (pending_return_error_deadline_ms != 0 &&
-				GetTickCount64() >= pending_return_error_deadline_ms)
-			{
-				pending_return_error_axis = -1;
-				pending_return_error_event_sequence = 0;
-				pending_return_error_deadline_ms = 0;
-			}
-		}
+        if (has_new_ads_snapshot && ads_snapshot.position_valid && !planned_return.active() && ads_snapshot.handoff.phase != 0)
+        {
+            planned_return.phase = HandoffPhase::Running;
+            planned_return.mode = PlannedReturnMode::Dual;
+            planned_return.command.request_id = ads_snapshot.handoff.ack_id;
+            planned_return.command.leg_mask = ads_snapshot.handoff.leg_mask;
+            load_pos_from_actual();
+            axis2_hold_rel = plc_act_pos[1];
+            axis7_hold_rel = plc_act_pos[6];
+            record_experiment_event(ExperimentEventCode::HandoffAck, static_cast<int>(planned_return.command.request_id));
+            planned_return.hold_axis1_rel = plc_act_pos[0];
+            planned_return.hold_axis6_rel = plc_act_pos[5];
+            planned_return.hold_axis3_rel = plc_act_pos[2];
+            planned_return.hold_axis5_rel = plc_act_pos[4];
+            for (int slot = 0; slot < 2; ++slot) if ((planned_return.command.leg_mask & (1 << slot)) != 0)
+            {
+                auto& leg = planned_return.legs[planned_return.leg_count++];
+                leg.active = true; leg.axis_index = slot == 0 ? 0 : 5;
+                leg.entry_rel = plc_act_pos[leg.axis_index];
+            }
+            return_recovery.original_trigger(planned_return.command.leg_mask);
+            original_return_intent.axis1 = planned_return.contains_axis(0);
+            original_return_intent.axis6 = planned_return.contains_axis(5);
+            original_return_intent.reverse = dual_reverse_active;
+            interrupted_return_mode = PlannedReturnMode::Dual;
+        }
+
 		// 断线清空的是通信缓存，只有新鲜 PLC 快照才能改变已确认的自检状态。
 		const bool ads_self_check_valid = has_new_ads_snapshot && ads_snapshot.position_valid &&
 			ads_stats.state == AdsConnectionState::Running;
@@ -718,17 +518,15 @@ int main()
 				<< " return_phase=" << static_cast<int>(planned_return.phase)
 				<< " return_mode=" << static_cast<int>(planned_return.mode)
 				<< " legs=" << planned_return.leg_count << " reverse_prev1/6=" << axis1_reverse_pressed_prev << "/" << axis6_effective_reverse_prev
-				<< " clamp_stage=" << static_cast<int>(planned_return.clamp_stage) << " restore_stage=" << static_cast<int>(planned_return.restore_stage)
 				<< " snapshot_seq=" << ads_snapshot_sequence << " new_snapshot=" << has_new_ads_snapshot
 				<< " position_valid=" << ads_snapshot.position_valid << " age_us=" << ads_stats.latest_snapshot_age_us
 				<< " host_timeout=" << ads_snapshot.host_comm_timeout << "/" << ads_events.host_comm_timeout
-				<< " axis6_busy/done/error/id=" << ads_events.axis6_return_busy << "/"
-				<< ads_events.axis6_return_done << "/" << ads_events.axis6_return_error << "/" << ads_events.axis6_return_error_id;
+				<< " handoff_id/phase/result=" << ads_snapshot.handoff.ack_id << "/" << ads_snapshot.handoff.phase << "/" << ads_snapshot.handoff.result;
 			for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
 			{
 				const auto& leg = planned_return.legs[leg_index];
 				plc_estop_diagnostic << " axis=" << leg.axis_index + 1 << " target_abs=" << leg.target_abs
-					<< " started=" << leg.started << " done=" << leg.done
+					<< " txn=" << planned_return.command.request_id
 					<< " actual_abs=" << ads_snapshot.act_pos_rel[leg.axis_index] + ads_snapshot.init_pos[leg.axis_index]
 					<< " refer_abs=" << pos[leg.axis_index] + plc_init_pos[leg.axis_index];
 			}
@@ -854,13 +652,11 @@ int main()
 				for (int diagnostic_leg = 0; diagnostic_leg < planned_return.leg_count; ++diagnostic_leg)
 				{
 					const auto& leg = planned_return.legs[diagnostic_leg];
-					diagnostic << " axis=" << leg.axis_index + 1 << " target=" << leg.target_abs << " started=" << leg.started;
+					diagnostic << " axis=" << leg.axis_index + 1 << " target=" << leg.target_abs << " txn=" << planned_return.command.request_id;
 				}
-				diagnostic << " axis1_busy/error/id=" << ads_events.axis1_return_busy << "/" << ads_events.axis1_return_error
-					<< "/" << ads_events.axis1_return_error_id
-					<< " axis6_busy/error/id=" << ads_events.axis6_return_busy << "/" << ads_events.axis6_return_error
-					<< "/" << ads_events.axis6_return_error_id << "\n[ADS-DIAG] last_failure_seq=" << ads_stats.diagnostic_sequence
-					<< " failure_tick_ms=" << ads_stats.diagnostic_tick_ms << " now_tick_ms=" << loop_now_ms
+				diagnostic << " handoff_id/phase/result=" << ads_snapshot.handoff.ack_id << "/" << ads_snapshot.handoff.phase << "/" << ads_snapshot.handoff.result
+                    << "\n[ADS-DIAG] last_failure_seq=" << ads_stats.diagnostic_sequence
+                    << " failure_tick_ms=" << ads_stats.diagnostic_tick_ms << " now_tick_ms=" << loop_now_ms
 					<< " " << (ads_stats.diagnostic_sequence ? ads_stats.diagnostic : "No ADS call failure recorded; inspect readiness flags or snapshot wait") << "\n";
 				std::cout << diagnostic.str();
 				std::ofstream diagnostic_log(diagnostic_path, std::ios::app | std::ios::binary);
@@ -898,8 +694,6 @@ int main()
 			ads_soft_hold_active = !baseline_rebuilt;
 			if (baseline_rebuilt)
 			{
-				axis1_fast_return = false;
-				axis6_fast_retract = false;
                 if (recovered_ads_snapshot) recovery_event_text = "ADS 快照恢复";
                 else if (handle_rebase_requested)
                 {
@@ -955,8 +749,6 @@ int main()
 		if (connection_hold_exit_edge && !planned_return.active())
 		{
 			load_pos_from_actual();
-			axis1_fast_return = false;
-			axis6_fast_retract = false;
 			axis2_hold_rel = plc_act_pos[1];
 			axis7_hold_rel = plc_act_pos[6];
 			std::cout << "连接保持退出：source=" << recovery_event_text
@@ -966,7 +758,7 @@ int main()
 
 		if (!initial_sync_done)
 		{
-			if (ads_motion_cycle_valid && !handle_soft_hold_active)
+			if (ads_motion_cycle_valid && !handle_soft_hold_active && !planned_return.active())
 			{
 				(void)read_plc_state();
 				if (sync_all(30))
@@ -1004,10 +796,11 @@ int main()
             homing_record_pending = false;
             plc_app_name_read = false;
 			handled_plc_restart_count = ads_stats.plc_restart_count;
+            if (ads_snapshot.handoff.phase == 0) { planned_return.reset(); dual_handoff.reset(); }
 			ff.set_enabled(0, false);
 			if (spacing_recovery.phase != SpacingRecoveryPhase::Idle) record_experiment_event(ExperimentEventCode::SpacingRecoveryPhase, static_cast<int>(SpacingRecoveryPhase::Idle));
 			spacing_recovery.reset();
-			(void)cancel_active_return_motion(true);
+			if (!planned_return.active()) dual_handoff.reset();
 			if (control_active) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::PlcRestart), 0));
 			control_active = false;
 			startup.completed = false;
@@ -1130,8 +923,6 @@ int main()
 		}
 
 		++loop_count;
-		axis1_fast_return = false; // 每周期先清零，仅在快退状态机阶段置 TRUE
-		axis6_fast_retract = false; // 每周期先清零，仅在快退状态机阶段置 TRUE
 		if (return_ads_fault_hold)
 		{
 			if (control_active) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::ReturnFault), 0));
@@ -1162,7 +953,7 @@ int main()
 		bool axis1_reverse_pressed = dual_reverse_active;
 		if (spacing_recovery.active())
 		{
-			(void)cancel_active_return_motion(true);
+			if (!planned_return.active()) dual_handoff.reset();
 		}
 		bool axis6_effective_reverse_pressed = axis1_reverse_pressed;
 		if (spacing_recovery_button_press_edge)
@@ -1217,7 +1008,7 @@ int main()
 			estop_hold_active || return_ads_fault_hold ||
 			spacing_recovery.active() || (spacing_recovery.requested && !planned_return.active())))
 		{
-			(void)cancel_active_return_motion(true);
+			if (!planned_return.active()) dual_handoff.reset();
 		}
 		// 正式控制阶段：启动流程已完成，任一B6按住为全局撤出，两只均松开为递送。
 		const bool formal_control_stage = startup.completed && (startup.phase == StartupPhase::Done);
@@ -1288,15 +1079,6 @@ int main()
 				estop_hold_active = true;
 				if (control_active) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::Estop), 0));
 				control_active = false;
-                if (planned_return.active())
-                {
-                    bool unfinished = false;
-                    for (int leg = 0; leg < planned_return.leg_count; ++leg) unfinished = unfinished || !planned_return.legs[leg].done;
-                    if (!return_ads_fault_hold) record_experiment_event(ExperimentEventCode::ReturnFaultEnter, experiment_return_reason("本体急停打断回退"));
-                    return_recovery.interrupted("本体急停打断回退", unfinished);
-                    return_ads_fault_hold = true;
-                }
-				(void)cancel_active_return_motion(true);
 				clear_force_output();
 				// 完成原有停止处理后再写文件，不增加ADS请求。
 				std::cout << "PLC 急停状态：开启。" << std::endl << plc_estop_diagnostic.str();
@@ -1341,7 +1123,7 @@ int main()
 		{
 			if (last_self_check_done && !self_check_done)
 			{
-				(void)cancel_active_return_motion(true);
+				if (!planned_return.active()) dual_handoff.reset();
 				if (control_active) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::SelfCheckLost), 0));
 				control_active = false;
 				clear_force_output();
@@ -1364,14 +1146,14 @@ int main()
 				}
 				if (spacing_recovery.phase != SpacingRecoveryPhase::Idle) record_experiment_event(ExperimentEventCode::SpacingRecoveryPhase, static_cast<int>(SpacingRecoveryPhase::Idle));
 				spacing_recovery.reset();
-				(void)cancel_active_return_motion(true);
+				if (!planned_return.active()) dual_handoff.reset();
 				axis6_crawl.enabled = false;
                 const bool restored_homing = homing_restore_applied;
                 homing_restore_applied = false;
                 startup.completed = !restored_homing || control_before_plc_restart;
                 startup.phase = startup.completed ? StartupPhase::Done : StartupPhase::WaitForEnter;
 				if (coordinates_refreshed && !estop_hold_active &&
-					!ads_soft_hold_active && sync_all(30))
+					!ads_soft_hold_active && !planned_return.active() && sync_all(30))
 				{
                     if (control_active != (startup.completed && startup.phase == StartupPhase::Done)) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::SelfCheckSync), (startup.completed && startup.phase == StartupPhase::Done) ? 1 : 0));
                     control_active = startup.completed && startup.phase == StartupPhase::Done;
@@ -1436,34 +1218,13 @@ int main()
             conditions.ads_running = ads_stats.state == AdsConnectionState::Running;
             conditions.snapshot_valid = ads_motion_cycle_valid && ads_snapshot.valid;
             conditions.snapshot_sequence = ads_snapshot.attempt_sequence;
-            if (return_recovery.clear_sequence() != 0)
-            {
-                bool completed = false, success = false;
-                std::uint8_t mask = 0;
-                if (ads_communication.planned_return_command_result(return_recovery.clear_sequence(), completed, success, mask) && completed)
-                {
-                    record_experiment_event(ExperimentEventCode::PlannedReturnClear, experiment_event_value(static_cast<int>(success ? ExperimentCommandResult::Succeeded : ExperimentCommandResult::Failed), static_cast<int>(ExperimentCommandContext::FaultRecovery)));
-                    return_recovery.clear_result(success, ads_snapshot.attempt_sequence);
-                }
-            }
             conditions.estop = estop_hold_active || ads_snapshot.estop_hold_req;
             conditions.host_timeout = ads_snapshot.host_comm_timeout;
             conditions.handle_reinit_done = ads_snapshot.handle_reinit_done;
             conditions.handles_valid = !handle_soft_hold_active;
             conditions.exclusive_task = planned_return.active() || spacing_recovery.active() ||
                 spacing_recovery.requested || ads_events.axis4_manual_busy;
-            for (int slot = 0; slot < 2; ++slot)
-            { conditions.req[slot] = ads_snapshot.return_req[slot]; conditions.busy[slot] = ads_snapshot.return_busy[slot]; }
-            if (conditions.ads_running && has_new_ads_snapshot && ads_snapshot.valid && return_recovery.clear_due(GetTickCount64(), conditions.req))
-            {
-                AdsPlannedReturnCommand clear;
-                clear.operation = AdsPlannedReturnOperation::Clear;
-                for (int slot = 0; slot < 2; ++slot) if (return_recovery.mask() & (1 << slot))
-                    clear.legs[clear.leg_count++].axis_index = slot == 0 ? 0 : 5;
-                const auto clear_sequence = ads_communication.submit_planned_return_command(clear);
-                record_experiment_event(ExperimentEventCode::PlannedReturnClear, experiment_event_value(static_cast<int>(clear_sequence ? ExperimentCommandResult::Submitted : ExperimentCommandResult::QueueRejected), static_cast<int>(ExperimentCommandContext::FaultRecovery)));
-                return_recovery.clear_submitted(clear_sequence);
-            }
+            conditions.handoff_idle = ads_snapshot.handoff.phase == 0;
             if (return_recovery.can_restore(conditions) && sync_all(20))
             {
                 record_experiment_event(ExperimentEventCode::ReturnFaultCleared, static_cast<int>(ExperimentEventReason::ReturnRecovered));
@@ -1579,163 +1340,11 @@ int main()
 			const bool axis6_directional_increment_active =
 				std::abs(axis6_directional_increment_mm) > 0.0;
 
-			struct PlannedReturnEventView
-			{
-				bool busy = false;
-				bool done = false;
-				bool error = false;
-				std::uint32_t error_id = 0;
-				std::uint64_t event_sequence = 0;
-				std::uint64_t busy_true_sequence = 0;
-				std::uint64_t done_false_sequence = 0;
-				std::uint64_t done_true_sequence = 0;
-				std::uint64_t error_true_sequence = 0;
-				std::uint32_t last_nonzero_error_id = 0;
-				std::uint64_t last_nonzero_error_id_sequence = 0;
-			};
-			auto planned_return_event_view = [&](int axis_index) -> PlannedReturnEventView
-			{
-				PlannedReturnEventView view{};
-				if (axis_index == 0)
-				{
-					view.busy = ads_events.axis1_return_busy;
-					view.done = ads_events.axis1_return_done;
-					view.error = ads_events.axis1_return_error;
-					view.error_id = ads_events.axis1_return_error_id;
-					view.event_sequence = ads_events.axis1_return_event_sequence;
-					view.busy_true_sequence = ads_events.axis1_return_busy_true_sequence;
-					view.done_false_sequence = ads_events.axis1_return_done_false_sequence;
-					view.done_true_sequence = ads_events.axis1_return_done_true_sequence;
-					view.error_true_sequence = ads_events.axis1_return_error_true_sequence;
-					view.last_nonzero_error_id = ads_events.axis1_return_last_nonzero_error_id;
-					view.last_nonzero_error_id_sequence =
-						ads_events.axis1_return_last_nonzero_error_id_sequence;
-				}
-				else if (axis_index == 5)
-				{
-					view.busy = ads_events.axis6_return_busy;
-					view.done = ads_events.axis6_return_done;
-					view.error = ads_events.axis6_return_error;
-					view.error_id = ads_events.axis6_return_error_id;
-					view.event_sequence = ads_events.axis6_return_event_sequence;
-					view.busy_true_sequence = ads_events.axis6_return_busy_true_sequence;
-					view.done_false_sequence = ads_events.axis6_return_done_false_sequence;
-					view.done_true_sequence = ads_events.axis6_return_done_true_sequence;
-					view.error_true_sequence = ads_events.axis6_return_error_true_sequence;
-					view.last_nonzero_error_id = ads_events.axis6_return_last_nonzero_error_id;
-					view.last_nonzero_error_id_sequence =
-						ads_events.axis6_return_last_nonzero_error_id_sequence;
-				}
-				return view;
-			};
-
-			auto refresh_planned_return_leg = [&](PlannedReturnLeg& leg)
-			{
-				// 初始化/prepare阶段的Done=FALSE属于历史初值，只有本次commit已捕获
-				// 事件基线后，才允许把后续Busy/Done/Error边沿解释为本任务状态。
-				if (!leg.active || !leg.request_armed) return;
-				const bool was_acknowledged = leg.acknowledged, was_done = leg.done;
-				const PlannedReturnEventView events = planned_return_event_view(leg.axis_index);
-				std::uint64_t first_ack_sequence = 0;
-				if (events.busy_true_sequence > leg.request_event_sequence)
-				{
-					first_ack_sequence = events.busy_true_sequence;
-				}
-				if (events.done_false_sequence > leg.request_event_sequence &&
-					(first_ack_sequence == 0 || events.done_false_sequence < first_ack_sequence))
-				{
-					first_ack_sequence = events.done_false_sequence;
-				}
-				if (!leg.acknowledged && first_ack_sequence != 0)
-				{
-					leg.acknowledged = true;
-					leg.started = true;
-					leg.ack_event_sequence = first_ack_sequence;
-					if (planned_return.execution_t0_ms == 0)
-					{
-						planned_return.execution_t0_ms = now_ms;
-					}
-				}
-				// 重连可能错过 Busy 边沿；本次请求后的 Done 和实际到位可直接确认已完成。
-				if (!leg.acknowledged && events.done_true_sequence > leg.request_event_sequence &&
-					events.done && !events.busy && !events.error && ads_motion_cycle_valid &&
-					std::abs(plc_act_pos[leg.axis_index] + plc_init_pos[leg.axis_index] - leg.target_abs) <= cfg.crawl_arrive_tol_mm)
-				{
-					leg.acknowledged = true;
-					leg.started = true;
-					leg.done = true;
-					leg.ack_event_sequence = events.done_true_sequence;
-				}
-
-				if (events.error_true_sequence > leg.request_event_sequence)
-				{
-					leg.error_event_sequence = events.error_true_sequence;
-					if (events.last_nonzero_error_id_sequence > leg.request_event_sequence)
-					{
-						leg.reported_error_id = events.last_nonzero_error_id;
-					}
-					else
-					{
-						leg.reported_error_id = events.error_id;
-					}
-				}
-
-				const bool completed_cycle = leg.acknowledged &&
-					events.done_true_sequence > leg.ack_event_sequence &&
-					events.done && !events.busy;
-				if (completed_cycle)
-				{
-					leg.done = true;
-				}
-				if (!was_acknowledged && leg.acknowledged) record_experiment_event(ExperimentEventCode::PlannedReturnAck, leg.axis_index + 1);
-				if (!was_done && leg.done) record_experiment_event(ExperimentEventCode::PlannedReturnDone, leg.axis_index + 1);
-			};
-
-			auto planned_return_any_started = [&]() -> bool
-			{
-				for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
-				{
-					const PlannedReturnLeg& leg = planned_return.legs[leg_index];
-					if (leg.started || leg.possibly_started) return true;
-				}
-				return false;
-			};
-
-			auto planned_return_all_acknowledged = [&]() -> bool
-			{
-				if (planned_return.leg_count <= 0) return false;
-				for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
-				{
-					if (!planned_return.legs[leg_index].acknowledged) return false;
-				}
-				return true;
-			};
-
-			auto planned_return_all_done = [&]() -> bool
-			{
-				if (planned_return.leg_count <= 0) return false;
-				for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
-				{
-					if (!planned_return.legs[leg_index].done) return false;
-				}
-				return true;
-			};
-
-			auto planned_return_has_error = [&]() -> const PlannedReturnLeg*
-			{
-				for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
-				{
-					const PlannedReturnLeg& leg = planned_return.legs[leg_index];
-					if (leg.error_event_sequence > leg.request_event_sequence) return &leg;
-				}
-				return nullptr;
-			};
-
 			auto planned_return_targets_safe = [&]() -> bool
 			{
 				for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
 				{
-					const PlannedReturnLeg& leg = planned_return.legs[leg_index];
+					const HandoffLeg& leg = planned_return.legs[leg_index];
 					if (leg.axis_index == 0)
 					{
 						if (!is_within_range(
@@ -1773,50 +1382,6 @@ int main()
 				return true;
 			};
 
-			auto rebase_planned_return = [&]() -> bool
-			{
-				const bool rebased = motion_sync::rebase_dual_after_return(ctx);
-				record_experiment_event(ExperimentEventCode::PlannedReturnRebase,
-					experiment_event_value(static_cast<int>(planned_return.phase == PlannedReturnPhase::AwaitFreshSnapshot ?
-						ExperimentEventReason::RebaseBeforeHandoff : ExperimentEventReason::RebaseAfterHandoff), rebased ? 1 : 0));
-				return rebased;
-			};
-
-			auto fail_planned_return = [&](const char* reason,
-				const PlannedReturnLeg* failed_leg,
-				bool attempt_request_clear)
-			{
-				(void)attempt_request_clear;
-                record_experiment_event(ExperimentEventCode::PlannedReturnFailed, experiment_return_reason(reason));
-                if (!return_ads_fault_hold) record_experiment_event(ExperimentEventCode::ReturnFaultEnter, experiment_return_reason(reason));
-                return_recovery.interrupted(reason, !planned_return_all_done());
-				return_ads_fault_hold = true;
-				if (control_active) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::ReturnFault), 0));
-				control_active = false;
-				clear_force_output();
-				std::cout << reason;
-				if (failed_leg != nullptr && failed_leg->reported_error_id != 0)
-				{
-					record_experiment_event(ExperimentEventCode::PlannedReturnPlcError, static_cast<int>(failed_leg->reported_error_id));
-					std::cout << "，错误码: " << failed_leg->reported_error_id;
-					pending_return_error_axis = -1;
-					pending_return_error_event_sequence = 0;
-					pending_return_error_deadline_ms = 0;
-				}
-				else if (failed_leg != nullptr &&
-					failed_leg->error_event_sequence > failed_leg->request_event_sequence)
-				{
-					pending_return_error_axis = failed_leg->axis_index;
-					pending_return_error_event_sequence = failed_leg->error_event_sequence;
-					pending_return_error_deadline_ms = GetTickCount64() + 2000;
-					std::cout << "，错误码等待PLC后续Notification";
-				}
-				std::cout << "。已停止上位机运动控制，并异步清Req、等待PLC受控停稳。"
-					<< std::endl;
-				// 真实 PLC 运动或握手故障仍走原有取消路径。
-				(void)cancel_active_return_motion(true);
-			};
-
 		auto begin_planned_return = [&](PlannedReturnMode mode,
 				PlannedReturnRebaseScope rebase_scope,
 				bool axis1_active,
@@ -1828,19 +1393,17 @@ int main()
 				if (planned_return.active()) return false;
 				planned_return.reset();
 				planned_return.mode = mode;
-				planned_return.rebase_scope = rebase_scope;
-				planned_return.phase = PlannedReturnPhase::ClampSettle;
-				record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::ClampSettle));
+				(void)rebase_scope;
+				planned_return.phase = HandoffPhase::Requested;
 				// 双手柄仅轴6换手时保留轴1先行进度，待恢复Follow继续。
 				if (axis1_active) clear_axis1_delivery_mapping(static_cast<int>(ExperimentEventReason::LeadReturn));
-				planned_return.phase_t0_ms = 0;
 				planned_return.hold_axis3_rel = plc_act_pos[2];
 				planned_return.hold_axis5_rel = plc_act_pos[4];
 				planned_return.hold_axis1_rel = plc_act_pos[0];
 				planned_return.hold_axis6_rel = plc_act_pos[5];
 				if (axis1_active)
 				{
-					PlannedReturnLeg& leg = planned_return.legs[planned_return.leg_count++];
+					HandoffLeg& leg = planned_return.legs[planned_return.leg_count++];
 					leg.active = true;
 					leg.axis_index = 0;
 					leg.target_abs = axis1_target_abs;
@@ -1848,7 +1411,7 @@ int main()
 				}
 				if (axis6_active)
 				{
-					PlannedReturnLeg& leg = planned_return.legs[planned_return.leg_count++];
+					HandoffLeg& leg = planned_return.legs[planned_return.leg_count++];
 					leg.active = true;
 					leg.axis_index = 5;
 					leg.target_abs = axis6_target_abs;
@@ -1856,7 +1419,6 @@ int main()
 				}
 				if (planned_return.leg_count <= 0 || !planned_return_targets_safe())
 				{
-					if (planned_return.active()) record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::Idle));
 					planned_return.reset();
 					return false;
 				}
@@ -1875,564 +1437,28 @@ int main()
 					2, ff.smooth_582.force, ff.smooth_582.torque);
 				record_experiment_event(ExperimentEventCode::PlannedReturnEnter, (axis1_active ? 1 : 0) | (axis6_active ? 2 : 0));
 				clear_cylinder_manual_overrides();
+                auto& cmd = planned_return.command;
+                cmd.leg_mask = static_cast<std::uint8_t>((axis1_active ? 1 : 0) | (axis6_active ? 2 : 0));
+                next_handoff_id = (std::max)(next_handoff_id, ads_snapshot.handoff.ack_id) + 1;
+                if (next_handoff_id == 0) ++next_handoff_id;
+                cmd.request_id = next_handoff_id;
+                cmd.target_abs[0] = axis1_target_abs; cmd.target_abs[1] = axis6_target_abs;
+                cmd.velocity[0] = cfg.axis1_return_velocity_mm_s; cmd.velocity[1] = cfg.axis6_return_velocity_mm_s;
+                cmd.acc[0] = cfg.axis1_return_acc_mm_s2; cmd.acc[1] = cfg.axis6_return_acc_mm_s2;
+                cmd.dec[0] = cfg.axis1_return_dec_mm_s2; cmd.dec[1] = cfg.axis6_return_dec_mm_s2;
+                cmd.jerk[0] = cfg.axis1_return_jerk_mm_s3; cmd.jerk[1] = cfg.axis6_return_jerk_mm_s3;
+                const unsigned short clamps[] = { cyl.cyl1_clamp, cyl.cyl2_clamp, cyl.cyl3_clamp, cyl.cyl4_clamp };
+                const unsigned short opens[] = { cyl.cyl1_open, cyl.cyl2_open, cyl.cyl3_open, cyl.cyl4_open };
+                for (int i = 0; i < 4; ++i) { cmd.cyl_clamp[i] = clamps[i]; cmd.cyl_open[i] = opens[i]; }
+                const DWORD waits[2][4] = {
+                    { cfg.cyl1_clamp_wait_ms, cfg.cyl2_release_wait_ms, cfg.cyl2_clamp_wait_ms, cfg.cyl1_release_wait_ms },
+                    { cfg.cyl3_clamp_wait_ms, cfg.cyl4_release_wait_ms, cfg.cyl4_clamp_wait_ms, cfg.cyl3_release_wait_ms }
+                };
+                for (int i = 0; i < 2; ++i) for (int j = 0; j < 4; ++j) cmd.wait_ms[i][j] = static_cast<std::uint16_t>(waits[i][j]);
+                planned_return.request_t0_ms = planned_return.last_send_ms = GetTickCount64();
+                planned_return.send_token = ++next_handoff_send_token;
+                record_experiment_event(ExperimentEventCode::HandoffRequest, static_cast<int>(cmd.request_id));
 				return true;
-			};
-
-			auto planned_return_settle_wait_ms = [&](bool restoring, unsigned char stage) -> DWORD
-			{
-				DWORD wait_ms = 0;
-				if (!restoring && stage == 0)
-				{
-					if (planned_return.contains_axis(0))
-						wait_ms = (std::max)(wait_ms, cfg.cyl1_clamp_wait_ms);
-					if (planned_return.contains_axis(5))
-						wait_ms = (std::max)(wait_ms, cfg.cyl3_clamp_wait_ms);
-				}
-				else if (!restoring)
-				{
-					if (planned_return.contains_axis(0))
-						wait_ms = (std::max)(wait_ms, cfg.cyl2_release_wait_ms);
-					if (planned_return.contains_axis(5))
-						wait_ms = (std::max)(wait_ms, cfg.cyl4_release_wait_ms);
-				}
-				else if (stage == 0)
-				{
-					if (planned_return.contains_axis(0))
-						wait_ms = (std::max)(wait_ms, cfg.cyl2_clamp_wait_ms);
-					if (planned_return.contains_axis(5))
-						wait_ms = (std::max)(wait_ms, cfg.cyl4_clamp_wait_ms);
-				}
-				else
-				{
-					if (planned_return.contains_axis(0))
-						wait_ms = (std::max)(wait_ms, cfg.cyl1_release_wait_ms);
-					if (planned_return.contains_axis(5))
-						wait_ms = (std::max)(wait_ms, cfg.cyl3_release_wait_ms);
-				}
-				return wait_ms;
-			};
-
-			auto apply_planned_return_outputs = [&]()
-			{
-				const bool axis1_leg_active = planned_return.contains_axis(0);
-				const bool axis6_leg_active = planned_return.contains_axis(5);
-				const bool restore_clamps =
-					planned_return.phase == PlannedReturnPhase::AwaitFreshSnapshot ||
-					planned_return.phase == PlannedReturnPhase::PublishHandoff ||
-					planned_return.phase == PlannedReturnPhase::AwaitHandoffApplied ||
-					planned_return.phase == PlannedReturnPhase::PostHandoffClampSettle;
-				const bool request_may_start =
-					planned_return.phase == PlannedReturnPhase::AwaitAccepted ||
-					planned_return.phase == PlannedReturnPhase::AwaitDone ||
-					(planned_return.phase == PlannedReturnPhase::SubmitRequest &&
-						planned_return.request_prepared) ||
-					planned_return.ads_command_purpose == PlannedReturnAdsCommandPurpose::Commit;
-
-				axis1_fast_return = false;
-				axis6_fast_retract = false;
-				if (axis1_leg_active)
-				{
-					const PlannedReturnLeg& leg = planned_return.legs[0];
-					const bool move_active = leg.started && !restore_clamps;
-					pos[0] = restore_clamps
-						? plc_act_pos[0]
-						: (move_active ? (leg.target_abs - plc_init_pos[0]) : leg.entry_rel);
-					pos[1] = axis2_hold_rel;
-					pos[2] = planned_return.hold_axis3_rel;
-					pos[4] = planned_return.hold_axis5_rel;
-					axis1_fast_return = move_active || request_may_start ||
-						planned_return.phase == PlannedReturnPhase::AwaitFreshSnapshot;
-					// 持有者cyl1先夹、移动者cyl2后松；回程移动者cyl2先夹、持有者cyl1后松。
-					cylinder1_cmd = (restore_clamps && planned_return.restore_stage >= 1)
-						? cyl.cyl1_open : cyl.cyl1_clamp;
-					cylinder2_cmd = (!restore_clamps && planned_return.clamp_stage >= 1)
-						? cyl.cyl2_open : cyl.cyl2_clamp;
-				}
-
-				if (axis6_leg_active)
-				{
-					const PlannedReturnLeg& leg = planned_return.legs[axis1_leg_active ? 1 : 0];
-					const bool move_active = leg.started && !restore_clamps;
-					pos[5] = restore_clamps
-						? plc_act_pos[5]
-						: (move_active ? (leg.target_abs - plc_init_pos[5]) : leg.entry_rel);
-					pos[6] = axis7_hold_rel;
-					axis6_fast_retract = move_active || request_may_start ||
-						planned_return.phase == PlannedReturnPhase::AwaitFreshSnapshot;
-					// 持有者cyl3(axis5机构)先夹、移动者cyl4(axis6机构)后松；回程对称。
-					cylinder3_cmd = (restore_clamps && planned_return.restore_stage >= 1)
-						? cyl.cyl3_open : cyl.cyl3_clamp;
-					cylinder4_cmd = (!restore_clamps && planned_return.clamp_stage >= 1)
-						? cyl.cyl4_open : cyl.cyl4_clamp;
-				}
-
-				if (!axis1_leg_active)
-				{
-					pos[0] = planned_return.hold_axis1_rel;
-					pos[1] = axis2_hold_rel;
-					pos[2] = planned_return.hold_axis3_rel;
-					pos[4] = planned_return.hold_axis5_rel;
-					cylinder1_cmd = cyl.cyl1_open;
-					cylinder2_cmd = cyl.cyl2_clamp;
-				}
-				if (!axis6_leg_active)
-				{
-					pos[5] = planned_return.hold_axis6_rel;
-					pos[6] = axis7_hold_rel;
-					cylinder3_cmd = cyl.cyl3_open;
-					cylinder4_cmd = cyl.cyl4_clamp;
-				}
-			};
-
-			auto enter_planned_return_retry = [&](const char* reason)
-			{
-				for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
-				{
-					refresh_planned_return_leg(planned_return.legs[leg_index]);
-				}
-				if (planned_return.retry_count >= 1 || planned_return_any_started())
-				{
-					fail_planned_return(reason, planned_return_has_error(), true);
-					return;
-				}
-				planned_return.request_prepared = false;
-				planned_return.commit_guard_generation = 0;
-				axis1_fast_return = false;
-				axis6_fast_retract = false;
-				planned_return.phase = PlannedReturnPhase::RetryClear;
-				record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::RetryClear));
-				planned_return.retry_clear_t0_ms = now_ms;
-				planned_return.retry_clear_issued = false;
-				planned_return.retry_clear_snapshot_sequence = ads_snapshot_sequence;
-				record_experiment_event(ExperimentEventCode::PlannedReturnRetry, experiment_return_reason(reason));
-				std::cout << reason << "；PLC尚未启动动作，将清除请求并安全重试一次。"
-					<< std::endl;
-			};
-
-			auto step_planned_return = [&]()
-			{
-				if (!planned_return.active()) return;
-				for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
-				{
-					refresh_planned_return_leg(planned_return.legs[leg_index]);
-				}
-				if (planned_return.phase == PlannedReturnPhase::SubmitRequest &&
-					planned_return.ads_command_purpose == PlannedReturnAdsCommandPurpose::Commit &&
-					planned_return_all_acknowledged() && planned_return_has_error() == nullptr)
-				{
-					record_return_command(planned_return.ads_command_purpose, ExperimentCommandResult::ObservedAck);
-					// PLC 已确认各腿时不再依赖写入回执，避免 ADS 短暂丢包误取消已启动的动作。
-					clear_planned_return_ads_command_tracking();
-					planned_return.request_prepared = false;
-					planned_return.commit_guard_generation = 0;
-					planned_return.phase = PlannedReturnPhase::AwaitDone;
-					record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::AwaitDone));
-				}
-				apply_planned_return_outputs();
-
-				if (planned_return.phase == PlannedReturnPhase::ClampSettle)
-				{
-					const DWORD clamp_wait_ms = planned_return_settle_wait_ms(
-						false, planned_return.clamp_stage);
-					if (planned_return.clamp_output_generation != 0 &&
-						!planned_return.clamp_output_applied &&
-						ads_communication.applied_motion_output_generation() >=
-						planned_return.clamp_output_generation)
-					{
-						planned_return.clamp_output_applied = true;
-						planned_return.phase_t0_ms = now_ms;
-					}
-					if (planned_return.clamp_output_applied &&
-						(now_ms - planned_return.phase_t0_ms) >= clamp_wait_ms)
-					{
-						if (planned_return.clamp_stage == 0)
-						{
-							// 持有者已夹紧并稳定：下一级松开移动者，重新捕获输出代次。
-							planned_return.clamp_stage = 1;
-							record_experiment_event(ExperimentEventCode::PlannedReturnPhase, experiment_event_value(static_cast<int>(PlannedReturnPhase::ClampSettle), 1));
-							planned_return.clamp_output_generation = 0;
-							planned_return.clamp_output_applied = false;
-							apply_planned_return_outputs();
-						}
-						else
-						{
-							planned_return.phase = PlannedReturnPhase::SubmitRequest;
-							record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::SubmitRequest));
-						}
-					}
-				}
-				else if (planned_return.phase == PlannedReturnPhase::SubmitRequest)
-				{
-					bool existing_busy = false;
-					for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
-					{
-						PlannedReturnLeg& leg = planned_return.legs[leg_index];
-						const PlannedReturnEventView events = planned_return_event_view(leg.axis_index);
-						if (events.busy)
-						{
-							leg.started = true;
-							existing_busy = true;
-						}
-					}
-
-					if (existing_busy &&
-						planned_return.ads_command_purpose != PlannedReturnAdsCommandPurpose::Commit)
-					{
-						fail_planned_return(
-							"计划回退提交前检测到PLC已有Busy，禁止覆盖正在执行的动作",
-							nullptr,
-							true);
-					}
-					else if (!planned_return.request_prepared)
-					{
-						if (planned_return.ads_command_purpose == PlannedReturnAdsCommandPurpose::None)
-						{
-							if (!submit_planned_return_ads_command(
-								AdsPlannedReturnOperation::Prepare,
-								PlannedReturnAdsCommandPurpose::Prepare,
-								false))
-							{
-								enter_planned_return_retry("计划回退参数命令未能进入通信队列");
-							}
-						}
-						else if (planned_return.ads_command_purpose == PlannedReturnAdsCommandPurpose::Prepare)
-						{
-							const PlannedReturnAdsPoll poll = poll_planned_return_ads_command();
-							if (poll == PlannedReturnAdsPoll::Failure)
-							{
-								clear_planned_return_ads_command_tracking();
-								enter_planned_return_retry("计划回退参数批量写入失败");
-							}
-							else if (poll == PlannedReturnAdsPoll::Success)
-							{
-								clear_planned_return_ads_command_tracking();
-								planned_return.request_prepared = true;
-								planned_return.commit_guard_generation = 0;
-								planned_return.request_t0_ms = now_ms;
-								apply_planned_return_outputs();
-							}
-							else if (planned_return_ads_command_timed_out(now_ms))
-							{
-								clear_planned_return_ads_command_tracking();
-								enter_planned_return_retry("计划回退参数命令等待超过250 ms");
-							}
-						}
-						else
-						{
-							clear_planned_return_ads_command_tracking();
-							enter_planned_return_retry("计划回退参数阶段出现未知通信命令");
-						}
-					}
-					else
-					{
-						if (planned_return.ads_command_purpose == PlannedReturnAdsCommandPurpose::Commit)
-						{
-							const PlannedReturnAdsPoll poll = poll_planned_return_ads_command();
-							if (poll == PlannedReturnAdsPoll::Failure)
-							{
-								clear_planned_return_ads_command_tracking();
-								planned_return.request_prepared = false;
-								planned_return.commit_guard_generation = 0;
-								enter_planned_return_retry("计划回退请求批量置位失败");
-							}
-							else if (poll == PlannedReturnAdsPoll::Success)
-							{
-								clear_planned_return_ads_command_tracking();
-								planned_return.request_prepared = false;
-								planned_return.commit_guard_generation = 0;
-								planned_return.request_t0_ms = now_ms;
-								planned_return.phase = PlannedReturnPhase::AwaitAccepted;
-								record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::AwaitAccepted));
-								apply_planned_return_outputs();
-							}
-							else if (planned_return_ads_command_timed_out(now_ms))
-							{
-								// Commit仍在队列/ADS调用中时无法证明Req未生效，禁止清理后整组重发。
-								latch_planned_return_possibly_started(
-									planned_return_active_axis_mask());
-								clear_planned_return_ads_command_tracking();
-								planned_return.request_prepared = false;
-								planned_return.commit_guard_generation = 0;
-								enter_planned_return_retry("计划回退请求命令等待超过250 ms");
-							}
-						}
-						else if (planned_return.commit_guard_generation == 0 ||
-							ads_communication.applied_motion_output_generation() <
-							planned_return.commit_guard_generation)
-						{
-							// 必须先确认包含快退旁路和冻结参考的输出代次已经写入，
-							// 才允许Req=TRUE进入队列；因此通信线程不可能把Commit与旧输出配对。
-							if ((now_ms - planned_return.request_t0_ms) >=
-								cfg.planned_return_ack_timeout_ms)
-							{
-								planned_return.request_prepared = false;
-								planned_return.commit_guard_generation = 0;
-								enter_planned_return_retry("计划回退提交保护输出确认超时");
-							}
-						}
-						else
-						{
-							bool idle_state_ready = true;
-							for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
-							{
-								const PlannedReturnEventView events =
-									planned_return_event_view(planned_return.legs[leg_index].axis_index);
-								idle_state_ready = idle_state_ready && !events.busy &&
-									!events.done && !events.error;
-							}
-							if (idle_state_ready)
-							{
-								for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
-								{
-									PlannedReturnLeg& leg = planned_return.legs[leg_index];
-									const PlannedReturnEventView events = planned_return_event_view(leg.axis_index);
-									leg.request_event_sequence = events.event_sequence;
-									leg.error_event_sequence = events.event_sequence;
-									// 命令一旦进入通信队列就可能在下一PLC扫描启动；先武装边沿检测。
-									leg.request_armed = true;
-								}
-								if (!submit_planned_return_ads_command(
-									AdsPlannedReturnOperation::Commit,
-									PlannedReturnAdsCommandPurpose::Commit,
-									false))
-								{
-									for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
-									{
-										planned_return.legs[leg_index].request_armed = false;
-									}
-									planned_return.request_prepared = false;
-									enter_planned_return_retry("计划回退请求未能进入通信队列");
-								}
-								else
-								{
-									// commit等待通信线程完成期间立即拉起快退旁路/力反馈冻结，
-									// refer仍保持各腿entry位置直到观察到本次ACK。
-									apply_planned_return_outputs();
-								}
-							}
-							else if ((now_ms - planned_return.request_t0_ms) >=
-								cfg.planned_return_ack_timeout_ms)
-							{
-								planned_return.request_prepared = false;
-								enter_planned_return_retry("计划回退提交前PLC状态清理超时");
-							}
-						}
-					}
-				}
-				else if (planned_return.phase == PlannedReturnPhase::AwaitAccepted)
-				{
-					const PlannedReturnLeg* error_leg = planned_return_has_error();
-					if (error_leg != nullptr)
-					{
-						enter_planned_return_retry("计划回退在PLC启动前报告错误");
-					}
-					else if (planned_return_all_acknowledged())
-					{
-						planned_return.phase = PlannedReturnPhase::AwaitDone;
-						record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::AwaitDone));
-					}
-					else if ((now_ms - planned_return.request_t0_ms) >=
-						cfg.planned_return_ack_timeout_ms)
-					{
-						enter_planned_return_retry("计划回退请求确认超时");
-					}
-				}
-				else if (planned_return.phase == PlannedReturnPhase::AwaitDone)
-				{
-					const PlannedReturnLeg* error_leg = planned_return_has_error();
-					if (error_leg != nullptr)
-					{
-						fail_planned_return("计划回退运动报错", error_leg, true);
-					}
-					else if (planned_return_all_done())
-					{
-						// Done事件可能落在当前ADS读快照之后，因此先记录序号并等待下一份
-						// 有效100 Hz快照；随后把清Req和交接输出合并到同一次Sum Write。
-						planned_return.done_snapshot_sequence = ads_snapshot_sequence;
-						planned_return.completion_clear_confirmed = false;
-						axis1_fast_return = false;
-						axis6_fast_retract = false;
-						planned_return.phase = PlannedReturnPhase::AwaitFreshSnapshot;
-						record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::AwaitFreshSnapshot));
-						apply_planned_return_outputs();
-					}
-					else if (planned_return.execution_t0_ms != 0 &&
-						(now_ms - planned_return.execution_t0_ms) >=
-						cfg.planned_return_execution_timeout_ms)
-					{
-						fail_planned_return("计划回退执行超时", nullptr, true);
-					}
-				}
-				else if (planned_return.phase == PlannedReturnPhase::RetryClear)
-				{
-					if (planned_return_any_started())
-					{
-						fail_planned_return("清理待重试请求期间检测到PLC已经启动动作", nullptr, true);
-					}
-					else if (!planned_return.retry_clear_issued)
-					{
-						if (planned_return.ads_command_purpose == PlannedReturnAdsCommandPurpose::None)
-						{
-							if (!submit_planned_return_ads_command(
-								AdsPlannedReturnOperation::Clear,
-								PlannedReturnAdsCommandPurpose::RetryClear,
-								false))
-							{
-								fail_planned_return("安全重试前清Req命令未能进入通信队列", nullptr, true);
-							}
-						}
-						else if (planned_return.ads_command_purpose ==
-							PlannedReturnAdsCommandPurpose::RetryClear)
-						{
-							const PlannedReturnAdsPoll poll = poll_planned_return_ads_command();
-							if (poll == PlannedReturnAdsPoll::Failure)
-							{
-								clear_planned_return_ads_command_tracking();
-								fail_planned_return("安全重试前清除PLC请求失败", nullptr, true);
-							}
-							else if (poll == PlannedReturnAdsPoll::Success)
-							{
-								clear_planned_return_ads_command_tracking();
-								planned_return.retry_clear_issued = true;
-								planned_return.retry_clear_t0_ms = now_ms;
-								planned_return.retry_clear_snapshot_sequence = ads_snapshot_sequence;
-							}
-							else if (planned_return_ads_command_timed_out(now_ms))
-							{
-								clear_planned_return_ads_command_tracking();
-								fail_planned_return("安全重试前清Req命令等待超过250 ms", nullptr, true);
-							}
-						}
-					}
-					else
-					{
-						bool reset_state_ready = ads_motion_cycle_valid &&
-							ads_snapshot_sequence > planned_return.retry_clear_snapshot_sequence;
-						for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
-						{
-							const PlannedReturnEventView events =
-								planned_return_event_view(planned_return.legs[leg_index].axis_index);
-							reset_state_ready = reset_state_ready && !events.busy && !events.error;
-						}
-						if (reset_state_ready)
-						{
-							if (!planned_return_targets_safe())
-							{
-								fail_planned_return("安全重试前目标重新校验失败", nullptr, true);
-							}
-							else
-							{
-								++planned_return.retry_count;
-								for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
-								{
-									PlannedReturnLeg& leg = planned_return.legs[leg_index];
-									leg.acknowledged = false;
-									leg.started = false;
-									leg.possibly_started = false;
-									leg.done = false;
-									leg.request_armed = false;
-									leg.request_event_sequence = 0;
-									leg.ack_event_sequence = 0;
-									leg.error_event_sequence = 0;
-									leg.reported_error_id = 0;
-									leg.cancel_event_sequence = 0;
-									leg.cancel_event_required = false;
-									leg.entry_rel = plc_act_pos[leg.axis_index];
-								}
-								planned_return.request_prepared = false;
-								planned_return.commit_guard_generation = 0;
-						planned_return.execution_t0_ms = 0;
-						planned_return.phase = PlannedReturnPhase::SubmitRequest;
-						record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::SubmitRequest));
-					}
-						}
-						else if ((now_ms - planned_return.retry_clear_t0_ms) >=
-							cfg.planned_return_retry_clear_timeout_ms)
-						{
-							fail_planned_return("安全重试前PLC状态复位超时", nullptr, true);
-						}
-					}
-				}
-				else if (planned_return.phase == PlannedReturnPhase::AwaitFreshSnapshot)
-				{
-					if (ads_motion_cycle_valid && ads_snapshot_sequence > planned_return.done_snapshot_sequence)
-					{
-						// 同步暂未成功时留在本阶段，下一份有效快照继续尝试。
-						if (rebase_planned_return())
-						{
-							axis1_fast_return = false;
-							axis6_fast_retract = false;
-							planned_return.phase = PlannedReturnPhase::PublishHandoff;
-							record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::PublishHandoff));
-						}
-					}
-				}
-				else if (planned_return.phase == PlannedReturnPhase::AwaitHandoffApplied)
-				{
-					if (planned_return.handoff_generation != 0 &&
-						ads_communication.applied_motion_output_generation() >=
-						planned_return.handoff_generation)
-					{
-						// handoff generation对应的同一Sum Write同时携带各腿Req=FALSE，
-						// 因而该代次成功即可同时确认清Req、实际位置保持和夹爪恢复。
-						record_experiment_event(ExperimentEventCode::PlannedReturnClear, experiment_event_value(static_cast<int>(ExperimentCommandResult::Succeeded), static_cast<int>(ExperimentCommandContext::HandoffOutput)));
-						planned_return.completion_clear_confirmed = true;
-						planned_return.phase_t0_ms = now_ms;
-						planned_return.phase = PlannedReturnPhase::PostHandoffClampSettle;
-						record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::PostHandoffClampSettle));
-					}
-				}
-				else if (planned_return.phase == PlannedReturnPhase::PostHandoffClampSettle)
-				{
-					if (planned_return.restore_stage == 0)
-					{
-						// 移动者已夹紧并稳定后，再松开持有者。
-						if ((now_ms - planned_return.phase_t0_ms) >=
-							planned_return_settle_wait_ms(true, planned_return.restore_stage))
-						{
-							planned_return.restore_stage = 1;
-							record_experiment_event(ExperimentEventCode::PlannedReturnPhase, experiment_event_value(static_cast<int>(PlannedReturnPhase::PostHandoffClampSettle), 1));
-							planned_return.release_output_generation = 0;
-							planned_return.release_applied = false;
-							apply_planned_return_outputs();
-						}
-					}
-					else if (!planned_return.release_applied)
-					{
-						if (planned_return.release_output_generation != 0 &&
-							ads_communication.applied_motion_output_generation() >=
-							planned_return.release_output_generation)
-						{
-							planned_return.release_applied = true;
-							planned_return.phase_t0_ms = now_ms;
-						}
-					}
-					else if ((now_ms - planned_return.phase_t0_ms) >=
-						planned_return_settle_wait_ms(true, planned_return.restore_stage) &&
-						ads_motion_cycle_valid)
-					{
-						if (rebase_planned_return())
-						{
-							// 夹爪恢复和最终重同步完成后才开始计算释放距离；
-							// 换手期间的自动轴运动不能消耗这 2 mm。
-							if (planned_return.contains_axis(0))
-								ff.complete_clamp_hold(1, plc_act_pos[0] + plc_init_pos[0],
-									std::chrono::duration_cast<std::chrono::milliseconds>(
-										std::chrono::steady_clock::now().time_since_epoch()).count());
-							if (planned_return.contains_axis(5))
-								ff.complete_clamp_hold(2, plc_act_pos[5] + plc_init_pos[5],
-									std::chrono::duration_cast<std::chrono::milliseconds>(
-										std::chrono::steady_clock::now().time_since_epoch()).count());
-							if (planned_return.contains_axis(0) && !axis1_reverse_pressed)
-							{
-								// 回退完成后的附加映射只在后续正常导管前推中生效。
-								arm_axis1_delivery_mapping();
-							}
-                            return_recovery.completed();
-							reset_planned_return();
-						}
-					}
-				}
 			};
 
 			auto compute_axis7_cmd_rel = [&]() -> double
@@ -2518,8 +1544,6 @@ int main()
 				}
 				else
 				{
-					clear_axis1_group_return_requests();
-					clear_axis_return_request(AdsSymbol::axis6_return);
 					for (int cylinder_index = 0; cylinder_index < 4; ++cylinder_index)
 					{
 						cylinder_manual_mode[cylinder_index] = CylinderManualMode::Automatic;
@@ -2635,7 +1659,7 @@ int main()
                     axis1_leg, target1, axis6_leg, target6);
                 resuming_return = false;
                 record_experiment_event(ExperimentEventCode::ReturnResume, experiment_event_value(return_recovery.mask(), resumed ? 1 : 0));
-                if (resumed) { apply_planned_return_outputs(); std::cout << "计划回退已从当前位置重新规划，自动续做一次。" << std::endl; }
+                if (resumed) { std::cout << "计划回退已从当前位置重新规划，自动续做一次。" << std::endl; }
                 else std::cout << "计划回退续做未通过原目标安全校验，已恢复当前位置控制。" << std::endl;
             }
 			else if (planned_return.active())
@@ -2643,7 +1667,7 @@ int main()
 				// 双手柄计划回退和交接由协调器推进。
 				axis4_axis6_coupling_active_prev = false;
 				axis4_axis6_coupling_last_ms = 0;
-				step_planned_return();
+				// 事务统一在运动树之后推进，保持/急停期间不取消。
 			}
 			else
 			{
@@ -2852,7 +1876,7 @@ int main()
 						{
 							// 实际到位并低速后才夹紧；电机请求仍等待原有两级夹爪时序。
 							dual_handoff.reset();
-							apply_planned_return_outputs();
+	
 						}
 					}
 					else dual_handoff.reset();
@@ -2912,6 +1936,114 @@ int main()
 		axis4_manual_error_prev = axis4_manual_error_now;
 		axis4_manual_error_id_prev = axis4_manual_error_id_now;
 
+        const bool handoff_ready = ads_motion_cycle_valid && !handle_soft_hold_active &&
+            !estop_hold_active && !ads_snapshot.host_comm_timeout && ads_snapshot.handle_reinit_done;
+        if (planned_return.active() && handoff_ready)
+        {
+            const ULONGLONG now = GetTickCount64();
+            const auto& status = ads_snapshot.handoff;
+            if (status.ack_id == planned_return.command.request_id)
+            {
+                if (planned_return.phase == HandoffPhase::Requested)
+                {
+                    planned_return.phase = HandoffPhase::Running;
+                    record_experiment_event(ExperimentEventCode::HandoffAck, static_cast<int>(status.ack_id));
+                }
+                if (planned_return.status.phase_seq != status.phase_seq)
+                    record_experiment_event(ExperimentEventCode::PlannedReturnPhase, experiment_event_value(status.phase, static_cast<int>(status.phase_seq & 0x7fff)));
+                planned_return.status = status;
+            }
+            if (planned_return.phase == HandoffPhase::Requested)
+            {
+                if (now - planned_return.request_t0_ms >= cfg.handoff_ack_timeout_ms)
+                {
+                    // 不取消可能已经由PLC受理的事务；故障保持后仍读取完成状态并接管。
+                    if (!planned_return.request_timed_out)
+                    {
+                        planned_return.request_timed_out = true;
+                        return_recovery.interrupted("换手事务应答超时");
+                        if (control_active) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::ReturnFault), 0));
+                        return_ads_fault_hold = true; control_active = false;
+                        record_experiment_event(ExperimentEventCode::ReturnFaultEnter, 1000);
+                        record_experiment_event(ExperimentEventCode::HandoffRequestTimeout, static_cast<int>(planned_return.command.request_id));
+                    }
+                    if (status.phase == 0 && status.ack_id != planned_return.command.request_id)
+                    { planned_return.reset(); dual_handoff.reset(); }
+                }
+                else if (now - planned_return.last_send_ms >= cfg.handoff_resend_ms)
+                {
+                    planned_return.last_send_ms = now;
+                    planned_return.send_token = ++next_handoff_send_token;
+                    record_experiment_event(ExperimentEventCode::HandoffRequest, static_cast<int>(planned_return.command.request_id));
+                }
+            }
+            if (planned_return.phase == HandoffPhase::Running && status.done_id == planned_return.command.request_id)
+            {
+                planned_return.status = status;
+                planned_return.phase = HandoffPhase::Takeover;
+                planned_return.done_snapshot_sequence = ads_snapshot_sequence;
+                record_experiment_event(ExperimentEventCode::HandoffDone, experiment_event_value(status.result, static_cast<int>(status.error_code)));
+                for (int i = 0; i < 8; ++i)
+                    record_experiment_event(static_cast<ExperimentEventCode>(static_cast<int>(ExperimentEventCode::HandoffPhase10Ms) + i), static_cast<int>(status.phase_ms[i]));
+            }
+            if (planned_return.phase == HandoffPhase::Takeover)
+            {
+                if (!planned_return.rebased && ads_snapshot_sequence > planned_return.done_snapshot_sequence)
+                {
+                    planned_return.rebased = motion_sync::rebase_dual_after_return(ctx);
+                    if (planned_return.rebased) record_experiment_event(ExperimentEventCode::PlannedReturnRebase, static_cast<int>(ExperimentEventReason::RebaseBeforeHandoff));
+                }
+                if (planned_return.handoff_generation != 0 && ads_communication.applied_motion_output_generation() >= planned_return.handoff_generation)
+                {
+                    record_experiment_event(ExperimentEventCode::HandoffTakeover, static_cast<int>(planned_return.command.request_id));
+                    if (planned_return.status.result == 1)
+                    {
+                        const auto steady_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+                        if (planned_return.contains_axis(0)) ff.complete_clamp_hold(1, plc_act_pos[0] + plc_init_pos[0], steady_ms);
+                        if (planned_return.contains_axis(5)) ff.complete_clamp_hold(2, plc_act_pos[5] + plc_init_pos[5], steady_ms);
+                        if (planned_return.contains_axis(0) && !axis1_reverse_pressed) arm_axis1_delivery_mapping();
+                        return_recovery.completed();
+                    }
+                    else
+                    {
+                        return_recovery.interrupted("PLC换手失败后已安全收尾");
+                        if (control_active) record_experiment_event(ExperimentEventCode::ControlActiveChanged, experiment_event_value(static_cast<int>(ExperimentEventReason::ReturnFault), 0));
+                        return_ads_fault_hold = true; control_active = false; clear_force_output();
+                        record_experiment_event(ExperimentEventCode::ReturnFaultEnter, static_cast<int>(planned_return.status.error_code));
+                        record_experiment_event(ExperimentEventCode::PlannedReturnPlcError, static_cast<int>(planned_return.status.nc_error_code));
+                    }
+                    cylinder1_cmd = cyl.cyl1_open; cylinder2_cmd = cyl.cyl2_clamp;
+                    cylinder3_cmd = cyl.cyl3_open; cylinder4_cmd = cyl.cyl4_clamp;
+                    planned_return.reset(); dual_handoff.reset();
+                }
+            }
+        }
+        if (planned_return.active() && handoff_ready)
+        {
+            // 非参与轴沿用触发时的保持值；参与轴由PLC拥有，接管帧取实际位置。
+            pos[0] = planned_return.contains_axis(0) ? plc_act_pos[0] : planned_return.hold_axis1_rel;
+            pos[5] = planned_return.contains_axis(5) ? plc_act_pos[5] : planned_return.hold_axis6_rel;
+            pos[1] = axis2_hold_rel; pos[6] = axis7_hold_rel;
+            pos[2] = planned_return.hold_axis3_rel; pos[4] = planned_return.hold_axis5_rel;
+            cylinder1_cmd = cyl.cyl1_open; cylinder2_cmd = cyl.cyl2_clamp;
+            cylinder3_cmd = cyl.cyl3_open; cylinder4_cmd = cyl.cyl4_clamp;
+            // 回显PLC当前夹爪阶段；实际输出所有权仍由PLC事务持有。
+            if (planned_return.status.phase > 0 && planned_return.status.phase < 50)
+            {
+                if (planned_return.contains_axis(0))
+                {
+                    cylinder1_cmd = cyl.cyl1_clamp;
+                    if (planned_return.status.phase == 20 || planned_return.status.phase == 30) cylinder2_cmd = cyl.cyl2_open;
+                }
+                if (planned_return.contains_axis(5))
+                {
+                    cylinder3_cmd = cyl.cyl3_clamp;
+                    if (planned_return.status.phase == 20 || planned_return.status.phase == 30) cylinder4_cmd = cyl.cyl4_open;
+                }
+            }
+            if (planned_return.phase == HandoffPhase::Takeover && planned_return.rebased) load_pos_from_actual();
+        }
+
 		// 10) 构建本拍离散输出；与 refer 一起交给 100 Hz 通信线程。
 		bool cylinder5_req = y_valve_open;
 		// 电缸独立于手柄采样和主控制锁存；PLC 自动流程仍保有夹爪控制权。
@@ -2924,7 +2056,7 @@ int main()
 
 			!spacing_recovery.active() && !spacing_recovery.requested &&
 			 !planned_return.active() && !dual_handoff.active() &&
-			!ads_events.axis1_return_busy && !ads_events.axis6_return_busy;
+			ads_snapshot.handoff.phase == 0;
 		if (!cylinder_manual_allowed)
 		{
 			// 被安全条件或自动流程接管后不保留待执行的手动目标。
@@ -3021,24 +2153,8 @@ int main()
 		const bool normal_motion_output_enabled = ads_motion_cycle_valid && !connection_hold_active &&
 			!return_ads_fault_hold && !estop_hold_active &&
 			(control_active);
-		ads_output.motion_enabled = normal_motion_output_enabled;
+		ads_output.motion_enabled = normal_motion_output_enabled || (planned_return.active() && handoff_ready);
 		for (int axis = 0; axis < 7; ++axis) ads_output.refer[axis] = pos[axis];
-		ads_output.axis1_fast_return = ads_output.motion_enabled && axis1_fast_return;
-		ads_output.axis6_fast_retract = ads_output.motion_enabled && axis6_fast_retract;
-		if ((planned_return.phase == PlannedReturnPhase::PublishHandoff ||
-			planned_return.phase == PlannedReturnPhase::AwaitHandoffApplied) &&
-			!planned_return.completion_clear_confirmed)
-		{
-			// 交接代次持续携带各回退腿的Req=FALSE，直到同一Sum Write成功。
-			// 这样不会因desired_output与专用命令队列的并发取样而拆成两拍。
-			for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
-			{
-				const PlannedReturnLeg& leg = planned_return.legs[leg_index];
-				if (!leg.active) continue;
-				if (leg.axis_index == 0) ads_output.planned_return_clear_mask |= 0x01u;
-				else if (leg.axis_index == 5) ads_output.planned_return_clear_mask |= 0x02u;
-			}
-		}
 		ads_output.cylinder[0] = cylinder1_cmd;
 		ads_output.cylinder[1] = cylinder2_cmd;
 		ads_output.cylinder[2] = cylinder3_cmd;
@@ -3057,7 +2173,6 @@ int main()
 			ads_output.inject_push_req[injector_index] = injector_push_request[injector_index];
 			ads_output.inject_pull_req[injector_index] = injector_pull_request[injector_index];
 		}
-		ads_output.startup_smoothing_bypass = false;
 		const bool distance_follow_output = ads_output.motion_enabled && ads_output.cylinder_valid &&
 			handle_distance_follow_allowed();
 		axis1_net_distance.set_following(distance_follow_output &&
@@ -3066,50 +2181,18 @@ int main()
 
 			!axis4_forward_request && !axis4_reverse_request &&
 			cylinder3_cmd == cyl.cyl3_open && cylinder4_cmd == cyl.cyl4_clamp);
+        if (planned_return.phase == HandoffPhase::Requested && !planned_return.request_timed_out && handoff_ready)
+        { ads_output.handoff = planned_return.command; ads_output.handoff_send_token = planned_return.send_token; }
+        if (planned_return.phase == HandoffPhase::Takeover && planned_return.rebased && handoff_ready)
+        {
+            ads_output.motion_enabled = true;
+            for (int i = 0; i < 7; ++i) ads_output.refer[i] = pos[i];
+            ads_output.cylinder_valid = true; ads_output.cylinder_write_mask = 0x0f;
+            ads_output.handoff_takeover_id = planned_return.command.request_id;
+        }
 		const std::uint64_t output_generation = ads_communication.publish_output(ads_output);
-		if (planned_return.phase == PlannedReturnPhase::SubmitRequest &&
-			planned_return.request_prepared &&
-			planned_return.commit_guard_generation == 0 &&
-			ads_output.motion_enabled)
-		{
-			bool guard_output_complete = true;
-			for (int leg_index = 0; leg_index < planned_return.leg_count; ++leg_index)
-			{
-				const PlannedReturnLeg& leg = planned_return.legs[leg_index];
-				if (!leg.active) continue;
-				if (leg.axis_index == 0) guard_output_complete =
-					guard_output_complete && ads_output.axis1_fast_return;
-				else if (leg.axis_index == 5) guard_output_complete =
-					guard_output_complete && ads_output.axis6_fast_retract;
-			}
-			if (guard_output_complete)
-			{
-				planned_return.commit_guard_generation = output_generation;
-			}
-		}
-		if (planned_return.phase == PlannedReturnPhase::ClampSettle &&
-			planned_return.clamp_output_generation == 0 &&
-			ads_output.motion_enabled && ads_output.cylinder_valid)
-		{
-			// 50 ms 从夹爪命令实际经 Sum Write 应用后开始计算，而不是从任务创建时开始。
-			planned_return.clamp_output_generation = output_generation;
-		}
-		if (planned_return.phase == PlannedReturnPhase::PostHandoffClampSettle &&
-				planned_return.restore_stage >= 1 &&
-				planned_return.release_output_generation == 0 &&
-				ads_output.motion_enabled && ads_output.cylinder_valid)
-			{
-				planned_return.release_output_generation = output_generation;
-			}
-		if (planned_return.phase == PlannedReturnPhase::PublishHandoff &&
-			ads_output.motion_enabled && !ads_output.axis1_fast_return &&
-			!ads_output.axis6_fast_retract)
-		{
-			record_experiment_event(ExperimentEventCode::PlannedReturnClear, experiment_event_value(static_cast<int>(ExperimentCommandResult::Submitted), static_cast<int>(ExperimentCommandContext::HandoffOutput)));
-			planned_return.handoff_generation = output_generation;
-			planned_return.phase = PlannedReturnPhase::AwaitHandoffApplied;
-			record_experiment_event(ExperimentEventCode::PlannedReturnPhase, static_cast<int>(PlannedReturnPhase::AwaitHandoffApplied));
-		}
+        if (planned_return.phase == HandoffPhase::Takeover && planned_return.rebased && ads_output.motion_enabled && planned_return.handoff_generation == 0)
+            planned_return.handoff_generation = output_generation;
 
 		process_force_feedback(
 			ff,
@@ -3246,10 +2329,11 @@ int main()
 			vs.startup_phase = static_cast<int>(startup.phase);
 			vs.control_active = control_active;
 			vs.estop_hold = estop_hold_active;
-			vs.axis1_fast_return = axis1_fast_return;
-			vs.axis6_fast_retract = axis6_fast_retract;
+			vs.axis1_fast_return = planned_return.contains_axis(0) && planned_return.status.phase == 30;
+			vs.axis6_fast_retract = planned_return.contains_axis(5) && planned_return.status.phase == 30;
 			vs.self_check_done = self_check_done;
             std::ostringstream recovery_status;
+            if (ads_stats.handoff_if_version != kHandoffInterfaceVersion) recovery_status << "PLC 与数据端版本不一致；";
             if (return_ads_fault_hold) recovery_status << "回退故障恢复中：" << return_recovery.reason() << "；";
             if (estop_hold_active) recovery_status << "本体急停恢复中；";
             if (!handle1_poll_ok) recovery_status << "手柄587无有效样本或采样断开；";
@@ -3393,7 +2477,7 @@ int main()
 		{
 			VisCommand vcmd;
 			// 有界消费避免命令突发占满运动周期，FIFO 顺序与既有门控保持不变。
-			for (int command_budget = 0; command_budget < 64 && zenoh_service.poll_command(vcmd); ++command_budget)
+			for (int command_budget = 0; command_budget < 64 && (zenoh_service.poll_command(vcmd) || (pending_start_control && !planned_return.active() && ads_snapshot.handoff.phase == 0 && initial_sync_done && !connection_hold_active && !estop_hold_active && !return_ads_fault_hold && (pending_start_control = false, vcmd.type = VisCommandType::SelectDirectControl, true))); ++command_budget)
 			{
 				switch (vcmd.type)
 				{
@@ -3546,7 +2630,9 @@ int main()
 					break;
 				case VisCommandType::SelectDirectControl:
 					{
-						if (control_active || planned_return.active() || spacing_recovery.active()) break;
+						if (ads_stats.handoff_if_version != kHandoffInterfaceVersion) { std::cout << "PLC 与数据端版本不一致。" << std::endl; break; }
+                        if (planned_return.active() || ads_snapshot.handoff.phase != 0) { pending_start_control = true; break; }
+                        if (control_active || spacing_recovery.active()) break;
 						// 自检完成后点击“开始控制”：不再走到准备位置，直接在当前位置开始手柄控制。
 						pending_selfcheck_axes = 0;
 						if (

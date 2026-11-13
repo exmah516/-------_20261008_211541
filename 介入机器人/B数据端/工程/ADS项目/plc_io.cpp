@@ -19,10 +19,10 @@ namespace AdsSymbol
 	const char* leftlimit = "G.leftlimit";
 	const char* act_pos_from_left = "G.act_pos_from_left";
 	const char* refer_from_left = "G.refer_from_left";
-	const char* cylinder1_value = "G.cylinder1_value";
-	const char* cylinder2_value = "G.cylinder2_value";
-	const char* cylinder3_value = "G.cylinder3_value";
-	const char* cylinder4_value = "G.cylinder4_value";
+	const char* cylinder1_value = "G.cyl_cmd[1]";
+	const char* cylinder2_value = "G.cyl_cmd[2]";
+	const char* cylinder3_value = "G.cyl_cmd[3]";
+	const char* cylinder4_value = "G.cyl_cmd[4]";
 	const char* cylinder5_cmd = "G.cylinder5_cmd";
 	const char* cylinder5_press_req = "G.cylinder5_press_req";
 	const char* cylinder5_value = "G.cylinder5_value";
@@ -34,9 +34,6 @@ namespace AdsSymbol
 	const char* fn_1_value = "G.fn_1_value";
 	const char* fn_2_value = "G.fn_2_value";
 	const char* ft_2_value = "G.ft_2_value";
-	const char* axis1_fast_return = "G.axis1_fast_return";
-	const char* axis6_fast_retract = "G.axis6_fast_retract";
-	const char* startup_smoothing_bypass = "G.startup_smoothing_bypass";
 	const char* axis4_fwd_req = "G.axis4_fwd_req";
 	const char* axis4_rev_req = "G.axis4_rev_req";
 	const char* inject_push_req = "G.inject_push_req";
@@ -52,72 +49,11 @@ namespace AdsSymbol
 	const char* host_comm_timeout = "G.host_comm_timeout";
 	const char* app_name = "TwinCAT_SystemInfoVarList._AppInfo.AppName";
 
-	const AxisReturnAdsSymbols axis1_return = {
-		"G.return_cmd[1].Req",
-		"G.return_cmd[1].Busy",
-		"G.return_cmd[1].Done",
-		"G.return_cmd[1].Error",
-		"G.return_cmd[1].ErrorId",
-		"G.return_cmd[1].TargetAbs",
-		"G.return_cmd[1].Velocity",
-		"G.return_cmd[1].Acc",
-		"G.return_cmd[1].Dec",
-		"G.return_cmd[1].Jerk"
-	};
 
-	const AxisReturnAdsSymbols axis3_return = {
-		"G.return_cmd[3].Req",
-		"G.return_cmd[3].Busy",
-		"G.return_cmd[3].Done",
-		"G.return_cmd[3].Error",
-		"G.return_cmd[3].ErrorId",
-		"G.return_cmd[3].TargetAbs",
-		"G.return_cmd[3].Velocity",
-		"G.return_cmd[3].Acc",
-		"G.return_cmd[3].Dec",
-		"G.return_cmd[3].Jerk"
-	};
-
-	const AxisReturnAdsSymbols axis5_return = {
-		"G.return_cmd[5].Req",
-		"G.return_cmd[5].Busy",
-		"G.return_cmd[5].Done",
-		"G.return_cmd[5].Error",
-		"G.return_cmd[5].ErrorId",
-		"G.return_cmd[5].TargetAbs",
-		"G.return_cmd[5].Velocity",
-		"G.return_cmd[5].Acc",
-		"G.return_cmd[5].Dec",
-		"G.return_cmd[5].Jerk"
-	};
-
-	const AxisReturnAdsSymbols axis6_return = {
-		"G.return_cmd[6].Req",
-		"G.return_cmd[6].Busy",
-		"G.return_cmd[6].Done",
-		"G.return_cmd[6].Error",
-		"G.return_cmd[6].ErrorId",
-		"G.return_cmd[6].TargetAbs",
-		"G.return_cmd[6].Velocity",
-		"G.return_cmd[6].Acc",
-		"G.return_cmd[6].Dec",
-		"G.return_cmd[6].Jerk"
-	};
 }
 
 namespace
 {
-	constexpr std::uint64_t kAxisReturnStatusCacheMs = 100;
-
-	struct AxisReturnStatusCache
-	{
-		AxisReturnStatus status{};
-		std::uint64_t update_tick_ms = 0;
-		bool valid = false;
-	};
-
-	std::array<AxisReturnStatusCache, 4> g_axis_return_status_cache{};
-
 	bool ads_read(AppContext& ctx, const char* symbol, unsigned long length, void* output)
 	{
 		if (ctx.ads_service != nullptr)
@@ -172,23 +108,7 @@ namespace
 		return error.empty() ? "后台 ADS 请求失败。\n" : error;
 	}
 
-	int axis_return_cache_index(const AxisReturnAdsSymbols& symbols)
-	{
-		if (std::strcmp(symbols.req, AdsSymbol::axis1_return.req) == 0) return 0;
-		if (std::strcmp(symbols.req, AdsSymbol::axis3_return.req) == 0) return 1;
-		if (std::strcmp(symbols.req, AdsSymbol::axis5_return.req) == 0) return 2;
-		if (std::strcmp(symbols.req, AdsSymbol::axis6_return.req) == 0) return 3;
-		return -1;
-	}
 
-	void invalidate_axis_return_cache(const AxisReturnAdsSymbols& symbols)
-	{
-		const int index = axis_return_cache_index(symbols);
-		if (index >= 0)
-		{
-			g_axis_return_status_cache[static_cast<std::size_t>(index)].valid = false;
-		}
-	}
 }
 
 namespace plc_io
@@ -267,275 +187,6 @@ namespace plc_io
 	{
 		// 以当前实际位置为基线重建一帧 refer，避免直接使用旧参考引发跳变。
 		copy_positions(ctx.plc_act_pos, ctx.pos, 7);
-	}
-
-	bool read_axis_return_status(AppContext& ctx, const AxisReturnAdsSymbols& symbols, AxisReturnStatus& status)
-	{
-		// 计划回退状态最多 10 Hz 刷新；同一缓存窗口内复用结果，避免挤占 100 Hz 高频事务。
-		status = AxisReturnStatus{};
-		const int cache_index = axis_return_cache_index(symbols);
-		const std::uint64_t now_ms = GetTickCount64();
-		if (ctx.ads_service != nullptr)
-		{
-			if (ctx.ads_service->stats().state != AdsConnectionState::Running)
-			{
-				invalidate_axis_return_cache(symbols);
-				return false;
-			}
-			if (cache_index >= 0)
-			{
-				const AxisReturnStatusCache& cache =
-					g_axis_return_status_cache[static_cast<std::size_t>(cache_index)];
-				if (cache.valid && now_ms - cache.update_tick_ms < kAxisReturnStatusCacheMs)
-				{
-					status = cache.status;
-					return true;
-				}
-			}
-		}
-
-		const char* names[] = { symbols.busy, symbols.done, symbols.error, symbols.error_id };
-		const unsigned long lengths[] = {
-			sizeof(status.busy), sizeof(status.done), sizeof(status.error), sizeof(status.error_id)
-		};
-		void* outputs[] = { &status.busy, &status.done, &status.error, &status.error_id };
-		if (!ads_read_sum(ctx, names, lengths, outputs, 4))
-		{
-			invalidate_axis_return_cache(symbols);
-			std::cout << "计划回退 ADS 状态批量读取失败，错误：" << ads_error_text(ctx);
-			return false;
-		}
-		if (cache_index >= 0)
-		{
-			AxisReturnStatusCache& cache =
-				g_axis_return_status_cache[static_cast<std::size_t>(cache_index)];
-			cache.status = status;
-			cache.update_tick_ms = now_ms;
-			cache.valid = true;
-		}
-		return true;
-	}
-
-	bool clear_axis_return_request(AppContext& ctx, const AxisReturnAdsSymbols& symbols)
-	{
-		// 清除单轴计划回退触发位 Req。
-		bool req = false;
-		if (ads_write(ctx, symbols.req, sizeof(req), &req))
-		{
-			invalidate_axis_return_cache(symbols);
-			return true;
-		}
-		std::cout << "计划回退 ADS 请求清除失败：" << symbols.req
-			<< "，错误：" << ads_error_text(ctx);
-		return false;
-	}
-
-	bool clear_axis_return_requests(
-		AppContext& ctx,
-		const AxisReturnAdsSymbols* const* symbols,
-		int count)
-	{
-		if (symbols == nullptr || count <= 0 || count > 2)
-		{
-			return false;
-		}
-
-		bool req = false;
-		const char* names[2] = {};
-		unsigned long lengths[2] = {};
-		const void* values[2] = {};
-		for (int i = 0; i < count; ++i)
-		{
-			if (symbols[i] == nullptr || symbols[i]->req == nullptr)
-			{
-				return false;
-			}
-			names[i] = symbols[i]->req;
-			lengths[i] = sizeof(req);
-			values[i] = &req;
-		}
-
-		if (!ads_write_sum(ctx, names, lengths, values, count))
-		{
-			std::cout << "计划回退 ADS 请求批量清除失败，错误：" << ads_error_text(ctx);
-			return false;
-		}
-		for (int i = 0; i < count; ++i)
-		{
-			invalidate_axis_return_cache(*symbols[i]);
-		}
-		return true;
-	}
-
-	bool request_axis_return(
-		AppContext& ctx,
-		const AxisReturnAdsSymbols& symbols,
-		double target_abs,
-		double velocity,
-		double acc,
-		double dec,
-		double jerk)
-	{
-		const AxisReturnAdsSymbols* symbol_list[] = { &symbols };
-		const double targets[] = { target_abs };
-		const double velocities[] = { velocity };
-		const double accelerations[] = { acc };
-		const double decelerations[] = { dec };
-		const double jerks[] = { jerk };
-		return request_axis_returns(
-			ctx,
-			symbol_list,
-			targets,
-			velocities,
-			accelerations,
-			decelerations,
-			jerks,
-			1);
-	}
-
-	bool prepare_axis_returns(
-		AppContext& ctx,
-		const AxisReturnAdsSymbols* const* symbols,
-		const double* target_abs,
-		const double* velocity,
-		const double* acc,
-		const double* dec,
-		const double* jerk,
-		int count)
-	{
-		if (symbols == nullptr || target_abs == nullptr || velocity == nullptr ||
-			acc == nullptr || dec == nullptr || jerk == nullptr || count <= 0 || count > 2)
-		{
-			return false;
-		}
-
-		// 第一阶段：同一事务写入所有腿的 Req=FALSE 与完整参数。
-		bool req_false = false;
-		const char* parameter_names[12] = {};
-		unsigned long parameter_lengths[12] = {};
-		const void* parameter_values[12] = {};
-		for (int i = 0; i < count; ++i)
-		{
-			if (symbols[i] == nullptr || symbols[i]->req == nullptr ||
-				symbols[i]->target_abs == nullptr || symbols[i]->velocity == nullptr ||
-				symbols[i]->acc == nullptr || symbols[i]->dec == nullptr ||
-				symbols[i]->jerk == nullptr)
-			{
-				return false;
-			}
-			const int base = i * 6;
-			parameter_names[base + 0] = symbols[i]->req;
-			parameter_names[base + 1] = symbols[i]->target_abs;
-			parameter_names[base + 2] = symbols[i]->velocity;
-			parameter_names[base + 3] = symbols[i]->acc;
-			parameter_names[base + 4] = symbols[i]->dec;
-			parameter_names[base + 5] = symbols[i]->jerk;
-			parameter_lengths[base + 0] = sizeof(req_false);
-			parameter_lengths[base + 1] = sizeof(target_abs[i]);
-			parameter_lengths[base + 2] = sizeof(velocity[i]);
-			parameter_lengths[base + 3] = sizeof(acc[i]);
-			parameter_lengths[base + 4] = sizeof(dec[i]);
-			parameter_lengths[base + 5] = sizeof(jerk[i]);
-			parameter_values[base + 0] = &req_false;
-			parameter_values[base + 1] = &target_abs[i];
-			parameter_values[base + 2] = &velocity[i];
-			parameter_values[base + 3] = &acc[i];
-			parameter_values[base + 4] = &dec[i];
-			parameter_values[base + 5] = &jerk[i];
-		}
-		if (!ads_write_sum(
-			ctx,
-			parameter_names,
-			parameter_lengths,
-			parameter_values,
-			static_cast<unsigned long>(count * 6)))
-		{
-			std::cout << "计划回退 ADS 参数批量写入失败，错误：" << ads_error_text(ctx);
-			(void)clear_axis_return_requests(ctx, symbols, count);
-			return false;
-		}
-		return true;
-	}
-
-	bool commit_axis_return_requests(
-		AppContext& ctx,
-		const AxisReturnAdsSymbols* const* symbols,
-		int count)
-	{
-		if (symbols == nullptr || count <= 0 || count > 2)
-		{
-			return false;
-		}
-
-		// 第二阶段：在参数和旧 Done/Error 已有机会清理后，同时置位全部 Req。
-		bool req_true = true;
-		const char* request_names[2] = {};
-		unsigned long request_lengths[2] = {};
-		const void* request_values[2] = {};
-		for (int i = 0; i < count; ++i)
-		{
-			request_names[i] = symbols[i]->req;
-			request_lengths[i] = sizeof(req_true);
-			request_values[i] = &req_true;
-		}
-		if (!ads_write_sum(
-			ctx,
-			request_names,
-			request_lengths,
-			request_values,
-			static_cast<unsigned long>(count)))
-		{
-			std::cout << "计划回退 ADS 请求批量置位失败，错误：" << ads_error_text(ctx);
-			(void)clear_axis_return_requests(ctx, symbols, count);
-			return false;
-		}
-
-		for (int i = 0; i < count; ++i)
-		{
-			invalidate_axis_return_cache(*symbols[i]);
-		}
-		return true;
-	}
-
-	bool request_axis_returns(
-		AppContext& ctx,
-		const AxisReturnAdsSymbols* const* symbols,
-		const double* target_abs,
-		const double* velocity,
-		const double* acc,
-		const double* dec,
-		const double* jerk,
-		int count)
-	{
-		if (!prepare_axis_returns(
-			ctx, symbols, target_abs, velocity, acc, dec, jerk, count))
-		{
-			return false;
-		}
-		return commit_axis_return_requests(ctx, symbols, count);
-	}
-
-	bool clear_axis1_group_return_requests(AppContext& ctx)
-	{
-		// axis1 相关轴群共用的回退请求清理（1/3/5/6）。
-		bool req = false;
-		const char* symbols[] = {
-			AdsSymbol::axis1_return.req,
-			AdsSymbol::axis3_return.req,
-			AdsSymbol::axis5_return.req,
-			AdsSymbol::axis6_return.req
-		};
-		const unsigned long lengths[] = { sizeof(req), sizeof(req), sizeof(req), sizeof(req) };
-		const void* inputs[] = { &req, &req, &req, &req };
-		const bool ok = ads_write_sum(ctx, symbols, lengths, inputs, 4);
-		if (ok)
-		{
-			invalidate_axis_return_cache(AdsSymbol::axis1_return);
-			invalidate_axis_return_cache(AdsSymbol::axis3_return);
-			invalidate_axis_return_cache(AdsSymbol::axis5_return);
-			invalidate_axis_return_cache(AdsSymbol::axis6_return);
-		}
-		return ok;
 	}
 
 	bool write_axis4_manual_requests(AppContext& ctx, bool forward_req, bool reverse_req)

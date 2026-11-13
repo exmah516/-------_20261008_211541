@@ -29,9 +29,6 @@ namespace AdsSymbol
 	extern const char* fn_1_value;
 	extern const char* fn_2_value;
 	extern const char* ft_2_value;
-	extern const char* axis1_fast_return;
-	extern const char* axis6_fast_retract;
-	extern const char* startup_smoothing_bypass;
 	extern const char* axis4_fwd_req;
 	extern const char* axis4_rev_req;
 	extern const char* inject_push_req;
@@ -47,10 +44,6 @@ namespace AdsSymbol
 	extern const char* host_comm_timeout;
 	extern const char* app_name;
 
-	extern const AxisReturnAdsSymbols axis1_return;
-	extern const AxisReturnAdsSymbols axis3_return;
-	extern const AxisReturnAdsSymbols axis5_return;
-	extern const AxisReturnAdsSymbols axis6_return;
 }
 
 namespace plc_io
@@ -60,43 +53,6 @@ namespace plc_io
 	bool write_startup_loading_ready(AppContext& ctx, bool ready);
 	void load_pos_from_actual(AppContext& ctx);
 
-	bool read_axis_return_status(AppContext& ctx, const AxisReturnAdsSymbols& symbols, AxisReturnStatus& status);
-	bool clear_axis_return_request(AppContext& ctx, const AxisReturnAdsSymbols& symbols);
-	bool clear_axis_return_requests(
-		AppContext& ctx,
-		const AxisReturnAdsSymbols* const* symbols,
-		int count);
-	bool request_axis_return(
-		AppContext& ctx,
-		const AxisReturnAdsSymbols& symbols,
-		double target_abs,
-		double velocity,
-		double acc,
-		double dec,
-		double jerk);
-	bool prepare_axis_returns(
-		AppContext& ctx,
-		const AxisReturnAdsSymbols* const* symbols,
-		const double* target_abs,
-		const double* velocity,
-		const double* acc,
-		const double* dec,
-		const double* jerk,
-		int count);
-	bool commit_axis_return_requests(
-		AppContext& ctx,
-		const AxisReturnAdsSymbols* const* symbols,
-		int count);
-	bool request_axis_returns(
-		AppContext& ctx,
-		const AxisReturnAdsSymbols* const* symbols,
-		const double* target_abs,
-		const double* velocity,
-		const double* acc,
-		const double* dec,
-		const double* jerk,
-		int count);
-	bool clear_axis1_group_return_requests(AppContext& ctx);
 	bool write_axis4_manual_requests(AppContext& ctx, bool forward_req, bool reverse_req);
 	void clear_plc_reinit_req(AppContext& ctx);
 }

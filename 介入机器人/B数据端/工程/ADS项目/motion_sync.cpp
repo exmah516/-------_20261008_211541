@@ -142,8 +142,6 @@ namespace motion_sync
 	{
 		double preserved_axis2_hold_rel = *ctx.axis2_hold_rel;
 		double preserved_axis7_hold_rel = *ctx.axis7_hold_rel;
-		plc_io::clear_axis1_group_return_requests(ctx);
-		plc_io::clear_axis_return_request(ctx, AdsSymbol::axis6_return);
 		plc_io::write_axis4_manual_requests(ctx, false, false);
 
 		if (!plc_io::read_plc_state(ctx))

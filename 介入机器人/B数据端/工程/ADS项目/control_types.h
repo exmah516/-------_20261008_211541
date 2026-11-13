@@ -5,6 +5,7 @@
 #pragma once
 
 #include "Handle.h"
+#include "handoff_types.h"
 #include <ADSComm1.h>
 #include <cstdint>
 #include <cmath>
@@ -26,28 +27,6 @@ bool get_average_dual_pos(
 void copy_positions(const double* src, double* dst, int count);
 
 class AdsCommunicationService;
-
-struct AxisReturnAdsSymbols
-{
-	const char* req = nullptr;
-	const char* busy = nullptr;
-	const char* done = nullptr;
-	const char* error = nullptr;
-	const char* error_id = nullptr;
-	const char* target_abs = nullptr;
-	const char* velocity = nullptr;
-	const char* acc = nullptr;
-	const char* dec = nullptr;
-	const char* jerk = nullptr;
-};
-
-struct AxisReturnStatus
-{
-	bool busy = false;
-	bool done = false;
-	bool error = false;
-	unsigned long error_id = 0;
-};
 
 struct HandleFilterState
 {
@@ -159,10 +138,9 @@ struct ControlConfig
 	double axis6_return_acc_mm_s2 = 4800.0;
 	double axis6_return_dec_mm_s2 = 4800.0;
 	double axis6_return_jerk_mm_s3 = 70000.0;
-	// 统一计划回退握手：只允许在PLC尚未启动动作时自动重试一次。
-	DWORD planned_return_ack_timeout_ms = 250;
-	DWORD planned_return_retry_clear_timeout_ms = 500;
-	DWORD planned_return_execution_timeout_ms = 5000;
+	// 同一事务号原样重发，PLC侧幂等。
+	DWORD handoff_resend_ms = 300;
+	DWORD handoff_ack_timeout_ms = 1000;
 
 	// 手柄低通滤波。
 	double linear_handle_alpha = 0.25;
@@ -187,140 +165,42 @@ struct CylinderPreset
 	unsigned short cyl4_follow_release = 100;
 };
 
-enum class PlannedReturnPhase : unsigned char
+enum class HandoffPhase : unsigned char { Idle, Requested, Running, Takeover };
+enum class PlannedReturnMode : unsigned char { None = 0, Dual = 5 };
+enum class PlannedReturnRebaseScope : unsigned char { Both = 2 };
+struct HandoffLeg
 {
-	Idle,
-	ClampSettle,
-	SubmitRequest,
-	AwaitAccepted,
-	AwaitDone,
-	RetryClear,
-	AwaitFreshSnapshot,
-	PublishHandoff,
-	AwaitHandoffApplied,
-	PostHandoffClampSettle
+    bool active = false;
+    int axis_index = -1;
+    double target_abs = 0.0, entry_rel = 0.0;
 };
-
-enum class PlannedReturnMode : unsigned char
+struct HandoffCoordinator
 {
-	None = 0,
-	Dual = 5
-};
-
-enum class PlannedReturnRebaseScope : unsigned char
-{
-	Both = 2
-};
-
-enum class PlannedReturnAdsCommandPurpose : unsigned char
-{
-	None,
-	Prepare,
-	Commit,
-	RetryClear,
-	CancelClear
-};
-
-struct PlannedReturnLeg
-{
-	bool active = false;
-	int axis_index = -1; // 0=axis1，5=axis6
-	double target_abs = 0.0;
-	double entry_rel = 0.0;
-	bool request_armed = false; // 已捕获本次commit前事件基线，允许解释后续Notification
-	bool acknowledged = false;
-	bool started = false;
-	// Commit部分成功或传输结果未知时锁存；即使Notification尚未到达也禁止整组自动重发。
-	bool possibly_started = false;
-	bool done = false;
-	std::uint64_t request_event_sequence = 0;
-	std::uint64_t ack_event_sequence = 0;
-	std::uint64_t error_event_sequence = 0;
-	std::uint32_t reported_error_id = 0;
-	std::uint64_t cancel_event_sequence = 0;
-	bool cancel_event_required = false;
-
-	void reset()
-	{
-		*this = PlannedReturnLeg{};
-	}
-};
-
-struct PlannedReturnCoordinator
-{
-	PlannedReturnPhase phase = PlannedReturnPhase::Idle;
-	PlannedReturnMode mode = PlannedReturnMode::None;
-	PlannedReturnRebaseScope rebase_scope = PlannedReturnRebaseScope::Both;
-	PlannedReturnLeg legs[2];
-	int leg_count = 0;
-	unsigned int retry_count = 0;
-	ULONGLONG phase_t0_ms = 0;
-	ULONGLONG request_t0_ms = 0;
-	ULONGLONG execution_t0_ms = 0;
-	ULONGLONG retry_clear_t0_ms = 0;
-	std::uint64_t clamp_output_generation = 0;
-	bool clamp_output_applied = false;
-	bool request_prepared = false;
-	std::uint64_t commit_guard_generation = 0;
-	bool retry_clear_issued = false;
-	std::uint64_t retry_clear_snapshot_sequence = 0;
-	PlannedReturnAdsCommandPurpose ads_command_purpose = PlannedReturnAdsCommandPurpose::None;
-	std::uint64_t ads_command_sequence = 0;
-	ULONGLONG ads_command_submit_ms = 0;
-	bool cancel_clear_confirmed = false;
-	bool completion_clear_confirmed = false;
-	std::uint64_t cancel_snapshot_sequence = 0;
-	ULONGLONG cancel_t0_ms = 0;
-	ULONGLONG cancel_clear_retry_after_ms = 0;
-	bool cancel_timeout_reported = false;
-	bool cancel_rebased = false;
-	std::uint64_t cancel_hold_generation = 0;
-	std::uint64_t done_snapshot_sequence = 0;
-	std::uint64_t handoff_generation = 0;
-	double hold_axis3_rel = 0.0;
-	double hold_axis5_rel = 0.0;
-	double hold_axis1_rel = 0.0;
-	double hold_axis6_rel = 0.0;
-	// 夹爪两级时序：clamp_stage 0=仅持有者夹紧，1=移动者已松开；
-	// restore_stage 0=移动者已夹紧(持有者仍夹)，1=持有者已松开。
-	unsigned char clamp_stage = 0;
-	unsigned char restore_stage = 0;
-	std::uint64_t release_output_generation = 0;
-	bool release_applied = false;
-
-	bool active() const
-	{
-		return phase != PlannedReturnPhase::Idle;
-	}
-
-	bool contains_axis(int axis_index) const
-	{
-		for (int i = 0; i < leg_count; ++i)
-		{
-			if (legs[i].active && legs[i].axis_index == axis_index) return true;
-		}
-		return false;
-	}
-
-	// 保持既有WPF数值契约：0=Follow，1=夹爪稳定，2=请求/运动，3=交接/恢复夹爪稳定。
-	int compatibility_phase_for_axis(int axis_index) const
-	{
-		if (!active() || !contains_axis(axis_index)) return 0;
-		if (phase == PlannedReturnPhase::ClampSettle) return 1;
-		if (phase == PlannedReturnPhase::SubmitRequest ||
-			phase == PlannedReturnPhase::AwaitAccepted ||
-			phase == PlannedReturnPhase::AwaitDone ||
-			phase == PlannedReturnPhase::RetryClear)
-		{
-			return 2;
-		}
-		return 3;
-	}
-
-	void reset()
-	{
-		*this = PlannedReturnCoordinator{};
-	}
+    HandoffPhase phase = HandoffPhase::Idle;
+    PlannedReturnMode mode = PlannedReturnMode::None;
+    HandoffCommand command{};
+    HandoffStatus status{};
+    HandoffLeg legs[2];
+    int leg_count = 0;
+    ULONGLONG request_t0_ms = 0, last_send_ms = 0;
+    std::uint64_t send_token = 0, done_snapshot_sequence = 0, handoff_generation = 0;
+    bool rebased = false, request_timed_out = false;
+    double hold_axis1_rel = 0.0, hold_axis6_rel = 0.0, hold_axis3_rel = 0.0, hold_axis5_rel = 0.0;
+    bool active() const { return phase != HandoffPhase::Idle; }
+    bool contains_axis(int axis_index) const
+    {
+        for (int i = 0; i < leg_count; ++i)
+            if (legs[i].active && legs[i].axis_index == axis_index) return true;
+        return false;
+    }
+    int public_phase_for_axis(int axis_index) const
+    {
+        if (!active() || !contains_axis(axis_index)) return 0;
+        if (status.phase == 10 || status.phase == 20) return 1;
+        if (status.phase >= 40 || phase == HandoffPhase::Takeover) return 3;
+        return 2;
+    }
+    void reset() { *this = HandoffCoordinator{}; }
 };
 
 // 指令触边只记住换手意图；实际到位并低速后才切换夹爪。
@@ -391,7 +271,7 @@ enum class StartupPhase
 struct CrawlState
 {
 	// 这里只保留 Follow 计算所需的手柄基准、轴基准和窗口。
-	// 自动换手阶段、计时、PLC请求和夹爪时序统一由 PlannedReturnCoordinator 管理。
+	// 自动换手阶段、计时、PLC请求和夹爪时序统一由 HandoffCoordinator 管理。
 	bool enabled = false;
 	bool window_active = false;
 	double handle_ref = 0.0; // 当前控制段的手柄线性基准（重同步/重建基线时更新）
