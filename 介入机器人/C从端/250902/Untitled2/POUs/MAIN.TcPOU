@@ -3,6 +3,7 @@
   <POU Name="MAIN" Id="{0f7d3262-e451-4dc7-838c-99daae61b3ae}" SpecialFunc="None">
     <Declaration><![CDATA[PROGRAM MAIN
 VAR
+    handoff_called : BOOL;
 	init_		:		init;
 	handle1_	:		handle;
 	clear_err_	:		clear_err;
@@ -118,6 +119,7 @@ IF G.gen_state <> _self_check THEN
 END_IF
 
 dispatched_state := G.gen_state;
+handoff_called := FALSE;
 CASE G.gen_state OF
 	_init:			init_();
 	_self_check:
@@ -195,12 +197,15 @@ CASE G.gen_state OF
 		IF selfcheck_started THEN
 			self_check_(init_target_from_left := selfcheck_target_latched);
 		END_IF
-	_handle:		handle1_();	
+	_handle:		handoff_called := TRUE; handle1_();	
 		SETPOSITIONGEN();
 	_clear_err:		clear_err_();	
 	_err:			err_(enter := last_dispatched_state <> _err);
 	_reset:			reset_();
 END_CASE
+IF NOT handoff_called THEN
+    handle1_.handoff(ready:=FALSE, interrupted:=TRUE);
+END_IF
 last_dispatched_state := dispatched_state;]]></ST>
     </Implementation>
     <Folder Name="block" Id="{8d2a06f7-1a45-482f-85f8-8678060c15b3}" />

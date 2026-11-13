@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
   <POU Name="handle" Id="{687f3d3e-09ee-464b-b8db-c97aea6d31ed}" SpecialFunc="None">
     <Declaration><![CDATA[FUNCTION_BLOCK handle
@@ -8,6 +8,8 @@ VAR_OUTPUT
 END_VAR
 VAR
 	i,j,k:INT;
+    handoff : Handoff;
+    handoff_reinit : BOOL;
 	v_step		: LREAL;
 	avg_window	: INT;
 	avg_window_size : INT := 20;
@@ -62,7 +64,7 @@ VAR
 	spg_enable_exec	: ARRAY[1..7] OF BOOL;
 	spg_disable_exec : ARRAY[1..7] OF BOOL;
 
-	return_enable : ARRAY[1..7] OF BOOL := [TRUE, FALSE, TRUE, FALSE, TRUE, TRUE, FALSE];
+	return_enable : ARRAY[1..7] OF BOOL := [TRUE, FALSE, FALSE, FALSE, FALSE, TRUE, FALSE];
 	return_state : ARRAY[1..7] OF INT;
 	return_exec : ARRAY[1..7] OF BOOL;
 	return_target_abs : ARRAY[1..7] OF LREAL;
@@ -135,6 +137,7 @@ IF G.host_comm_timeout THEN
 END_IF
 G.host_comm_timeout := host_timeout_latched;
 
+handoff_reinit := G.handle_reinit_req;
 IF G.handle_reinit_req THEN
 	init_done := FALSE;
 	init_wait(IN:=FALSE);
@@ -162,11 +165,11 @@ IF G.handle_reinit_req THEN
 		traj_vel[i] := 0.0;
 		traj_acc[i] := 0.0;
 		host_hold_abs[i] := 0.0;
-		G.return_cmd[i].Req := FALSE;
-		G.return_cmd[i].Busy := FALSE;
-		G.return_cmd[i].Done := FALSE;
-		G.return_cmd[i].Error := FALSE;
-		G.return_cmd[i].ErrorId := 0;
+		handoff.leg_cmd[i].Req := FALSE;
+		handoff.leg_cmd[i].Busy := FALSE;
+		handoff.leg_cmd[i].Done := FALSE;
+		handoff.leg_cmd[i].Error := FALSE;
+		handoff.leg_cmd[i].ErrorId := 0;
 	END_FOR
 	host_hold_captured := FALSE;
 	host_timeout_prev := FALSE;
@@ -203,6 +206,9 @@ FOR i:=1 TO 7 DO
 	END_IF
 END_FOR
 
+handoff(ready:=init_done AND all_powered AND NOT has_axis_error AND NOT G.host_comm_timeout AND NOT handoff_reinit,
+    interrupted:=NOT all_powered OR has_axis_error OR G.host_comm_timeout OR handoff_reinit);
+
 IF (NOT all_powered) OR has_axis_error THEN
 	// 在自动清错、重建参考和重启 Power 之前保留故障当拍，恢复后不清除。
 	G.estop_diag_host_timeout := G.host_comm_timeout;
@@ -214,7 +220,7 @@ IF (NOT all_powered) OR has_axis_error THEN
 		G.estop_diag_power_positive[j] := G.power_[j].Enable_Positive;
 		G.estop_diag_power_negative[j] := G.power_[j].Enable_Negative;
 		G.estop_diag_return_state[j] := return_state[j];
-		G.estop_diag_return_cmd[j] := G.return_cmd[j];
+		G.estop_diag_return_cmd[j] := handoff.leg_cmd[j];
 		G.estop_diag_move_error[j] := fb_return_move_abs[j].Error;
 		G.estop_diag_move_aborted[j] := fb_return_move_abs[j].CommandAborted;
 		G.estop_diag_move_error_id[j] := fb_return_move_abs[j].ErrorID;
@@ -298,10 +304,10 @@ IF NOT init_done THEN
 			IF slimit_enable[j] THEN
 				right_slimit[j] := G.leftlimit[j] + G.rslimit_distance[j];
 			END_IF
-			G.return_cmd[j].Busy := FALSE;
-			G.return_cmd[j].Done := FALSE;
-			G.return_cmd[j].Error := FALSE;
-			G.return_cmd[j].ErrorId := 0;
+			handoff.leg_cmd[j].Busy := FALSE;
+			handoff.leg_cmd[j].Done := FALSE;
+			handoff.leg_cmd[j].Error := FALSE;
+			handoff.leg_cmd[j].ErrorId := 0;
 		END_FOR
 
 		G.axis4_manual_busy := FALSE;
@@ -334,18 +340,18 @@ IF G.host_comm_timeout THEN
 		// 仅捕获超时发生时已经在运行的独立运动，禁止恢复后自动续跑。
 		FOR i:=1 TO 7 DO
 			host_return_stop_active[i] := return_enable[i] AND
-				((return_state[i] <> 0) OR G.return_cmd[i].Busy OR fb_return_move_abs[i].Busy);
+				((return_state[i] <> 0) OR handoff.leg_cmd[i].Busy OR fb_return_move_abs[i].Busy);
 			host_return_stop_exec[i] := FALSE;
 		END_FOR
 		host_axis4_stop_active := (axis4_manual_state <> 0) OR fb_axis4_move_velocity.Busy;
 	END_IF
 
 	// 超时期间持续清除运动请求，避免上位机重连时把旧请求重新送入状态机。
-	G.axis1_fast_return := FALSE;
-	G.axis6_fast_retract := FALSE;
+
+
 	G.axis4_fwd_req := FALSE;
 	G.axis4_rev_req := FALSE;
-	G.startup_smoothing_bypass := FALSE;
+
 	axis4_move_exec := FALSE;
 	host_all_stopped := TRUE;
 
@@ -353,8 +359,8 @@ IF G.host_comm_timeout THEN
 		spg_enable_exec[i] := FALSE;
 		spg_disable_exec[i] := FALSE;
 		return_exec[i] := FALSE;
-		G.return_cmd[i].Req := FALSE;
-		G.return_cmd[i].Done := FALSE;
+		handoff.leg_cmd[i].Req := FALSE;
+		handoff.leg_cmd[i].Done := FALSE;
 
 		// 实际位置仍实时刷新用于诊断；外部参考始终保持超时边沿的锁存位置。
 		G.Act_pos[i] := G.axis[i].NcToPlc.ActPos - G.init_pos[i];
@@ -387,7 +393,7 @@ IF G.host_comm_timeout THEN
 		ELSE
 			host_return_stop_exec[i] := FALSE;
 		END_IF
-		G.return_cmd[i].Busy := host_return_stop_active[i];
+		handoff.leg_cmd[i].Busy := host_return_stop_active[i];
 
 		IF ext_setpoint_enabled[i] THEN
 			MC_ExtSetPointGenFeed(
@@ -491,9 +497,9 @@ FOR j:=1 TO 7 DO
 	G.act_pos_from_left[j] := G.axis[j].NcToPlc.ActPos - G.leftlimit[j];
 	G.refer_from_left[j] := (G.refer[j] + G.init_pos[j]) - G.leftlimit[j];
 
-	// 保持状态 30 锁存的位置，直到接管完成且上位机清除 Req，避免过渡参考覆盖预送值。
+	// 事务运动开始后直到接管，参与轴的参考由PLC独占。
 	// 状态 30/31 期间冻结参考输入，防止驱动层接收矛盾信号（禁用→重启 同时 参考变化）
-	IF return_enable[j] AND ((return_state[j] >= 30) OR G.return_cmd[j].Done OR G.return_cmd[j].Error) THEN
+	IF return_enable[j] AND handoff.freeze[j] THEN
 		G.refer[j] := traj_pos[j];
 		G.refer_from_left[j] := traj_pos[j] + G.init_pos[j] - G.leftlimit[j];
 		CONTINUE;
@@ -501,8 +507,7 @@ FOR j:=1 TO 7 DO
 
 	v_step := G.v_limit[j];
 	// 回退接管旁路：回退 Busy 期间跳过斜坡/均值，避免回退末端重新进入慢链路
-	return_handoff_bypass := ((j = 1) AND (G.axis1_fast_return OR G.return_cmd[1].Busy))
-		OR ((j = 6) AND (G.axis6_fast_retract OR G.return_cmd[6].Busy));
+	return_handoff_bypass := handoff.freeze[j];
 	IF return_handoff_bypass THEN
 		avg_window := 1;
 		ramp_counter[j] := 0;
@@ -544,7 +549,7 @@ FOR j:=1 TO 7 DO
 		END_FOR
 	END_IF
 
-	IF traj_enable[j] AND NOT return_handoff_bypass AND NOT G.startup_smoothing_bypass THEN
+	IF traj_enable[j] AND NOT return_handoff_bypass THEN
 		acc_raw := traj_wn * traj_wn * (G.refer[j] - traj_pos[j]) - 2.0 * traj_wn * traj_vel[j];
 		IF acc_raw > traj_amax[j] THEN
 			acc_raw := traj_amax[j];
@@ -577,21 +582,20 @@ FOR i:=1 TO 7 DO
 	END_IF
 
 	IF return_state[i] = 0 THEN
-		G.return_cmd[i].Busy := FALSE;
-		IF NOT G.return_cmd[i].Req THEN
-			G.return_cmd[i].Done := FALSE;
-			G.return_cmd[i].Error := FALSE;
-			G.return_cmd[i].ErrorId := 0;
+		handoff.leg_cmd[i].Busy := FALSE;
+		IF NOT handoff.leg_cmd[i].Req THEN
+			handoff.leg_cmd[i].Done := FALSE;
+			handoff.leg_cmd[i].Error := FALSE;
+			handoff.leg_cmd[i].ErrorId := 0;
 			return_finish_error[i] := FALSE;
 			return_error_id_pending[i] := 0;
-		ELSIF (NOT G.return_cmd[i].Done) AND (NOT G.return_cmd[i].Error) THEN
-			// Req 由上位机在完整写入参数后最后置位；此处只锁存一次，
-			// 本次 MC_MoveAbsolute 后续不再直接读取可被 ADS 改写的命令参数。
-			return_target_abs[i] := G.return_cmd[i].TargetAbs;
-			return_velocity[i] := G.return_cmd[i].Velocity;
-			return_acc[i] := G.return_cmd[i].Acc;
-			return_dec[i] := G.return_cmd[i].Dec;
-			return_jerk[i] := G.return_cmd[i].Jerk;
+		ELSIF (NOT handoff.leg_cmd[i].Done) AND (NOT handoff.leg_cmd[i].Error) THEN
+			// 子流程请求由Handoff发起；运动参数仅在此锁存一次。
+			return_target_abs[i] := handoff.leg_cmd[i].TargetAbs;
+			return_velocity[i] := handoff.leg_cmd[i].Velocity;
+			return_acc[i] := handoff.leg_cmd[i].Acc;
+			return_dec[i] := handoff.leg_cmd[i].Dec;
+			return_jerk[i] := handoff.leg_cmd[i].Jerk;
 			return_state[i] := 10;
 		END_IF
 	END_IF
@@ -606,20 +610,20 @@ FOR i:=1 TO 7 DO
 		return_enable_drop[i] := FALSE;
 	END_IF
 	IF ((return_state[i] = 10) OR (return_state[i] = 20)) AND
-		((NOT G.return_cmd[i].Req) OR G.SetPointGenDisable[i].Error OR return_wait[i].Q) THEN
+		(handoff.abort_motion OR G.SetPointGenDisable[i].Error OR return_wait[i].Q) THEN
 		return_clear_stop_active[i] := return_state[i] = 20;
 		return_finish_error[i] := TRUE;
-		IF NOT G.return_cmd[i].Req THEN
-			return_error_id_pending[i] := G.return_clear_error_id;
-		ELSE
-			// 超时没有FB错误码时保持该FB的ErrorID（通常为0），由阶段日志区分。
-			return_error_id_pending[i] := G.SetPointGenDisable[i].ErrorID;
-		END_IF
+        handoff.leg_error[i] := G.handoff_err_timeout;
+        IF G.SetPointGenDisable[i].Error THEN handoff.leg_error[i] := G.handoff_err_disable; END_IF
+        IF handoff.abort_motion THEN handoff.leg_error[i] := G.handoff_err_move; END_IF
+        return_error_id_pending[i] := G.SetPointGenDisable[i].ErrorID;
+        handoff.leg_cmd[i].Error := TRUE;
+        handoff.leg_cmd[i].ErrorId := return_error_id_pending[i];
 		return_state[i] := 30;
 	END_IF
 	CASE return_state[i] OF
 	10:
-		G.return_cmd[i].Busy := TRUE;
+		handoff.leg_cmd[i].Busy := TRUE;
 		spg_disable_exec[i] := TRUE;
 		IF G.SetPointGenDisable[i].Done OR NOT G.SetPointGenDisable[i].Enabled THEN
 			ext_setpoint_enabled[i] := FALSE;
@@ -627,14 +631,18 @@ FOR i:=1 TO 7 DO
 		END_IF
 
 	20:
-		G.return_cmd[i].Busy := TRUE;
+		handoff.leg_cmd[i].Busy := TRUE;
 		return_exec[i] := TRUE;
 		G.refer_from_left[i] := return_target_abs[i] - G.leftlimit[i];
 
 		// 接近目标不能代替功能块完成确认，否则未启动或被中断的命令也会被当成成功。
-		IF fb_return_move_abs[i].Error OR fb_return_move_abs[i].CommandAborted THEN
+		IF handoff.abort_motion OR fb_return_move_abs[i].Error OR fb_return_move_abs[i].CommandAborted THEN
 			return_finish_error[i] := TRUE;
 			return_error_id_pending[i] := fb_return_move_abs[i].ErrorID;
+            return_clear_stop_active[i] := TRUE;
+            handoff.leg_error[i] := G.handoff_err_move;
+            handoff.leg_cmd[i].Error := TRUE;
+            handoff.leg_cmd[i].ErrorId := return_error_id_pending[i];
 			return_state[i] := 30;
 		ELSIF fb_return_move_abs[i].Done THEN
 			return_finish_error[i] := FALSE;
@@ -643,24 +651,19 @@ FOR i:=1 TO 7 DO
 		END_IF
 
 	30:
-		G.return_cmd[i].Busy := TRUE;
+		handoff.leg_cmd[i].Busy := TRUE;
 		IF (ABS(G.axis[i].NcToPlc.ActVelo) <= 0.5) AND NOT return_clear_stop_active[i] THEN
 			G.Act_pos[i] := G.axis[i].NcToPlc.ActPos - G.init_pos[i];
 			G.act_pos_from_left[i] := G.axis[i].NcToPlc.ActPos - G.leftlimit[i];
-			// 状态 30 只锁存位置一次，不再更新 refer/ref_slow/act_h
-			// 防止在禁用→重启外部给定期间参考继续变化
-			IF return_state[i] <> 30 THEN
-				G.refer[i] := G.Act_pos[i];
-				G.ref_slow[i] := G.Act_pos[i];
-				G.act_h[i] := G.Act_pos[i];
-				G.act_hf[i] := G.Act_pos[i];
-				G.refer_from_left[i] := G.act_pos_from_left[i];
-				FOR k:=1 TO 30 DO
-					act_hh[i][k] := G.Act_pos[i];
-				END_FOR
-				act_h_prev[i] := G.Act_pos[i];
-				traj_pos[i] := G.Act_pos[i];
-			END_IF
+            // 停稳后只对齐一次；下一扫描先预送，再重新使能。
+            G.refer[i] := G.Act_pos[i];
+            G.ref_slow[i] := G.Act_pos[i];
+            G.act_h[i] := G.Act_pos[i];
+            G.act_hf[i] := G.Act_pos[i];
+            G.refer_from_left[i] := G.act_pos_from_left[i];
+            FOR k:=1 TO 30 DO act_hh[i][k] := G.Act_pos[i]; END_FOR
+            act_h_prev[i] := G.Act_pos[i];
+            traj_pos[i] := G.Act_pos[i];
 			traj_vel[i] := 0.0;
 			traj_acc[i] := 0.0;
 			// 先留出一个完整 PLC 扫描周期预送当前设定值，再重新使能外部设定值发生器。
@@ -668,7 +671,7 @@ FOR i:=1 TO 7 DO
 		END_IF
 
 	31:
-		G.return_cmd[i].Busy := TRUE;
+		handoff.leg_cmd[i].Busy := TRUE;
 		spg_enable_exec[i] := TRUE;
 		IF return_wait[i].Q THEN
 			G.gen_state := _err;
@@ -686,15 +689,15 @@ FOR i:=1 TO 7 DO
 		END_IF
 		IF G.SetPointGenEnable[i].Done AND NOT G.SetPointGenEnable[i].Error THEN
 			ext_setpoint_enabled[i] := TRUE;
-			G.return_cmd[i].Busy := FALSE;
+			handoff.leg_cmd[i].Busy := FALSE;
 			IF return_finish_error[i] THEN
-				G.return_cmd[i].Done := FALSE;
-				G.return_cmd[i].Error := TRUE;
-				G.return_cmd[i].ErrorId := return_error_id_pending[i];
+				handoff.leg_cmd[i].Done := FALSE;
+				handoff.leg_cmd[i].Error := TRUE;
+				handoff.leg_cmd[i].ErrorId := return_error_id_pending[i];
 			ELSE
-				G.return_cmd[i].Done := TRUE;
-				G.return_cmd[i].Error := FALSE;
-				G.return_cmd[i].ErrorId := 0;
+				handoff.leg_cmd[i].Done := TRUE;
+				handoff.leg_cmd[i].Error := FALSE;
+				handoff.leg_cmd[i].ErrorId := 0;
 			END_IF
 			return_finish_error[i] := FALSE;
 			return_error_id_pending[i] := 0;
@@ -894,7 +897,7 @@ FOR i:=1 TO 7 DO
 	// 计划回退结束后，状态 31 的预送周期和 SetPointGenEnable 过渡周期都必须喂入当前设定值。
 	// 否则 NC 重新接管时会短暂使用禁用前遗留的左窗口设定值，造成约一个窗口宽度的反向尖峰。
 	IF ext_setpoint_enabled[i] OR (return_state[i] = 31) OR spg_enable_exec[i] THEN
-		IF traj_enable[i] AND NOT G.startup_smoothing_bypass THEN
+		IF traj_enable[i] THEN
 			pos_abs := traj_pos[i] + G.init_pos[i];
 			MC_ExtSetPointGenFeed(
 				Position     := pos_abs,
@@ -924,7 +927,7 @@ FOR i:=1 TO 7 DO
 	G.SetPointGenDisable[i].Execute := spg_disable_exec[i];
 	return_clear_stop[i](Axis:=G.axis[i], Execute:=return_clear_stop_active[i],
 		Deceleration:=return_dec[i], Jerk:=return_jerk[i]);
-	IF return_clear_stop_active[i] AND (return_clear_stop[i].Done OR return_clear_stop[i].Error) THEN
+	IF return_clear_stop_active[i] AND return_clear_stop[i].Done THEN
 		return_clear_stop_active[i] := FALSE;
 	END_IF
 	fb_return_move_abs[i](

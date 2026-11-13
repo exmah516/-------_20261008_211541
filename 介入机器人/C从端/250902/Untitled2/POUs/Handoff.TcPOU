@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+<POU Name="Handoff" Id="{78796064-880d-4e24-9f26-870cb15c3eb4}"><Declaration><![CDATA[FUNCTION_BLOCK Handoff
+VAR_INPUT
+    ready : BOOL;
+    interrupted : BOOL;
+    // handle内部子流程回写状态；不向ADS上位机公开触发接口。
+    leg_cmd : ARRAY[1..7] OF ST_AxisPlannedReturnCmd;
+    leg_error : ARRAY[1..7] OF UDINT;
+END_VAR
+VAR_OUTPUT
+    freeze : ARRAY[1..7] OF BOOL;
+    abort_motion : BOOL;
+END_VAR
+VAR
+    latched : ST_HandoffCmd;
+    active_id : UDINT;
+    last_request : UDINT;
+    active : BOOL;
+    interrupted_pending : BOOL;
+    initialized : BOOL;
+    was_ready : BOOL;
+    fault_code : UDINT;
+    fault_axis : INT;
+    fault_nc : UDINT;
+    outputs : ARRAY[1..4] OF WORD;
+    tick : UDINT;
+    phase_start : UDINT;
+    motion_start : UDINT;
+    motion_recorded : ARRAY[1..2] OF BOOL;
+    phase : INT;
+    previous_phase : INT;
+    next_phase : INT;
+    wait_slot : INT;
+    wait_max : UDINT;
+    elapsed : UDINT;
+    slot, axis_index, holder, mover, i : INT;
+    participates, all_finished, params_valid : BOOL;
+END_VAR
+]]></Declaration><Implementation><ST><![CDATA[// 本功能块每个1ms任务扫描调用一次；不依赖ADS快照或上位机周期。
+tick := tick + 1;
+previous_phase := phase;
+next_phase := phase;
+IF NOT initialized THEN
+    outputs[1] := G.cylinder1_value;
+    outputs[2] := G.cylinder2_value;
+    outputs[3] := G.cylinder3_value;
+    outputs[4] := G.cylinder4_value;
+    IF ready THEN
+        G.cyl_cmd := outputs;
+        initialized := TRUE;
+    END_IF
+END_IF
+
+IF ready AND NOT was_ready AND NOT active THEN
+    G.cyl_cmd[1] := G.cylinder1_value;
+    G.cyl_cmd[2] := G.cylinder2_value;
+    G.cyl_cmd[3] := G.cylinder3_value;
+    G.cyl_cmd[4] := G.cylinder4_value;
+END_IF
+was_ready := ready;
+
+IF active AND interrupted THEN
+    interrupted_pending := TRUE;
+    fault_code := G.handoff_err_interrupted;
+    fault_axis := 0;
+    fault_nc := 0;
+    abort_motion := TRUE;
+END_IF
+
+IF (G.handoff_cmd.request_id <> 0) AND (G.handoff_cmd.request_id <> G.handoff_status.ack_id) AND (G.handoff_cmd.request_id <> last_request) AND NOT (active AND (G.handoff_cmd.request_id = active_id)) THEN
+    last_request := G.handoff_cmd.request_id;
+    params_valid := (G.handoff_cmd.leg_mask = 1) OR (G.handoff_cmd.leg_mask = 2) OR (G.handoff_cmd.leg_mask = 3);
+    FOR slot := 1 TO 2 DO
+        participates := (G.handoff_cmd.leg_mask = 3) OR (G.handoff_cmd.leg_mask = slot);
+        IF participates THEN
+            params_valid := params_valid AND (G.handoff_cmd.velocity[slot] > 0) AND (G.handoff_cmd.acc[slot] > 0);
+        END_IF
+    END_FOR
+    IF active OR NOT ready OR NOT params_valid OR (((G.handoff_cmd.leg_mask AND 1) <> 0) AND leg_cmd[1].Busy) OR (((G.handoff_cmd.leg_mask AND 2) <> 0) AND leg_cmd[6].Busy) THEN
+        G.handoff_status.ack_id := last_request;
+        G.handoff_status.done_id := last_request;
+        G.handoff_status.result := 2;
+        G.handoff_status.error_code := G.handoff_err_rejected;
+        G.handoff_status.error_axis := 0;
+        IF active THEN G.handoff_status.reject_reason := 1;
+        ELSIF NOT ready THEN G.handoff_status.reject_reason := 2;
+        ELSE G.handoff_status.reject_reason := 3; END_IF
+    ELSE
+        latched := G.handoff_cmd;
+        active_id := latched.request_id;
+        active := TRUE;
+        abort_motion := FALSE;
+        interrupted_pending := FALSE;
+        fault_code := 0;
+        fault_axis := 0;
+        fault_nc := 0;
+        G.handoff_status.ack_id := active_id;
+        G.handoff_status.done_id := 0;
+        G.handoff_status.result := 0;
+        G.handoff_status.error_code := 0;
+        G.handoff_status.error_axis := 0;
+        G.handoff_status.nc_error_code := 0;
+        G.handoff_status.reject_reason := 0;
+        G.handoff_status.leg_mask := latched.leg_mask;
+        FOR i := 1 TO 8 DO G.handoff_status.phase_ms[i] := 0; END_FOR
+        FOR i := 1 TO 7 DO
+            leg_cmd[i].Req := FALSE;
+            leg_error[i] := 0;
+        END_FOR
+        FOR slot := 1 TO 2 DO motion_recorded[slot] := FALSE; END_FOR
+        outputs[1] := G.cyl_cmd[1];
+        outputs[2] := G.cyl_cmd[2];
+        outputs[3] := G.cyl_cmd[3];
+        outputs[4] := G.cyl_cmd[4];
+        next_phase := 10;
+    END_IF
+END_IF
+
+IF active AND ready AND NOT interrupted THEN
+    IF interrupted_pending THEN
+        // 原停轴/重初始化路径已完成；恢复后只执行夹爪收尾，不续跑旧目标。
+        interrupted_pending := FALSE;
+        next_phase := 40;
+        FOR i := 1 TO 7 DO leg_cmd[i].Req := FALSE; END_FOR
+    ELSE
+        elapsed := tick - phase_start;
+        CASE phase OF
+        10, 20, 40, 50:
+            wait_slot := 1;
+            IF phase = 20 THEN wait_slot := 2; END_IF
+            IF phase = 40 THEN wait_slot := 3; END_IF
+            IF phase = 50 THEN wait_slot := 4; END_IF
+            wait_max := 0;
+            FOR slot := 1 TO 2 DO
+                IF (latched.leg_mask = 3) OR (latched.leg_mask = slot) THEN
+                    wait_max := MAX(wait_max, latched.wait_ms[slot][wait_slot]);
+                END_IF
+            END_FOR
+            IF elapsed >= wait_max THEN next_phase := phase + 10; END_IF
+        30:
+            all_finished := TRUE;
+            FOR slot := 1 TO 2 DO
+                IF (latched.leg_mask = 3) OR (latched.leg_mask = slot) THEN
+                    axis_index := 1;
+                    IF slot = 2 THEN axis_index := 6; END_IF
+                    IF leg_error[axis_index] <> 0 THEN
+                        abort_motion := TRUE;
+                        IF fault_code = 0 THEN
+                            fault_code := leg_error[axis_index];
+                            fault_axis := axis_index;
+                            fault_nc := leg_cmd[axis_index].ErrorId;
+                        END_IF
+                    END_IF
+                    IF leg_cmd[axis_index].Busy OR NOT (leg_cmd[axis_index].Done OR leg_cmd[axis_index].Error) THEN
+                        all_finished := FALSE;
+                    ELSIF NOT motion_recorded[slot] THEN
+                        G.handoff_status.phase_ms[5 + slot] := tick - motion_start;
+                        motion_recorded[slot] := TRUE;
+                    END_IF
+                END_IF
+            END_FOR
+            IF all_finished THEN next_phase := 40; END_IF
+        60:
+            IF G.handoff_takeover_id = active_id THEN
+                // 移交时写回当前输出，屏蔽事务期间残留的上位机电缸命令。
+                G.cyl_cmd := outputs;
+                next_phase := 0;
+                active := FALSE;
+                abort_motion := FALSE;
+            END_IF
+        END_CASE
+    END_IF
+END_IF
+
+IF next_phase <> phase THEN
+    IF phase = 10 THEN G.handoff_status.phase_ms[1] := tick - phase_start; END_IF
+    IF phase = 20 THEN G.handoff_status.phase_ms[2] := tick - phase_start; END_IF
+    IF phase = 30 THEN G.handoff_status.phase_ms[3] := tick - phase_start; END_IF
+    IF phase = 40 THEN G.handoff_status.phase_ms[4] := tick - phase_start; END_IF
+    IF phase = 50 THEN G.handoff_status.phase_ms[5] := tick - phase_start; END_IF
+    phase := next_phase;
+    phase_start := tick;
+    G.handoff_status.phase := phase;
+    G.handoff_status.phase_seq := G.handoff_status.phase_seq + 1;
+    IF phase = 30 THEN motion_start := tick; END_IF
+    IF phase = 60 THEN
+        G.handoff_status.ack_id := active_id;
+        G.handoff_status.done_id := active_id;
+        G.handoff_status.error_code := fault_code;
+        G.handoff_status.error_axis := fault_axis;
+        G.handoff_status.nc_error_code := fault_nc;
+        G.handoff_status.reject_reason := 0;
+        IF fault_code = 0 THEN G.handoff_status.result := 1;
+        ELSE G.handoff_status.result := 2; END_IF
+    END_IF
+END_IF
+
+FOR slot := 1 TO 2 DO
+    axis_index := 1;
+    IF slot = 2 THEN axis_index := 6; END_IF
+    participates := active AND ((latched.leg_mask = 3) OR (latched.leg_mask = slot));
+    freeze[axis_index] := participates AND (phase >= 30);
+    IF participates AND ready AND NOT interrupted AND NOT interrupted_pending THEN
+        holder := slot * 2 - 1;
+        mover := slot * 2;
+        IF (phase = 10) OR (phase = 40) THEN
+            outputs[holder] := latched.cyl_clamp[holder];
+            outputs[mover] := latched.cyl_clamp[mover];
+        ELSIF (phase = 20) OR (phase = 30) THEN
+            outputs[holder] := latched.cyl_clamp[holder];
+            outputs[mover] := latched.cyl_open[mover];
+        ELSIF phase = 50 THEN
+            outputs[holder] := latched.cyl_open[holder];
+            outputs[mover] := latched.cyl_clamp[mover];
+        END_IF
+        leg_cmd[axis_index].Req := phase = 30;
+        IF (phase = 30) AND (previous_phase <> 30) THEN
+            leg_cmd[axis_index].TargetAbs := latched.target_abs[slot];
+            leg_cmd[axis_index].Velocity := latched.velocity[slot];
+            leg_cmd[axis_index].Acc := latched.acc[slot];
+            leg_cmd[axis_index].Dec := latched.dec[slot];
+            leg_cmd[axis_index].Jerk := latched.jerk[slot];
+        END_IF
+    END_IF
+END_FOR
+IF NOT active AND ready THEN outputs := G.cyl_cmd; END_IF
+// 非_handle时自检等原有流程仍直接控制电缸，事务保留内部输出直到恢复。
+IF G.gen_state = _handle THEN
+    G.cylinder1_value := outputs[1];
+    G.cylinder2_value := outputs[2];
+    G.cylinder3_value := outputs[3];
+    G.cylinder4_value := outputs[4];
+END_IF
+]]></ST></Implementation></POU>
+</TcPlcObject>

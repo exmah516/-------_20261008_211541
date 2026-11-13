@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+<DUT Name="ST_HandoffCmd" Id="{36ce565e-591d-4b9c-963e-5f7772831eca}"><Declaration><![CDATA[{attribute 'pack_mode' := '1'}
+TYPE ST_HandoffCmd :
+STRUCT
+    leg_mask : BYTE;
+    target_abs : ARRAY[1..2] OF LREAL;
+    velocity : ARRAY[1..2] OF LREAL;
+    acc : ARRAY[1..2] OF LREAL;
+    dec : ARRAY[1..2] OF LREAL;
+    jerk : ARRAY[1..2] OF LREAL;
+    cyl_clamp : ARRAY[1..4] OF WORD;
+    cyl_open : ARRAY[1..4] OF WORD;
+    wait_ms : ARRAY[1..2] OF ARRAY[1..4] OF UINT;
+    request_id : UDINT;
+END_STRUCT
+END_TYPE
+]]></Declaration></DUT>
+</TcPlcObject>

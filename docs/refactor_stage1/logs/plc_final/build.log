@@ -1,0 +1,59 @@
+﻿Source version=3.1.4024.67; fixed=True
+Installed TwinCAT Base versions: 3.1.4024.67
+Removed compile caches in build copy: 16
+Remote Manager selected version: 3.1.4024.67
+Solution.Open: C:\Users\Sui\AppData\Local\Temp\plc-build-3325d45c1f6145538a3b222159cf3cd5\250902.sln
+Project: 250902; Kind: {B1E792BE-AA5F-4E3C-8C82-674BF9C0715B}; File: C:\Users\Sui\AppData\Local\Temp\plc-build-3325d45c1f6145538a3b222159cf3cd5\250902\250902.tsproj
+Project: ; Kind: ; File: 
+Loaded PLC projects: Untitled2
+BuildProject: Release|TwinCAT RT (x64); 250902\250902.tsproj
+
+Build completed: errors=0; warnings=0; LastBuildInfo=0
+--- Build ---
+已启动生成…
+------ 已启动生成: 项目: Untitled2, 配置: Release TwinCAT RT (x64) ------
+------ Build started: Application: _250902.Untitled2 -------
+typify code ...
+generate code...
+generate global initializations ...
+generate code initialization ...
+generate relocations ...
+Size of generated code: 233970 bytes
+Size of global data: 209941 bytes
+Total allocated memory size for code and data: 831136 bytes
+Memory area 0 contains  Data, Input, Output, Memory, Code, Persistent Data and Nonsafe Data: size: 1080476 bytes, highest used address: 831136, largest contiguous memory gap: 249340 bytes (23 %)
+Build complete -- 0 errors, 0 warnings : ready for download!
+Generate TMC information ...
+Import symbol information ...
+PLC.Untitled2 : message: generate boot information...
+------ 已启动生成: 项目: 250902, 配置: Release TwinCAT RT (x64) ------
+========== 生成: 成功或最新 2 个，失败 0 个，跳过 0 个 ==========
+
+--- 源代码管理 - Team Foundation ---
+[pane not initialized]
+
+--- 生成顺序 ---
+[pane not initialized]
+
+--- 数据库输出 ---
+[pane not initialized]
+
+--- 测试 ---
+[pane not initialized]
+
+--- 源代码管理 ---
+[pane not initialized]
+
+--- 源代码管理 - Git ---
+[pane not initialized]
+
+--- 调试 ---
+[pane not initialized]
+
+--- 源代码管理 - Git(诊断) ---
+[pane not initialized]
+
+--- TwinCAT ---
+MSG | 2026/11/13 13:00:22 852 ms | 'TwinCAT XAE': Replace description for 'Drive Diagnostics (BodePlot)' from 'D:\Work_files\Twincat\3.1\Config\Modules\TcNcObjects.tmc' with versioned description from 'D:\Work_files\Twincat\3.1\Repository\Beckhoff Automation GmbH\TcNcObjects\3.1.0.4707\TcNcObjects.tmc'
+MSG | 2026/11/13 13:00:25 297 ms | 'TwinCAT XAE': Replace description for 'Drive Diagnostics (BodePlot)' from 'D:\Work_files\Twincat\3.1\Config\Modules\TcNcObjects.tmc' with versioned description from 'D:\Work_files\Twincat\3.1\Repository\Beckhoff Automation GmbH\TcNcObjects\3.1.0.4707\TcNcObjects.tmc'
+

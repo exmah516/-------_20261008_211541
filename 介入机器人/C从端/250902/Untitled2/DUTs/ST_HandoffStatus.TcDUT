@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+<DUT Name="ST_HandoffStatus" Id="{abaf8423-e8f3-404c-bc40-9b1393825f4a}"><Declaration><![CDATA[{attribute 'pack_mode' := '1'}
+TYPE ST_HandoffStatus :
+STRUCT
+    ack_id : UDINT;
+    phase : INT;
+    phase_seq : UDINT;
+    done_id : UDINT;
+    result : INT;
+    error_code : UDINT;
+    error_axis : INT;
+    nc_error_code : UDINT;
+    reject_reason : INT; // 1=忙，2=状态不允许，3=参数非法
+    leg_mask : BYTE; // 受理腿集合，供数据端重启后接管
+    phase_ms : ARRAY[1..8] OF UDINT; // 10/20/30/40/50、轴1运动、轴6运动、保留
+END_STRUCT
+END_TYPE
+]]></Declaration></DUT>
+</TcPlcObject>

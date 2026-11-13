@@ -57,10 +57,11 @@ VAR_GLOBAL
 	host_recover_req		: BOOL := FALSE;
 	host_comm_timeout		: BOOL := TRUE;
 
-	axis6_fast_retract	: BOOL := FALSE;
-	axis1_fast_return	: BOOL := FALSE;
-	startup_smoothing_bypass : BOOL := FALSE;
-	return_cmd			: ARRAY[1..7] OF ST_AxisPlannedReturnCmd;
+    handoff_cmd : ST_HandoffCmd;
+    handoff_status : ST_HandoffStatus;
+    handoff_takeover_id : UDINT;
+    handoff_if_version : UDINT := 1;
+    cyl_cmd : ARRAY[1..4] OF WORD;
 	axis4_fwd_req		: BOOL := FALSE;
 	axis4_rev_req		: BOOL := FALSE;
 	axis4_manual_busy	: BOOL := FALSE;
@@ -185,7 +186,11 @@ VAR_GLOBAL CONSTANT
 	err_backoff_acc : LREAL := 50.0;
 	axis15_reset_pulse : TIME := T#200MS;
 	axis15_reset_interval : TIME := T#2S;
-	return_clear_error_id : UDINT := 16#80005001;
+    handoff_err_rejected : UDINT := 1;
+    handoff_err_disable : UDINT := 2;
+    handoff_err_move : UDINT := 3;
+    handoff_err_timeout : UDINT := 4;
+    handoff_err_interrupted : UDINT := 5;
 END_VAR]]></Declaration>
   </GVL>
 </TcPlcObject>

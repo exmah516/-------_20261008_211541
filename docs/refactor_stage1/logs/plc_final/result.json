@@ -1,0 +1,38 @@
+﻿{
+    "success":  true,
+    "exit_code":  0,
+    "errors":  0,
+    "warnings":  0,
+    "build_started":  true,
+    "build_completed":  true,
+    "log":  "D:\\Work_files\\Vessel intervention Robot\\主从分机软件包_20261008_211541\\docs\\refactor_stage1\\logs\\plc_final\\build.log",
+    "workspace":  "C:\\Users\\Sui\\AppData\\Local\\Temp\\plc-build-3325d45c1f6145538a3b222159cf3cd5",
+    "interface":  "VisualStudio.DTE.16.0 / SolutionBuild.BuildProject",
+    "source_project_sha256":  "7C4B06168C74F773ABA099EAA0C284D9B22F54C2C4A09BB4381FA861CDAA057E",
+    "project_version":  "3.1.4024.67",
+    "project_version_fixed":  true,
+    "installed_versions":  [
+                               "3.1.4024.67"
+                           ],
+    "build_version":  "3.1.4024.67",
+    "copy_version_override":  false,
+    "plc_projects":  [
+                         "Untitled2"
+                     ],
+    "build_started_at":  "2026-11-13T05:00:30.3955245Z",
+    "last_build_info":  0,
+    "compiler_errors":  0,
+    "compiler_warnings":  0,
+    "error_list_errors":  0,
+    "error_list_warnings":  0,
+    "artifacts":  [
+                      {
+                          "path":  "C:\\Users\\Sui\\AppData\\Local\\Temp\\plc-build-3325d45c1f6145538a3b222159cf3cd5\\250902\\Untitled2\\_CompileInfo\\5E831FA6-2E1B-9EDD-4B51-C2CC76982CEE.compileinfo",
+                          "bytes":  3702564,
+                          "modified_utc":  "2026-11-13T05:00:32.3578162Z",
+                          "sha256":  "911E14E72F37FDCCCBDD44B2226BA77E4E27AD5D547382428DB64CAFA57B0EE5"
+                      }
+                  ],
+    "com_retries":  2,
+    "source_project_unchanged":  true
+}
