@@ -1,0 +1,351 @@
+{
+  "baseline": "d2bb5fc4de8e53aad750b2a048008b52fa488453",
+  "files": [
+    {
+      "path": "介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/HandleHostTests.cs",
+      "unchanged": true,
+      "current_sha256": "c4c9bf93dd9fc57922e9c2370b9f429f4a5b1e18b7dd7b63970816880533cbae"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/LocalForceTests.cs",
+      "unchanged": true,
+      "current_sha256": "58a5f5d7b24b5ba485bf4309e7a003cd41735b46d155d7a9a5316110114ab8d4"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/MasterConsole.Protocol.Tests.csproj",
+      "unchanged": true,
+      "current_sha256": "31f1d12fe19f83f3627dcf8aeda472ee0f566a45116d5f46d42407173713fa69"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/NetworkSmoke.cs",
+      "unchanged": true,
+      "current_sha256": "3222d6a15f2ac652484d180204db1713520033389c02e3ee08f79627773e2291"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/Program.cs",
+      "unchanged": true,
+      "current_sha256": "d6488750bdb00ee915d55e8830f5b2ca8456580bf72b13d40d57c2172ed3fff7"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/MasterConsole.Protocol.Tests/RobotServiceTests.cs",
+      "unchanged": true,
+      "current_sha256": "1f8b3c9c561bfdd1a09cd40ba7b0f2ac8c119576da0fa42d3d0665e1814373d5"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/MasterConsole.Protocol/FrameAuth.cs",
+      "unchanged": true,
+      "current_sha256": "762df7252907b897358161c4ce3d136bf8d62171a8fb55a3821d90ae98d77ff0"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/MasterConsole.Protocol/Frames.cs",
+      "unchanged": true,
+      "current_sha256": "7d589f7ffbf26e2d554a8ef8cd2bb7d06865eb8837689a8905f461a5bfc69cbb"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/MasterConsole.Protocol/MasterConsole.Protocol.csproj",
+      "unchanged": true,
+      "current_sha256": "6561277215228a16f2f85291635752fd61d6304d56c8f28bfd1d2cd33bf186e2"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/MasterConsole.Protocol/ProtocolConstants.cs",
+      "unchanged": true,
+      "current_sha256": "d6b002d47879c226f74d5356e0c7f720198bbd5c169f100417fe844871eacf69"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohFrames.cs",
+      "unchanged": true,
+      "current_sha256": "f1a9fa0cdef814d66e30f5e705fdc63b9ca0953a4d9cd57ed7b1458f7da7210e"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/MasterConsole.Protocol/ZenohWire.cs",
+      "unchanged": true,
+      "current_sha256": "27a6289df53c72bf6ef91e828bfdaa613805bd3139ead53f444768f997472f0e"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/MasterConsole.sln",
+      "unchanged": true,
+      "current_sha256": "c4147b4e9887e520f0f8fc7a92eb2a3f2af71a5db87e38af7116e964dd6b333c"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control.Tests.slnx",
+      "unchanged": true,
+      "current_sha256": "86e6560aad2729389bf4623d5a0fee05051cb08607cda5cdadb56c8fc58ea23b"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control.Tests/Fixtures/Baseline.InterventionPanel.xaml.xml",
+      "unchanged": true,
+      "current_sha256": "19044a2744416b4c39f888850e2d6f40a520a1b90eb2de080ea6dfbed9cfb453"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control.Tests/Fixtures/Baseline.LightClinical.xaml.xml",
+      "unchanged": true,
+      "current_sha256": "0319f2fb8b5aa3642b3386368d24331a60c6e82b45985b8b01564cfac845eede"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control.Tests/Fixtures/Baseline.MainWindow.xaml.xml",
+      "unchanged": true,
+      "current_sha256": "9b92c4d34488d0edb1ce545765a404bd77a58160ddd15bd51a000d42eb2113f1"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control.Tests/Fixtures/Baseline.PositioningArmPanel.xaml.xml",
+      "unchanged": true,
+      "current_sha256": "2a29ac2ba5cfb7ffe470c6ec413c3149f90a47a309895e3ece56fb86d9fd8824"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control.Tests/Fixtures/V3Baseline.InterventionPanel.xaml.xml",
+      "unchanged": true,
+      "current_sha256": "47f477ba4b7cdfb0967b7e0059fe0ae0d907fb38e7bdd597af4ee0dcd567a38e"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control.Tests/Fixtures/V3Baseline.MainWindow.xaml.xml",
+      "unchanged": true,
+      "current_sha256": "0e168369d6f2e8735e072027645ec6ecbf710129d2692c0435f9b3c84fd156e7"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control.Tests/Fixtures/V3Baseline.PositioningArmPanel.xaml.xml",
+      "unchanged": true,
+      "current_sha256": "538d7dc13f5ecfade2eae4f469ccb596670d5d05daf98511e6c239eacecc3a2f"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control.Tests/HomeChainChecks.cs",
+      "unchanged": true,
+      "current_sha256": "a09e8cead392689a8b4af177c3c5cbd5c24edb9f420f2fef5867db6719e181d1"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control.Tests/Program.cs",
+      "unchanged": true,
+      "current_sha256": "9c805a105726c36c84ba5e6e755372ff838a9ed8e0d998df04f1d0302af233c1"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control.Tests/ResponsiveLayoutChecks.cs",
+      "unchanged": true,
+      "current_sha256": "ff77411ef1baac152903532b2f44c7e14cb8d869188c7e8455686e899e4b83cc"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control.Tests/RevisionUChecks.cs",
+      "unchanged": true,
+      "current_sha256": "491329788ecd3d6f8d07c4aa3ef6cd2966ac4707f7d22879d2d4d07080f398b3"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control.Tests/VI.Control.Tests.csproj",
+      "unchanged": true,
+      "current_sha256": "6d38c09e489f828e0c1d521f30047ca9121ac56cd3bd9a7430c00431f74aa408"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control.slnx",
+      "unchanged": true,
+      "current_sha256": "4594e14219d6de7a49dadc9eaeac6977cce98bd9540d20d1dcc33004dca957f4"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control/App.xaml",
+      "unchanged": true,
+      "current_sha256": "7e9ac1ee18b071cfc1420df92742f74470ca46b66fa7ffb3c1d0780bbd86ffa0"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control/App.xaml.cs",
+      "unchanged": true,
+      "current_sha256": "e26ccf2695eec7e5e5aa099959fd8cb7cb3d9311f66e42905b5f0816591d1fba"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control/MainWindow.xaml",
+      "unchanged": true,
+      "current_sha256": "824be841ebed26f58135b02bcd821d83e3481aee29f5f3b1ed0827d528bf9629"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control/MainWindow.xaml.cs",
+      "unchanged": true,
+      "current_sha256": "b588b6f90cc197f8a5aecdb56e94b468d869332a3c01fc9b1a2f8a9d40258df5"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control/ShellRegion.cs",
+      "unchanged": true,
+      "current_sha256": "ae8c6e7871c3ae22bbb9b9cb6947c86df644e122a5ec361e80570fb8ca768808"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control/StartupSelection.cs",
+      "unchanged": true,
+      "current_sha256": "c443a0c2326ce37846a3d108e146e7da7a76baa0f509814a32c8244e5d723176"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control/Themes/LightClinical.xaml",
+      "unchanged": true,
+      "current_sha256": "f6d4aba8fb225a5f4972c40842d7968bb6544e46c52a4cee045ccb6c2d3fe057"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control/Themes/SizesLarge.xaml",
+      "unchanged": true,
+      "current_sha256": "1ed43e9d562817d8ff0c2a543e951ddd80807576885e9481661ca82e959692ee"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control/Themes/SizesMedium.xaml",
+      "unchanged": true,
+      "current_sha256": "afa05882f5e4c9bedb5d646f5862c4e2d24a9a4f10ec55502a62ce652efff85d"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control/Themes/SizesSmall.xaml",
+      "unchanged": true,
+      "current_sha256": "685fdff372cecac367beade859d51f02c4b6370a6bba0130634bf07229d16555"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control/VI.Control.csproj",
+      "unchanged": true,
+      "current_sha256": "66c05860d5ec69f538996292775bd1d5b37c66278a51de0c7ec0e57575b7fc62"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Control/app.manifest",
+      "unchanged": true,
+      "current_sha256": "d02731200c4652575956b7caf7f5e170df20d967e2ba240054300830d73786ac"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.HandleHost/Program.cs",
+      "unchanged": true,
+      "current_sha256": "3e93a0c062a11bacf20289effc9c9846c2323e708e55e261cb478a4d3e7939e0"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.HandleHost/VI.HandleHost.csproj",
+      "unchanged": true,
+      "current_sha256": "00270765e7eee8dac85a4039fcea67d8cd0b88fca1a1376fe47571e0259c10af"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Module.Intervention/InterventionModule.cs",
+      "unchanged": true,
+      "current_sha256": "0802d3c68a59f5cb94101443795f6237c8b681781ad53cd91468fc0320f3093c"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Module.Intervention/InterventionPanel.xaml",
+      "unchanged": true,
+      "current_sha256": "363c6ed72bce21a5dc4c7ffc8aa2b7ce77c679369f4c44ad165d0f13aed60a29"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Module.Intervention/InterventionPanel.xaml.cs",
+      "unchanged": true,
+      "current_sha256": "3e1c8c9fd06d82af385755caccbe55ba51d98853f962e253b306dc56d85ab606"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Module.Intervention/ReadoutPartConverter.cs",
+      "unchanged": true,
+      "current_sha256": "5a09f66c8c69a94d6edefcdf305f72f10b393d69ca9b7f3e9596c5de8c0154ca"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Module.Intervention/VI.Module.Intervention.csproj",
+      "unchanged": true,
+      "current_sha256": "4b5b72152d8bd0376b1ef695d77d8aa866cb96da410bde499695fc45f82cdd63"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Module.PositioningArm/PositioningArmModule.cs",
+      "unchanged": true,
+      "current_sha256": "7fad5aa272c9ddb862f4de14f5872233ac5f382409cb2a32af57141db6fb60db"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Module.PositioningArm/PositioningArmPanel.xaml",
+      "unchanged": true,
+      "current_sha256": "85624a57a187be455554b191e4893fd56b594caf8f82cf720569aeb3c989398c"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Module.PositioningArm/PositioningArmPanel.xaml.cs",
+      "unchanged": true,
+      "current_sha256": "62390a02e74cabd0356edeb148af0d189a2f1d99b11ceacccd30cfb44ce5fd27"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Module.PositioningArm/VI.Module.PositioningArm.csproj",
+      "unchanged": true,
+      "current_sha256": "4b5b72152d8bd0376b1ef695d77d8aa866cb96da410bde499695fc45f82cdd63"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Service.Net/VI.Service.Net.csproj",
+      "unchanged": true,
+      "current_sha256": "08cb0373647039815fd6b7c43ef4cca9324ef9a37cc8a0cf4420cab702d8e6d1"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Service.Net/ZenohSession.cs",
+      "unchanged": true,
+      "current_sha256": "c990aaf93ef33ba8e8e8cf4444b2cdb2284d109cddfad8237b89dbff50a2dd07"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Service.Robot/Properties/AssemblyInfo.cs",
+      "unchanged": true,
+      "current_sha256": "1ae5d3544633a31da815a48867868460f4617faebcacc689be1272b55ee8dd98"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Service.Robot/Services/FlCatheterNative.cs",
+      "unchanged": true,
+      "current_sha256": "cf87a92d7f0be9f41b23d0aaaa963ee5852c1c382399eba8d804c7ba282180eb"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleDeviceNotifications.cs",
+      "unchanged": true,
+      "current_sha256": "2c51a8efdaf23540ab147ae1b926ecc4837b6640d747e9d92f205afc46351728"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleHostMemory.cs",
+      "unchanged": true,
+      "current_sha256": "820ae19903e5317ab7f3e81254c1d15241311987e08e089afe016104ae651c39"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Service.Robot/Services/HandleService.cs",
+      "unchanged": true,
+      "current_sha256": "4eced7138a9c4594b007405b835852742a2a170fc3c9b1fabe94fadf79d8163d"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Service.Robot/Services/IHandleService.cs",
+      "unchanged": true,
+      "current_sha256": "526feccb95295814555d372cffe4edb72e51ed3593bc2d9754d21357408c9fef"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Service.Robot/Services/IRobotLink.cs",
+      "unchanged": true,
+      "current_sha256": "5dee1a657629a645fb24af5c594447b6f8670506438aae0e34348d7698514591"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Service.Robot/Services/RemoteRobotLink.cs",
+      "unchanged": true,
+      "current_sha256": "f26567f2a2fb36f110f3e58816c91fc4d9a92201771ce653e190fe200b3db477"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Service.Robot/Services/SimulatedRobotLink.cs",
+      "unchanged": true,
+      "current_sha256": "1ac64e2acc37258800633111893c6da3c3ce2344366b54d518532e5a8b6ea1db"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Service.Robot/VI.Service.Robot.csproj",
+      "unchanged": true,
+      "current_sha256": "7f86a62916e973c9136dcc125e73870f5d385fd6e98691609471c0117f33778e"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Service.Robot/ViewModels/MainViewModel.cs",
+      "unchanged": true,
+      "current_sha256": "556386ba831aef22f4321edcd093c55e639a80c1c8b9879123dbd54df85b192f"
+    },
+    {
+      "path": "介入机器人/A主端/工程/master/VI.Service.Robot/ViewModels/ObservableObject.cs",
+      "unchanged": true,
+      "current_sha256": "918ddd37d31b8ca1f7e374f04ebb07aaf5279269f6e422681386b48893d0922f"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/control_messages.h",
+      "unchanged": true,
+      "current_sha256": "176f066f4705420c17fdac0b1292d3a7f5ca7e9c428d8e2ff6e6845bbe17481e"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_protocol.h",
+      "unchanged": true,
+      "current_sha256": "e0cdcf49590b5a69b5fcddb5f319423b0ea5e4c13037028f4e0e554c6a71d7ec"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/protocol/cpp/zenoh_validation.h",
+      "unchanged": true,
+      "current_sha256": "46d808be5b5786f2e0ebc098de0f209400bcb4c51bdf024b1833eaa5c62e93d4"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/zenoh_service.cpp",
+      "unchanged": true,
+      "current_sha256": "62b24287d6d4ac49b176c4f9a602b8b2b3efb6bc164b514ccd72125eb1b2bbf6"
+    },
+    {
+      "path": "介入机器人/B数据端/工程/ADS项目/zenoh_service.h",
+      "unchanged": true,
+      "current_sha256": "511a74d124f17004c241a769cba18ca16817f635705cc01f9d61d535fe3cefca"
+    }
+  ],
+  "count": 69
+}
